@@ -44,7 +44,6 @@ fi
 ##########################
 
 # These are copies of the system-level shell startup scripts with:
-#   * Fix the TMOUT env-var bug
 #   * Prevent using /usr/share/Modules. We have our own modules.
 #   * Prevent scl-init which has a bug due to missing modulepath file
 #   * Prevent the incredibly annoying PackageKit from loading
@@ -96,7 +95,6 @@ fi
 ####################################################################################################
 ###################################     Interactive    #############################################
 ####################################################################################################
-# Fix the IT VM-setup TMOUT bug (/etc/profile.d/tmout.sh).
 # There's more, read comments farther up.
 # Switch to latest version of bash.
 # If on an EL7 machine, this bash test fails. Just keep using the system bash version.
@@ -105,7 +103,6 @@ bashrc_foss_tools_home="....../tools/foss/interactive"
 if $bashrc_foss_tools_home/bash/5.3.0/bin/bash -c exit >&/dev/null ; then
     if [[ -z $REBOOT_FOR_INTERACTIVE_SHELL ]]; then
         exec /usr/bin/env \
-            --unset=TMOUT \
             REBOOT_FOR_INTERACTIVE_SHELL=1 \
             $bashrc_foss_tools_home/bash/5.3.0/bin/bash --noprofile --rcfile "$bashrc_root/.bashrc"
     fi
