@@ -1,13 +1,30 @@
-### Non-interactive and interactive
+####################################################################################################
+###################################        Notes       #############################################
+####################################################################################################
+# * All vars that start with _ will be destroyed before exitting bashrc
+# * In order to support an arbitrary number of hooks, I use a numbered system (naming all the hooks
+#   got too hard, and was too limiting to make a hyper-flexible bashrc.
+#
+####################################################################################################
+###################################       Debug        #############################################
+####################################################################################################
+# Try this first. Can catch most stuff.
+# set -x
+# Capture all set -x to a log file for really hard to catch stuff.
+# exec 2> ~/bashrc.log
+#
+####################################################################################################
+###################################  Non Interactive   #############################################
+####################################################################################################
 # This section of the script is for non-interactive shell, so "keep it clean"
-# Start with a clean slate: basic path, clear all aliases and functions and modules (below)
-#set -x
-# Capture all set -x to a log file for really hard to catch stuff
-#exec 2> ~/bashrc.log
 
+# Start with a clean slate: basic path, clear all aliases and functions
 export PATH="/bin:/usr/bin:/usr/sbin"
 unalias -a
 unset -f $(declare -F | /bin/awk '{print $3}')
+
+export USER=$(/bin/whoami)
+export HOME=~$USER
 
 # https://stackoverflow.com/questions/59895/how-do-i-get-the-directory-where-a-bash-script-is-located-from-within-the-script
 get_script_dir()
@@ -25,70 +42,29 @@ get_script_dir()
     script_dir="$(cd -P "$(/usr/bin/dirname "$source_path")" >/dev/null 2>&1 && pwd)"
     echo "$script_dir"
 }
-bashrc_root=$(get_script_dir)
-bashrc_user=$(/bin/whoami)
-export USER=$bashrc_user
 
-# I use this dir for high-speed access to small/temporary files
-/bin/mkdir -p /dev/shm/$bashrc_user
+_bashrc_root=$(get_script_dir)
+echo $_bashrc_root
+return
 
-# Fast and robust check for DPC or nDPC
-if /bin/grep --silent -P "anvil_release.*ro," /proc/mounts; then
-    export DPC=1
-else
-    export DPC=0
-fi
+# Minimum set of functions to get through non-interactive stuff
+source "$_bashrc/bash_script_helpers.non_interactive.sh"
 
-######## HOOK TOP ########
-[[ -r ~/.bashrc_hook.top ]] && source ~/.bashrc_hook.top
-##########################
+source_if_exists "$_bashrc_root/.bashrc.cfg"
 
-# These are copies of the system-level shell startup scripts with:
-#   * Prevent using /usr/share/Modules. We have our own modules.
-#   * Prevent scl-init which has a bug due to missing modulepath file
-#   * Prevent the incredibly annoying PackageKit from loading
-#     (There was also a bad bug, but I can't recall what it was)
-if shopt -q login_shell; then
-    # Login shell
-    source $bashrc_root/etc/profile
-else
-    # Not a login shell
-    source $bashrc_root/etc/bashrc
-fi
+# I use this fast fs for high-speed access to small/temporary files vs. slow NFS
+/bin/mkdir -p /dev/shm/$USER
+
+source "$_bashrc_stuff/hooks/1.sh"
 
 # Make xterm-256color the default terminal.
 # Some trouble w/ RH7 not respecting the ~/.terminfo dir. Need to debug later.
 export TERM="xterm-256color"
 
-# Further environment management employs the Environment Modules utility,
-# which must be initialized.  We use a modern Environment Modules version,
-# which we expect to find in our common grid area.  Note that we don't use
-# /usr/share/Modules because its content and behavior varies on different
-# systems.  Note also that its possible /usr/share/Modules or some other
-# Environment Modules installation might already be in service on entry.
-# If so, we do our best to remove it from the environment before loading
-# our preferred version.
-if type 'module' > /dev/null 2>&1; then
-    # Environment Modules is already running
-    module purge >& /dev/null # valid command in all EM versions
-    module reset --force >& /dev/null # aggressive reset in newer EM versions
-    for modulevar in $(/bin/printenv | /bin/egrep '^MODULE|^__MODULE|LOADEDMODULES|_LMFILES_' | /bin/cut -f1 -d=); do
-        unset $modulevar
-    done
-fi
-export MODULESHOME="..../modules/v5.4.0"
-source "$MODULESHOME/init/bash"
-module reset --force >& /dev/null
-export MODULEPATH="..../modules"
-
-###################################### HOOK: MODULES ###############################################
-[[ -r ~/.bashrc_hook.module_setup ]] && source ~/.bashrc_hook.modules
-####################################################################################################
-
-# Exit here is not interactive
+# Exit here if not interactive
 if [[ $- != *i* ]]; then
-    # Unset all local variables. I use the bashrc_ leader to mark these.
-    unset ${!bashrc_@}
+    # Unset all bashrc local variables
+    unset ${!_@}
     return
 fi
 
@@ -99,17 +75,17 @@ fi
 # Switch to latest version of bash.
 # If on an EL7 machine, this bash test fails. Just keep using the system bash version.
 # The EL7 VM image does not have the TMOUT bug.
-bashrc_foss_tools_home="....../tools/foss/interactive"
-if $bashrc_foss_tools_home/bash/5.3.0/bin/bash -c exit >&/dev/null ; then
-    if [[ -z $REBOOT_FOR_INTERACTIVE_SHELL ]]; then
-        exec /usr/bin/env \
-            REBOOT_FOR_INTERACTIVE_SHELL=1 \
-            $bashrc_foss_tools_home/bash/5.3.0/bin/bash --noprofile --rcfile "$bashrc_root/.bashrc"
-    fi
-    unset REBOOT_FOR_INTERACTIVE_SHELL
-fi
+#_foss_tools_home="....../tools/foss/interactive"
+#if $_foss_tools_home/bash/5.3.0/bin/bash -c exit >&/dev/null ; then
+#    if [[ -z $REBOOT_FOR_INTERACTIVE_SHELL ]]; then
+#        exec /usr/bin/env \
+#            REBOOT_FOR_INTERACTIVE_SHELL=1 \
+#            $_foss_tools_home/bash/5.3.0/bin/bash --noprofile --rcfile "$_bashrc_file/.bashrc"
+#    fi
+#    unset REBOOT_FOR_INTERACTIVE_SHELL
+#fi
 
-source "$bashrc_root/bash_script_helpers.sh"
+source "~/.config/bash/bash_script_helpers.interactive.sh"
 
 export WHITE="\e[38;2;255;255;255m"
 export GREEN="\e[38;2;0;255;0m"
@@ -139,7 +115,7 @@ fi
 # Detect GLIBC version. I can't support everything on RH7, but I want a
 # minimal level of usability since we still occasionally find ourselves on
 # incredibly old RH7 VMs (sjdpc-remotenx for example).
-bashrc_glibc=$(/bin/ldd --version | /bin/grep -Po "\d\.\d+")
+_glibc=$(/usr/bin/ldd --version | /bin/grep -Po "\d\.\d+")
 
 # https://junegunn.github.io/fzf/shell-integration/
 # Preview file content using bat (https://github.com/sharkdp/bat)
@@ -147,46 +123,40 @@ export FZF_CTRL_T_OPTS="--walker-skip .git,.snapshot --preview 'bat -n --color=a
 # https://github.com/junegunn/fzf?tab=readme-ov-file#key-bindings-for-command-line
 eval "$(fzf --bash)"
 
-# This is a "helper" that is causing a hang on DPC when command not found. Disable it.
-# I fixed it in my /etc/bashrc|bash_profile hacks, so I don't need this unset anymore.
-# Leaving it here as a reminder though. PackageKit is USELESS for us. (Google it)
+# This is a "helper" that is causing a hang when command not found. Disable it.
+# Leaving it here as a reminder though. PackageKit is USELESS.
 # unset -f command_not_found_handle
 
 # Default settings
 # There are two nice ls replacements: eza and lsd. User can choose. (Need to add pls)
-bashrc_settings_preferred_ls="eza"
+_settings_preferred_ls="eza"
 # If a tmux session exists, auto-attach to it (but only for ssh, not GUI terminals)
-bashrc_settings_auto_attach_tmux=1
+_settings_auto_attach_tmux=1
 # Include the host name in the prompt. include_host=yes, no_include_host=no
-bashrc_settings_prompt_include_host=0
-#bashrc_settings_terminal_program="WindowsTerminal"
+_settings_prompt_include_host=0
+#_settings_terminal_program="WindowsTerminal"
 export EZA_ARGS="--classify=always --color=always --icons=always --long --sort date --time modified --time-style relative"
 export LSD_ARGS="--sort time --long --reverse --date '+%D %H:%M:%S'"
-bashrc_settings_prompt_color_normal=$PROMPT_GREEN
-bashrc_settings_prompt_color_farm=$PROMPT_RED
-bashrc_settings_enable_tmux_dir_db=1
-bashrc_settings_use_fastnvim=0
+_settings_prompt_color_normal=$PROMPT_GREEN
+_settings_prompt_color_farm=$PROMPT_RED
+_settings_enable_tmux_path_store=0
+_settings_use_fastnvim=0
 #################################### HOOK: SETTINGS ################################################
 source_if_exists $HOME/.bashrc_hook.settings
 ####################################################################################################
 
 # Commented on 8/13/25, remove later if still ok
-#export NVIM_RELEASE=$bashrc_settings_nvim_release
+#export NVIM_RELEASE=$_settings_nvim_release
 
 # Tmux will not detect UTF-8 support unless you set LANG/LC_ALL like this
 # When broken, all non-ASCII glyphs will show up as _ chars.
 export LC_ALL=en_US.UTF-8
 export LANG=en_US.UTF-8
 
-# Farm maching won't allow me to create a directory in /run/user.
-# Unsolved mystery. Just make it in /dev/shm instead.
 if [[ ! -r $XDG_RUNTIME_DIR ]]; then
     export XDG_RUNTIME_DIR=/dev/shm/$(id -u)
     mkdir -p "$XDG_RUNTIME_DIR"
 fi
-
-# Separating this from env-modules init because I only want completions in interactive
-source $$MODULESHOME/v5.4.0/init/bash_completion
 
 # bash checks the window size after each command and, if necessary, updates the values of LINES and COLUMNS.
 shopt -s checkwinsize
@@ -217,15 +187,15 @@ if [[ ! -r "$HISTFILE" ]]; then
 fi
 
 # Compile python bytecode cache to fast /dev/shm filesystem
-export PYTHONPYCACHEPREFIX=/dev/shm/$bashrc_user/pycache
+export PYTHONPYCACHEPREFIX=/dev/shm/$USER/pycache
 
 # Should work for all cases, but this terminfo stuff is always trying to fail.
 # When working correctly, you should see undercurl, italics, etc working in nvim.
 export COLORTERM=truecolor
 # This is a bad test for RH7 machines. There are better solutions, but in a rush.
-if (( $(/bin/echo "$bashrc_glibc > 2.17" | bc -l) )); then
-    export TERM="tmux-256color"
-fi
+#if (( $(/bin/echo "$_glibc > 2.17" | bc -l) )); then
+#    export TERM="tmux-256color"
+#fi
 
 # When using Python Poetry, it tries to access the desktop keyring
 # which for some reason causes a hang. This var disables keyring.
@@ -233,11 +203,11 @@ export PYTHON_KEYRING_BACKEND=keyring.backends.null.Keyring
 
 # Adds color to a lot of basic linux cmds
 export GRC_ALIASES="true"
-source $bashrc_root/grc.sh
+source ~/.config/bash/grc.sh
 
-# Create tmux_dir_db aliases. Run 'tdd' to see a list of aliases.
-if is_truthy $bashrc_settings_enable_tmux_dir_db; then
-    eval $(tmux_dir_db --bash)
+# Create tmux_path_store aliases. Run 'tdd' to see a list of aliases.
+if is_truthy $_settings_enable_tmux_path_store; then
+    eval $(tmux_path_store --bash)
 fi
 
 ### START PATH SETUP ###
@@ -247,15 +217,12 @@ if [[ -z ${VIRTUAL_ENV+x} ]]; then
     # This is required by bash in an empty if
     :
 
-    # I manage everything with shims/ now, so this is hollowed out.
-    ### START MODULES ###
-    #module load foss/python_venv
-    ### END MODULES ###
-
     # I want to re-order $HOME/.local/bin, so remove it first
     # path_remove PATH $HOME/.local/bin
     # [[ -d "$HOME/.local/bin" ]] && path_prepend PATH $HOME/.local/bin
 fi
+
+source_if_exists ~/.bashrc.hooks
 
 # Clean up any dupes that may have crept in
 path_trim PATH
@@ -264,20 +231,21 @@ path_trim PATH
 
 set_prompt() {
     local include_host="$1"
-    local prompt_color=$bashrc_settings_prompt_color_normal
+    local prompt_color=$_settings_prompt_color_normal
     local prompt_joined=""
     local prompt_parts=()
 
     # Assumption is that userid is in the VM name
     if [[ -n $LSB_JOBID ]]; then
         prompt_parts+=('LSF')
-        prompt_color=$bashrc_settings_prompt_color_farm
+        prompt_color=$_settings_prompt_color_farm
     fi
 
     prompt_joined=$(join_by : "${prompt_parts[@]}")
 
     [[ $include_host == "1" ]] && prompt_joined+=":$(hostname)"
 
+    # 
     get_prompt_uid() {
         local whoiam=$(/bin/whoami)
         if [[ "$whoiam" != "$USER" || "$whoiam" == "anviladm" ]]; then
@@ -292,12 +260,12 @@ set_prompt() {
 
     PS1="${PROMPT_YELLOW}\$(get_prompt_uid)${prompt_color}\$ ${PROMPT_WHITE}"
 }
-set_prompt $bashrc_settings_prompt_include_host
+set_prompt $_settings_prompt_include_host
 
 # Disable ctrl-s terminal pausing
 stty -ixon
 
-if is_truthy $bashrc_settings_use_fastnvim; then
+if is_truthy $_settings_use_fastnvim; then
     vim_exec="fastnvim"
 else
     vim_exec="nvim"
@@ -337,12 +305,12 @@ bind '\C-k:menu-complete-backward'
 
 ### Completions
 # https://github.com/scop/bash-completion
-source $bashrc_root/github.scop.bash-completion/bash_completion
-for bashrc_comp_file in $(/bin/ls -1 $bashrc_root/completions/*.bash $HOME/.bash_completions/*.bash 2> /dev/null); do
-    source $bashrc_comp_file
+source $_bashrc/github.scop.bash-completion/bash_completion
+for _comp_file in $(/bin/ls -1 $_bashrc/completions/*.bash $HOME/.bash_completions/*.bash 2> /dev/null); do
+    source $_comp_file
 done
-for bashrc_cmd in uv ruff; do
-    command -v $bashrc_cmd >/dev/null && eval "$($bashrc_cmd generate-shell-completion bash)"
+for _cmd in uv ruff; do
+    command -v $_cmd >/dev/null && eval "$($_cmd generate-shell-completion bash)"
 done
 
 if [[ $DPC == "1" ]]; then
@@ -360,8 +328,8 @@ fi
 # Using eval so that the value of the de-symlinking realpath call is baked into the definition instead of
 # calling it every time, and so that OS doesn't have to deal w/ symlink for every ls. And so it doesn't have
 # to test for preferred ls tool everytime.
-if (( $(/bin/echo "$bashrc_glibc > 2.17" | bc -l) )); then
-    if [[ $bashrc_settings_preferred_ls == "lsd" ]]; then
+if (( $(/bin/echo "$_glibc > 2.17" | bc -l) )); then
+    if [[ ${_cfg[preferred_ls]} == "lsd" ]]; then
         eval "
         ls_func() {
             if [[ \$1 == '-1' ]]; then
@@ -370,10 +338,10 @@ if (( $(/bin/echo "$bashrc_glibc > 2.17" | bc -l) )); then
             fi
             local option_size=\$([[ \$ls_func_human_readable == 1 ]] && echo -n short || echo -n bytes)
             # Careful, the ^[ in the sd search string is acually [ESC] ie typed with <ctrl-v>ESC
-            $(/bin/realpath $bashrc_foss_tools_home/rust/cargo/bin/lsd) --size \$option_size \$LSD_ARGS --date '+%D %H:%M:%S' \$LSD_ARGS \$*
+            $(/bin/realpath $_foss_tools_home/rust/cargo/bin/lsd) --size \$option_size \$LSD_ARGS --date '+%D %H:%M:%S' \$LSD_ARGS \$*
         }"
-    elif [[ $bashrc_settings_preferred_ls == "eza" ]]; then
-        rsync $(/bin/realpath $(/bin/which eza)) /dev/shm/$bashrc_user
+    elif [[ $_settings_preferred_ls == "eza" ]]; then
+        /usr/bin/rsync $(/bin/realpath $(/bin/which eza)) /dev/shm/$USER
         eval "
         ls_func() {
             if [[ \$1 == '-1' ]]; then
@@ -383,10 +351,10 @@ if (( $(/bin/echo "$bashrc_glibc > 2.17" | bc -l) )); then
             local option_a=\$([[ \$ls_func_list_all == 1 ]] && echo -n -a || echo -n '')
             local option_B=\$([[ \$ls_func_human_readable == 1 ]] && echo -n '' || echo -n -B)
             local option_g=\$([[ \$ls_func_show_group == 1 ]] && echo -n '-g' || echo -n '')
-            /dev/shm/$bashrc_user/eza --time-style '+%D %H:%M:%S' \$option_a \$option_B \$option_g \$EZA_ARGS \$*
+            /dev/shm/$USER/eza --time-style '+%D %H:%M:%S' \$option_a \$option_B \$option_g \$EZA_ARGS \$*
         }"
     fi
-    /bin/rsync $bashrc_foss_tools_home/eza/latest/bin/eza /dev/shm/$bashrc_user
+    /usr/bin/rsync $_foss_tools_home/eza/latest/bin/eza /dev/shm/$USER
 else
     eval "
     ls_func() {
@@ -442,7 +410,7 @@ zhead() {
 # paste a directory to the cmd line w/o a cd first.
 trap 'last_cmd=$BASH_COMMAND; [[ -r $last_cmd && -d $last_cmd ]] && cd $last_cmd || ( [[ -r $last_cmd && ! -x $last_cmd ]] && cd $(/bin/dirname $last_cmd) )' ERR
 
-bashrc_xterm_cmd="xterm -bg black -fg white -fa HackNerdFontMono-Regular -fs 10 +sb"
+_xterm_cmd="xterm -bg black -fg white -fa HackNerdFontMono-Regular -fs 10 +sb"
 
 alias ls='ls_func'
 alias sl='ls'
@@ -535,11 +503,11 @@ alias vlts='voltus -stylus'
 alias a="alias | sort > /tmp/alias.$$; declare -f >> /tmp/alias.$$; vi /tmp/alias.$$; rm /tmp/alias.$$"
 alias gpw='chmod -R g+w'
 alias gmw='chmod -R g-w'
-bashrc_tmux_get_window_cmd='TMUX_WINDOW=$(tmux display-message -p "#W")'
+_tmux_get_window_cmd='TMUX_WINDOW=$(tmux display-message -p "#W")'
 alias btopu='btop -u $(/bin/whoami)'
 alias rlrt="find \$1 -type f -print0 | xargs -0 stat --format '%Y :%y %n' | sort -nr | cut -d: -f2- | head"
 # There's a fxn above for ga (git add)
-alias xterm=$bashrc_xterm_cmd
+alias xterm=$_xterm_cmd
 alias gc='git commit'
 alias gs='git status'
 alias gp='git push'
@@ -563,7 +531,7 @@ alias we='watchexec --clear --poll 500'
 bq() {
     [[ $1 == "-l" ]] && bqueues -l $* || bqueues -u $(/bin/whoami) -o 'queue_name: status: njobs: pend: run:'
 }
-#alias bq="bqueues -u $bashrc_user -o 'queue_name: status: njobs: pend: run:'"
+#alias bq="bqueues -u $_user -o 'queue_name: status: njobs: pend: run:'"
 alias bqs="bq"
 alias sbqueues='echo "QUEUE_NAME      PRIO STATUS          MAX JL/U JL/P JL/H NJOBS  PEND   RUN  SUSP  RSV PJOBS "; bqueues | grep hw_ | egrep "interactive|reg_batch|reg_user|cot|batch|biggermem|spot|reg_ci"'
 alias sbq='sbqueues'
@@ -643,7 +611,7 @@ gah() {
 # Overriding here
 alias btop="$ANVIL_HOME/tools/foss/interactive/btop/latest/bin/btop"
 
-if (( $(/bin/echo "$bashrc_glibc < 2.18" | bc -l) )); then
+if (( $(/bin/echo "$_glibc < 2.18" | bc -l) )); then
     export PATH="$ANVIL_HOME/tools/foss/pkgs/nvim/latest/bin:$PATH"
     #unalias f vi vim vimdiff vid vidiff 2>/dev/null
     unalias f 2>/dev/null
@@ -668,17 +636,17 @@ source_if_exists $HOME/.bashrc_hook.bottom
 # work only when wanted.
 # Auto-attach to tmux if session exists, but only if using ssh to connect. $TERM_PROGRAM
 # is set by tmux. Don't auto-attach when creating new GUI terminals.
-bashrc_is_ssh_connection=$(/bin/ps -f $PPID | /bin/grep -c sshd)
+_is_ssh_connection=$(/bin/ps -f $PPID | /bin/grep -c sshd)
 if false && \
-    is_truthy $bashrc_settings_auto_attach_tmux && \
-    is_truthy $bashrc_is_ssh_connection && \
+    is_truthy $_settings_auto_attach_tmux && \
+    is_truthy $_is_ssh_connection && \
     [[ "$TERM_PROGRAM" != "tmux" ]] && \
     [[ $(/bin/hostname -f) != "sj-ajm-01" ]]; then
 
-    # Unset all local variables. I use the bashrc_ leader to mark these.
+    # Unset all local variables. I use the _ leader to mark these.
     # Can't do it before this if-cmd since vars are used in the conditional.
     # So have to do it here, and in the else clause.
-    unset ${!bashrc_@}
+    unset ${!_@}
 
     # Make sure terminal is in a known-good state
     reset
@@ -690,7 +658,7 @@ if false && \
         tmux
     fi
 else
-    unset ${!bashrc_@}
+    unset ${!_@}
 fi
 
 # vim: ft=bash
