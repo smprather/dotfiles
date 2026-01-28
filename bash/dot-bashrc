@@ -1,0 +1,93 @@
+####################################################################################################
+###################################        Notes       #############################################
+####################################################################################################
+# * All vars that start with _ will be destroyed before exitting bashrc
+# * In order to support an arbitrary number of hooks, I use a numbered system (naming all the hooks
+#   got too hard, and was too limiting to make a hyper-flexible bashrc.
+#
+####################################################################################################
+###################################       Debug        #############################################
+####################################################################################################
+# Try this first. Can catch most stuff.
+#set +x
+#PS4='+${BASH_SOURCE}:${LINENO}:${FUNCNAME[0]}: '
+#set -x
+# Capture all set -x to a log file for really hard to catch stuff.
+#exec 2> ~/bashrc.log
+#exec 1> ~/bashrc.log
+#
+####################################################################################################
+###################################  Non Interactive   #############################################
+####################################################################################################
+# This section of the script is for non-interactive shell, so "keep it clean"
+
+# Start with a clean slate: basic path, clear all aliases and functions
+export PATH="/usr/local/bin:/bin:/usr/bin:/usr/sbin"
+unalias -a
+unset -f $(declare -F | awk '{print $3}')
+
+export USER=$(whoami)
+export HOME=$(getent passwd $USER | cut -d: -f6)
+
+# https://stackoverflow.com/questions/59895/how-do-i-get-the-directory-where-a-bash-script-is-located-from-within-the-script
+_source_path="${BASH_SOURCE[0]}"
+while [[ -L "$_source_path" ]]; do
+    _symlink_dir="$(cd -P "$(dirname "$_source_path" )" >/dev/null 2>&1 && pwd)"
+    _source_path="$(readlink "$_source_path")"
+    if [[ $_source_path != /* ]]; then
+        _source_path="$_symlink_dir/$_source_path"
+    fi
+done
+export BASH_CONFIG_ROOT_DIR="$(cd -P "$(dirname "$_source_path")" >/dev/null 2>&1 && pwd)"
+
+# Source in order of precedence: global->corp->site->team->user
+layered_preference_source() {
+    local bash_file=""
+    local layer=""
+    for layer in global corp site team user; do
+        bash_file="$BASH_CONFIG_ROOT_DIR/$layer/$1"
+        [[ -f "$bash_file" ]] && source "$bash_file"
+    done
+}
+
+layered_preference_source "non_interactive.sh"
+
+# Exit here if not interactive
+if [[ $- != *i* ]]; then
+    # Unset all bashrc local variables
+    unset ${!_@}
+    return
+fi
+
+####################################################################################################
+###################################    Interactive   ###############################################
+####################################################################################################
+layered_preference_source "config.sh"
+layered_preference_source "interactive.sh"
+
+# Unset all local variables that start with '_'.
+unset ${!_@}
+
+if is_truthy $cfg_attach_to_tmux ; then
+    # Make sure terminal is in a known-good state
+    reset
+
+    if tmux has-session 2>/dev/null; then
+        if is_truthy $cfg_attach_to_tmux_with_detach_others ; then
+            unset cfg
+            # Attach this bash, -d -> detach all others
+            tmux attach -d
+        else
+            unset cfg
+            tmux attach
+        fi
+    else
+        # Create a new tmux session
+        unset cfg
+        tmux
+    fi
+fi
+
+unset cfg
+
+# vim: ft=bash ts=4
