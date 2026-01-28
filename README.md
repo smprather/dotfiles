@@ -33,3 +33,19 @@ upstream good/new "ways of working".
 # Modern
 Ideally will be used in conjunction with [EE Linux Tools](https://github.com/smprather/ee-linux-tools).
 These dot-files rely on modern Linux utilities like RipGrep, Tmux, EZA, etc.
+
+# Installation
+
+Two installation methods are supported:
+
+**Method 1: Custom Script** (works everywhere, no dependencies)
+```bash
+./install.sh --verbose
+```
+
+**Method 2: GNU Stow** (requires stow, more standard approach)
+```bash
+./install-stow.sh
+```
+
+The `dot-` prefix convention works perfectly with stow's `--dotfiles` option, which automatically converts `dot-bashrc` → `.bashrc`. See [STOW.md](STOW.md) for details.

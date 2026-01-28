@@ -17,6 +17,10 @@ The repository manages shell (Bash), editor (Vim/Neovim), and terminal multiplex
 
 ## Installation
 
+The repository supports two installation methods:
+
+### Method 1: Custom Install Script (install.sh)
+
 **Primary installation command:**
 ```bash
 ./install.sh --verbose
@@ -27,7 +31,7 @@ The repository manages shell (Bash), editor (Vim/Neovim), and terminal multiplex
 ./install.sh --verbose --unsafe
 ```
 
-The installation script:
+The custom installation script:
 - Backs up existing configs to `dotfiles_backups/backup.N/` with relative paths preserved
 - Creates symlinks in `~/.config/` pointing to repo directories
 - Creates rc file symlinks from `dot-*rc` files in repo:
@@ -38,6 +42,31 @@ The installation script:
   - `~/.editorconfig` → `editorconfig/dot-editorconfig`
 - Auto-installs/updates tmux plugins via TPM (only if github.com is reachable)
 - Installs git hooks from `hooks/` directory
+
+**Pros:** No external dependencies (just rsync/bash), works everywhere
+**Cons:** Custom code to maintain
+
+### Method 2: GNU Stow (install-stow.sh)
+
+**Installation command:**
+```bash
+./install-stow.sh
+```
+
+**Prerequisites:** GNU Stow must be installed (`sudo apt install stow` or `sudo yum install stow`)
+
+The stow-based installation uses GNU Stow's `--dotfiles` option, which automatically converts `dot-` prefixed files to `.` prefixed dotfiles:
+
+- `bash/dot-bashrc` → `~/.bashrc`
+- `vim/dot-vimrc` → `~/.vimrc`
+- `tmux/dot-tmux.conf` → `~/.tmux.conf`
+
+This is exactly why the `dot-` naming convention was chosen - it works perfectly with stow's `--dotfiles` feature!
+
+**Pros:** Industry-standard tool, easy unstow/restow, less custom code
+**Cons:** Requires stow to be installed (may not be available on older systems)
+
+**See [STOW.md](STOW.md) for detailed documentation, manual stow commands, and comparison between methods.**
 
 ## Git Hooks
 
