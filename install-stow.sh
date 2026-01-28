@@ -4,6 +4,67 @@
 
 set -e
 
+# Parse command line arguments for --restore-backup
+if [[ "$1" == "--restore-backup" ]]; then
+    if [[ -z "$2" ]]; then
+        echo "Error: --restore-backup requires a backup directory path"
+        echo "Usage: $0 --restore-backup <backup_dir>"
+        echo "Example: $0 --restore-backup dotfiles_backups/backup.1"
+        exit 1
+    fi
+
+    backup_dir="$2"
+
+    if [[ ! -d "$backup_dir" ]]; then
+        echo "Error: Backup directory not found: $backup_dir"
+        exit 1
+    fi
+
+    echo "Restoring dotfiles from backup: $backup_dir"
+    echo ""
+
+    # Remove current symlinks (both from stow and regular install)
+    echo "Removing current symlinks..."
+    for file in ~/.bashrc ~/.profile ~/.vimrc ~/.tmux.conf ~/.editorconfig; do
+        if [[ -L "$file" ]]; then
+            echo "  Removing symlink: $file"
+            rm -f "$file"
+        fi
+    done
+
+    for dir in ~/.tmux ~/.vim ~/.config/bash ~/.config/nvim ~/.config/tmux ~/.config/editorconfig; do
+        if [[ -L "$dir" ]]; then
+            echo "  Removing symlink: $dir"
+            rm -f "$dir"
+        fi
+    done
+
+    # Restore files from backup
+    echo ""
+    echo "Restoring files from backup..."
+    cd "$backup_dir"
+
+    # Check for rsync
+    if ! command -v rsync >/dev/null; then
+        echo "Error: rsync is required for restore operation"
+        exit 1
+    fi
+
+    # Use rsync to restore with relative paths preserved
+    if ls -A . 2>/dev/null | grep -q .; then
+        rsync -av --no-relative ./ "$HOME/"
+        echo ""
+        echo "✓ Backup restored successfully!"
+        echo ""
+        echo "Restored from: $backup_dir"
+    else
+        echo "Error: Backup directory is empty"
+        exit 1
+    fi
+
+    exit 0
+fi
+
 # Check for stow
 if ! command -v stow >/dev/null; then
     echo "Error: This script requires GNU Stow."

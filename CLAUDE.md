@@ -46,6 +46,11 @@ The custom installation script:
 **Pros:** No external dependencies (just rsync/bash), works everywhere
 **Cons:** Custom code to maintain
 
+**Restore from backup:**
+```bash
+./install.sh --restore-backup dotfiles_backups/backup.1
+```
+
 ### Method 2: GNU Stow (install-stow.sh)
 
 **Installation command:**
@@ -65,6 +70,11 @@ This is exactly why the `dot-` naming convention was chosen - it works perfectly
 
 **Pros:** Industry-standard tool, easy unstow/restow, less custom code
 **Cons:** Requires stow to be installed (may not be available on older systems)
+
+**Restore from backup:**
+```bash
+./install-stow.sh --restore-backup dotfiles_backups/backup.1
+```
 
 **See [STOW.md](STOW.md) for detailed documentation, manual stow commands, and comparison between methods.**
 

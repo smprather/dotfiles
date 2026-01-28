@@ -39,6 +39,9 @@ brew install stow        # macOS
 
 # Run the stow-based installer
 ./install-stow.sh
+
+# Restore from a backup (if needed)
+./install-stow.sh --restore-backup dotfiles_backups/backup.1
 ```
 
 ## How It Works
@@ -108,13 +111,35 @@ dotfiles/
 
 | Feature | install.sh | install-stow.sh |
 |---------|-----------|-----------------|
-| Dependencies | rsync, bash | stow, bash |
+| Dependencies | rsync, bash | stow, rsync, bash |
 | Availability | Universal | May not be on old systems |
 | Symlink creation | Custom logic | GNU Stow |
-| Code complexity | ~150 lines | ~120 lines |
+| Code complexity | ~210 lines | ~180 lines |
 | Unstow support | Manual removal | `stow -D` |
 | Restow support | Re-run script | `stow -R` |
+| Backup restore | `--restore-backup` | `--restore-backup` |
 | Standard tool | No | Yes |
+
+## Restoring from Backup
+
+Both install scripts create timestamped backups before making changes. You can restore from any backup:
+
+```bash
+# List available backups
+ls -la ~/dotfiles_backups/
+
+# Restore from a specific backup
+./install-stow.sh --restore-backup ~/dotfiles_backups/backup.20260128_123456
+# or with relative path
+./install-stow.sh --restore-backup dotfiles_backups/backup.1
+```
+
+**What the restore does:**
+1. Removes all current symlinks (created by either install script)
+2. Copies backed-up files back to their original locations
+3. Preserves directory structure from backup
+
+**Note:** The same `--restore-backup` flag works with both `install.sh` and `install-stow.sh`.
 
 ## Troubleshooting
 
