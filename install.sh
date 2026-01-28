@@ -147,6 +147,21 @@ lns --verbose .config/tmux/dot-tmux.conf .tmux.conf
 lns --verbose .config/tmux/dot-tmux .tmux
 lns --verbose .config/editorconfig/dot-editorconfig .editorconfig
 
+# Install git hooks
+echo "Installing git hooks..."
+if [[ -d "$repo_dir/hooks" ]]; then
+    for hook in "$repo_dir/hooks"/*; do
+        if [[ -f "$hook" && ! "$hook" =~ README ]]; then
+            hook_name=$(basename "$hook")
+            cp "$hook" "$repo_dir/.git/hooks/$hook_name"
+            chmod +x "$repo_dir/.git/hooks/$hook_name"
+            echo "  Installed: $hook_name"
+        fi
+    done
+else
+    echo "  No hooks directory found, skipping"
+fi
+
 if curl -fsLI http://github.com >/dev/null; then
     echo "Looks like github.com is reachable"
     echo "  Installing/updating Tmux plugins

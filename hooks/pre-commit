@@ -1,0 +1,27 @@
+#!/bin/bash
+# Pre-commit hook to remove .git directories from embedded repositories
+# This prevents "embedded git repository" warnings when adding bundled dependencies
+
+echo "Pre-commit: Checking for embedded git repositories..."
+
+# Find all .git directories except the root one
+# Use -mindepth 2 to skip the root .git directory
+embedded_gits=$(find . -mindepth 2 -type d -name ".git" 2>/dev/null)
+
+if [[ -n "$embedded_gits" ]]; then
+    echo "Found embedded git repositories, removing .git directories:"
+    while IFS= read -r git_dir; do
+        echo "  Removing: $git_dir"
+        rm -rf "$git_dir"
+    done <<< "$embedded_gits"
+
+    # Re-stage any modified files
+    echo "Re-staging affected files..."
+    git add -A
+
+    echo "✓ Cleaned up embedded git repositories"
+else
+    echo "✓ No embedded git repositories found"
+fi
+
+exit 0

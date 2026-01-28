@@ -37,6 +37,26 @@ The installation script:
   - `~/.tmux.conf` → `tmux/dot-tmux.conf`
   - `~/.editorconfig` → `editorconfig/dot-editorconfig`
 - Auto-installs/updates tmux plugins via TPM (only if github.com is reachable)
+- Installs git hooks from `hooks/` directory
+
+## Git Hooks
+
+The repository includes git hooks to maintain clean commits.
+
+### pre-commit Hook
+
+**Purpose:** Automatically removes `.git` directories from embedded repositories before committing.
+
+**Why needed:** For offline EE environments, external dependencies (like tmux plugins) are bundled directly in the repo. These plugins come with their own `.git` directories, which would cause "embedded git repository" warnings. The pre-commit hook strips these out, converting submodules to regular directories.
+
+**What it does:**
+1. Scans for any `.git` directories in subdirectories (excluding root `.git`)
+2. Removes them automatically
+3. Re-stages affected files
+
+This ensures bundled dependencies remain clean in version control without manual intervention.
+
+**Installation:** The `install.sh` script automatically installs hooks from the `hooks/` directory. To manually install: `cp hooks/* .git/hooks/ && chmod +x .git/hooks/*`
 
 ## Bash Configuration Architecture
 
