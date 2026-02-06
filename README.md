@@ -36,16 +36,8 @@ These dot-files rely on modern Linux utilities like RipGrep, Tmux, EZA, etc.
 
 # Installation
 
-Two installation methods are supported:
-
-**Method 1: Custom Script** (works everywhere, no dependencies)
 ```bash
-./install.sh --verbose
+./install --verbose
 ```
 
-**Method 2: GNU Stow** (requires stow, more standard approach)
-```bash
-./install-stow.sh
-```
-
-The `dot-` prefix convention works perfectly with stow's `--dotfiles` option, which automatically converts `dot-bashrc` → `.bashrc`. See [STOW.md](STOW.md) for details.
+See [CLAUDE.md](CLAUDE.md) for detailed installation instructions, including development mode and backup restore options.

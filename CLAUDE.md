@@ -99,7 +99,7 @@ layered_preference_source() {
 - `project/` - Project-specific settings
 - `user/` - Personal overrides
 
-This layering allows EE teams to maintain shared standards while preserving individual customization.
+This layering allows EE organizations and projects to maintain shared standards while preserving individual customization.
 
 ### Bash Loading Order
 
