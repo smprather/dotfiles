@@ -1,9 +1,1 @@
--- autopairs
--- https://github.com/windwp/nvim-autopairs
-
-return {
-  'windwp/nvim-autopairs',
-  enabled = false,
-  event = 'InsertEnter',
-  opts = {},
-}
+/home/myles/dotfiles/nvim/lua/kickstart/plugins/autopairs.lua

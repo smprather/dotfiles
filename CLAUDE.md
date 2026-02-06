@@ -9,7 +9,7 @@ This is a dotfiles repository designed for **Electrical Engineering work environ
 - **Multi-platform**: RedHat 7/8/9, Suse, x86_64, ARM, PowerPC
 - **Offline**: Limited or no internet access (explains why plugins/completions are bundled)
 - **No root access**: Can't install packages to system directories
-- **Multi-organizational**: Supports corporate/site/team/user hierarchy
+- **Multi-organizational**: Supports global/corporate/site/project/user hierarchy
 
 The repository manages shell (Bash), editor (Vim/Neovim), and terminal multiplexer (Tmux) configurations using symlinks. It's designed to be opinionated (30 years of EE experience) while allowing flexible overrides without breaking future updates.
 
@@ -17,66 +17,38 @@ The repository manages shell (Bash), editor (Vim/Neovim), and terminal multiplex
 
 ## Installation
 
-The repository supports two installation methods:
-
-### Method 1: Custom Install Script (install.sh)
-
 **Primary installation command:**
 ```bash
-./install.sh --verbose
+./install --verbose
 ```
 
-**Force installation (removes existing directories):**
+**Development mode** (simpler, symlinks entire directories):
 ```bash
-./install.sh --verbose --unsafe
+./install --dev
 ```
 
-The custom installation script:
-- Backs up existing configs to `dotfiles_backups/backup.N/` with relative paths preserved
-- Creates symlinks in `~/.config/` pointing to repo directories
-- Creates rc file symlinks from `dot-*rc` files in repo:
-  - `~/.bashrc` → `bash/dot-bashrc`
-  - `~/.vimrc` → `vim/dot-vimrc`
-  - `~/.profile` → `.config/bash/dot-bashrc`
-  - `~/.tmux.conf` → `tmux/dot-tmux.conf`
-  - `~/.editorconfig` → `editorconfig/dot-editorconfig`
+**Restore from backup:**
+```bash
+./install --restore-backup ~/dotfiles_backups/backup.1
+```
+
+The installation script:
+- Backs up existing configs to `~/dotfiles_backups/backup.N/` with relative paths preserved
+- Smart backup: Only backs up files that don't already point to the repo
+- Creates symlinks in `~/.config/` pointing to repo files
+- Creates rc file symlinks:
+  - `~/.bashrc` → `.config/bash/bashrc`
+  - `~/.vimrc` → `.config/vim/vimrc`
+  - `~/.profile` → `.config/bash/bashrc`
+  - `~/.tmux.conf` → `.config/tmux/tmux.conf`
+  - `~/.editorconfig` → `.config/editorconfig/editorconfig`
+- Smart tmux plugin handling: Only symlinks bundled plugins if offline
 - Auto-installs/updates tmux plugins via TPM (only if github.com is reachable)
 - Installs git hooks from `hooks/` directory
 
-**Pros:** No external dependencies (just rsync/bash), works everywhere
-**Cons:** Custom code to maintain
-
-**Restore from backup:**
-```bash
-./install.sh --restore-backup dotfiles_backups/backup.1
-```
-
-### Method 2: GNU Stow (install-stow.sh)
-
-**Installation command:**
-```bash
-./install-stow.sh
-```
-
-**Prerequisites:** GNU Stow must be installed (`sudo apt install stow` or `sudo yum install stow`)
-
-The stow-based installation uses GNU Stow's `--dotfiles` option, which automatically converts `dot-` prefixed files to `.` prefixed dotfiles:
-
-- `bash/dot-bashrc` → `~/.bashrc`
-- `vim/dot-vimrc` → `~/.vimrc`
-- `tmux/dot-tmux.conf` → `~/.tmux.conf`
-
-This is exactly why the `dot-` naming convention was chosen - it works perfectly with stow's `--dotfiles` feature!
-
-**Pros:** Industry-standard tool, easy unstow/restow, less custom code
-**Cons:** Requires stow to be installed (may not be available on older systems)
-
-**Restore from backup:**
-```bash
-./install-stow.sh --restore-backup dotfiles_backups/backup.1
-```
-
-**See [STOW.md](STOW.md) for detailed documentation, manual stow commands, and comparison between methods.**
+**Installation modes:**
+- **Production mode** (default): Creates granular symlinks to specific files for better control
+- **Dev mode** (`--dev`): Creates directory-level symlinks for easier development
 
 ## Git Hooks
 
@@ -86,7 +58,7 @@ The repository includes git hooks to maintain clean commits.
 
 **Purpose:** Automatically removes `.git` directories from embedded repositories before committing.
 
-**Why needed:** For offline EE environments, external dependencies (like tmux plugins) are bundled directly in the repo. These plugins come with their own `.git` directories, which would cause "embedded git repository" warnings. The pre-commit hook strips these out, converting submodules to regular directories.
+**Why needed:** For offline EE environments, external dependencies (like tmux plugins, vim plugins) are bundled directly in the repo. These plugins come with their own `.git` directories, which would cause "embedded git repository" warnings. The pre-commit hook strips these out, converting submodules to regular directories.
 
 **What it does:**
 1. Scans for any `.git` directories in subdirectories (excluding root `.git`)
@@ -95,7 +67,7 @@ The repository includes git hooks to maintain clean commits.
 
 This ensures bundled dependencies remain clean in version control without manual intervention.
 
-**Installation:** The `install.sh` script automatically installs hooks from the `hooks/` directory. To manually install: `cp hooks/* .git/hooks/ && chmod +x .git/hooks/*`
+**Installation:** The `install` script automatically installs hooks from the `hooks/` directory. To manually install: `cp hooks/* .git/hooks/ && chmod +x .git/hooks/*`
 
 ## Bash Configuration Architecture
 
@@ -104,17 +76,17 @@ This ensures bundled dependencies remain clean in version control without manual
 The bash configuration uses a sophisticated **layered override system** that sources files in this order:
 
 ```
-global → corp → site → team → user
+global → corp → site → project → user
 ```
 
-Each layer can override the previous layer. This design accommodates the multi-organizational EE environment where configurations need to cascade from global standards down to personal preferences. Implemented in `bash/dot-bashrc`:
+Each layer can override the previous layer. This design accommodates the multi-organizational EE environment where configurations need to cascade from global standards down to personal preferences. Implemented in `bash/bashrc`:
 
 ```bash
 layered_preference_source() {
     local bash_file=""
     local layer=""
-    for layer in global corp site team user; do
-        bash_file="$BASHRC_CONFIG_ROOT_DIR/$layer/$1"
+    for layer in global corp site project user; do
+        bash_file="$BASH_CONFIG_ROOT_DIR/$layer/$1"
         [[ -f "$bash_file" ]] && source "$bash_file"
     done
 }
@@ -124,14 +96,14 @@ layered_preference_source() {
 - `global/` - Global/canonical configuration (shouldn't be modified locally, designed to be upstreamed)
 - `corp/` - Corporation/organization-specific settings
 - `site/` - Site-specific settings (datacenter, lab, etc.)
-- `team/` - Team-specific settings
+- `project/` - Project-specific settings
 - `user/` - Personal overrides
 
 This layering allows EE teams to maintain shared standards while preserving individual customization.
 
 ### Bash Loading Order
 
-When bash starts (see `bash/dot-bashrc`):
+When bash starts (see `bash/bashrc`):
 
 1. **Non-interactive section** (always runs):
    - Clears PATH, aliases, functions
@@ -145,14 +117,14 @@ When bash starts (see `bash/dot-bashrc`):
 
 ### Key Global Files
 
-- `bash/dot-bashrc` - Main entry point, sets up layered sourcing
+- `bash/bashrc` - Main entry point, sets up layered sourcing
 - `bash/global/config.sh` - Configuration variables (`cfg_preferred_ls`, `cfg_preferred_vi`, etc.)
 - `bash/global/interactive.sh` - Main interactive setup (colors, history, PATH, aliases, prompt)
 - `bash/global/functions.sh` - Utility functions (path manipulation, version comparison, array slicing)
 
 ### Hook System
 
-Each layer (global, corp, site, team, user) can have its own `global_hooks/` directory with numbered hook files (1.sh through 7.sh). These are sourced at specific points during initialization, allowing each organizational level to inject custom behavior.
+Each layer (global, corp, site, project, user) can have its own `global_hooks/` directory with numbered hook files (1.sh through 7.sh). These are sourced at specific points during initialization, allowing each organizational level to inject custom behavior.
 
 ### Configuration Variables
 
@@ -164,10 +136,12 @@ Key `cfg_*` variables in `config.sh`:
 - `cfg_enable_fzf` - "1" to enable fzf integration
 - `cfg_prompt_color_normal` - Prompt color for normal sessions
 - `cfg_prompt_color_farm` - Prompt color for farm/LSF sessions
+- `cfg_attach_to_tmux` - "1" to auto-attach to tmux on login
+- `cfg_attach_to_tmux_with_detach_others` - "1" to detach other clients when attaching
 
 ## Tmux Configuration
 
-**Config file:** `tmux/dot-tmux.conf` (symlinked to `~/.tmux.conf`)
+**Config file:** `tmux/tmux.conf` (symlinked to `~/.tmux.conf`)
 
 **Key bindings:**
 - Prefix: `Ctrl-\` (not the default `Ctrl-b`)
@@ -190,6 +164,11 @@ Key `cfg_*` variables in `config.sh`:
 - tmux-continuum - Automatic session saving/restoration
 - tmux-better-mouse-mode - Enhanced mouse handling
 
+**Plugin installation:**
+- TPM is always symlinked for plugin management
+- Bundled plugins are only symlinked if offline
+- If online, plugins are downloaded fresh from GitHub
+
 ## Neovim Configuration
 
 **Config file:** `nvim/init.lua` (single ~64KB file based on Kickstart.nvim)
@@ -208,9 +187,16 @@ Key `cfg_*` variables in `config.sh`:
 
 ## Vim Configuration
 
-**Config file:** `vim/dot-vimrc` (symlinked to `~/.vimrc`)
+**Config file:** `vim/vimrc` (symlinked to `~/.vimrc`)
 
-Uses vim-plug plugin manager with SuperTab for completion. Basic settings: UTF-8, 4-space tabs.
+Uses native Vim 8 package management with plugins in `vim/pack/vendor/{start,opt}/`.
+
+**Bundled plugins:**
+- nerdtree - File explorer
+- SimpylFold - Python code folding
+- vim-liberty - Additional functionality
+
+Basic settings: UTF-8, 4-space tabs, line numbers.
 
 ## Modern CLI Tools
 
@@ -287,15 +273,13 @@ Bash history is per-shell-session with intelligent inheritance:
 
 **No root required**: All installations use `~/.local`, `~/.config`, and home directory symlinks since users can't access system directories.
 
-**Naming convention**: Configuration files in the repo use a `dot-` prefix (e.g., `dot-bashrc`, `dot-vimrc`) to distinguish them from their installed locations (`.bashrc`, `.vimrc`). This makes the repo structure clearer and avoids hidden files in git.
-
 ## Common Development Patterns
 
 ### Adding a New Layer Override
 
-To add corp/site/team/user-specific config:
+To add corp/site/project/user-specific config:
 
-1. Layer directories already exist: `bash/corp/`, `bash/site/`, `bash/team/`, `bash/user/`
+1. Layer directories already exist: `bash/corp/`, `bash/site/`, `bash/project/`, `bash/user/`
 2. Add your override file: `bash/user/config.sh` or `bash/user/interactive.sh`
 3. Variables/functions will override the global layer
 
@@ -305,9 +289,10 @@ Each layer has a `global_hooks/` directory for numbered hook files:
 
 ```bash
 # Hook locations by layer
-bash/global/global_hooks/1.sh  # Global early hook
-bash/corp/global_hooks/5.sh    # Corp-specific hook at position 5
-bash/user/global_hooks/7.sh    # User late hook (after completions)
+bash/global/global_hooks/1.sh   # Global early hook
+bash/corp/global_hooks/5.sh     # Corp-specific hook at position 5
+bash/project/global_hooks/3.sh  # Project-specific hook
+bash/user/global_hooks/7.sh     # User late hook (after completions)
 ```
 
 Hook execution points in `bash/global/interactive.sh`:
@@ -333,22 +318,23 @@ source ~/.bashrc
 
 ### Offline Support
 
-The `install.sh` script includes intelligent offline detection:
+The `install` script includes intelligent offline detection:
 
 ```bash
 if curl -fsLI http://github.com >/dev/null; then
     # Only install/update tmux plugins if github.com is reachable
-    ~/.tmux/plugins/tpm/bin/install_plugins
-    ~/.tmux/plugins/tpm/bin/update_plugins all
+    .tmux/plugins/tpm/bin/install_plugins
+    .tmux/plugins/tpm/bin/update_plugins all
 fi
 ```
 
-This allows the dotfiles to work fully in offline environments, with tmux plugins already bundled in the repo. Plugin updates only occur when internet connectivity is available.
+This allows the dotfiles to work fully in offline environments, with tmux/vim plugins already bundled in the repo. Plugin updates only occur when internet connectivity is available.
 
 ### Backup Safety
 
 Before any installation, the script:
 - Creates numbered backups (`dotfiles_backups/backup.1/`, `backup.2/`, etc.)
+- Only backs up files that don't already point to the repo (smart detection)
 - Preserves relative paths in backups
 - Never overwrites existing backup directories
 
@@ -356,7 +342,7 @@ Before any installation, the script:
 
 ```
 bash/
-  dot-bashrc       - Main entry point (symlinked to ~/.bashrc)
+  bashrc           - Main entry point (symlinked to ~/.bashrc)
   global/          - Global configuration (canonical)
     config.sh
     interactive.sh
@@ -369,27 +355,33 @@ bash/
     global_hooks/  - Corp-level hook overrides
   site/            - Site-level overrides
     global_hooks/  - Site-level hook overrides
-  team/            - Team-level overrides
-    global_hooks/  - Team-level hook overrides
+  project/         - Project-level overrides
+    global_hooks/  - Project-level hook overrides
   user/            - Personal overrides
     global_hooks/  - User-level hook overrides
 
 nvim/
   init.lua         - Neovim config (Kickstart.nvim based)
   lazy-lock.json   - Locked plugin versions
+  lua/kickstart/   - Kickstart plugins
 
 vim/
-  dot-vimrc        - Vim config (symlinked to ~/.vimrc)
+  vimrc            - Vim config (symlinked to ~/.vimrc)
+  vim/pack/vendor/ - Bundled vim plugins (start/ and opt/)
 
 tmux/
-  dot-tmux.conf    - Tmux config (symlinked to ~/.tmux.conf)
-  dot-tmux/        - Tmux runtime directory
-  plugins/         - Bundled tmux plugins (tpm, resurrect, continuum, better-mouse-mode)
+  tmux.conf        - Tmux config (symlinked to ~/.tmux.conf)
+  tmux/plugins/    - Bundled tmux plugins (tpm, resurrect, continuum, better-mouse-mode)
 
 editorconfig/
-  dot-editorconfig - Universal editor settings (symlinked to ~/.editorconfig)
+  editorconfig     - Universal editor settings (symlinked to ~/.editorconfig)
 
-install.sh         - Installation script with offline support
+hooks/
+  pre-commit       - Git pre-commit hook to clean embedded repos
+  README.md        - Hook documentation
+
+install            - Installation script with offline support and --dev mode
 .gitignore         - Ignores dotfiles_backups/
 CLAUDE.md          - This file
 README.md          - Project purpose and design goals
+```

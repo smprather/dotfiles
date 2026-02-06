@@ -21,7 +21,7 @@ From lowest->highest precedence:
 * Global
 * Corp
 * Site
-* Team
+* Project
 * User
 
 # Opinionated

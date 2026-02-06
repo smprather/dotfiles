@@ -5,5 +5,5 @@
     │             #   Ie, edits made in here may be overwritten.
     ├── corp      # Shared by everyone at corp
     ├── site      # Shared by everyone at site
-    ├── team      # Shared by everyone on team
+    ├── project   # Shared by everyone on project
     └── user      # Personal

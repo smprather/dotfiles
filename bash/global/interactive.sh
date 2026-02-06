@@ -106,6 +106,7 @@ export COLORTERM=truecolor
 #    export TERM="tmux-256color"
 #fi
 
+### START PATH SETUP ###
 # Adds color to a lot of basic linux cmds
 if is_truthy $cfg_enable_grc ; then
     path_prepend PATH "$BASH_CONFIG_ROOT_DIR/global/grc/bin"
@@ -113,19 +114,19 @@ if is_truthy $cfg_enable_grc ; then
     source $BASH_CONFIG_ROOT_DIR/global/grc/etc/profile.d/grc.sh
 fi
 
-# Create tmux_path_store aliases. Run 'tdd' to see a list of aliases.
-if is_truthy $cfg_enable_tmux_path_store ; then
-    eval $(tmux_path_store --bash)
-fi
-
-### START PATH SETUP ###
 for potential_bin_dir in \
     /usr/local \
     ~/.cargo \
     ~/.venv \
+    ~/.opencode \
     ~/.local; do
     [[ -r $potential_bin_dir/bin ]] && export PATH="$potential_bin_dir/bin:$PATH"
 done
+
+# Create tmux_path_store aliases. Run 'tdd' to see a list of aliases.
+if is_truthy $cfg_enable_tmux_path_store ; then
+    eval $(tmux_path_store --bash)
+fi
 
 # If NOT in an activated python virtual env
 if [[ -z ${VIRTUAL_ENV+x} ]]; then
@@ -217,12 +218,14 @@ export LESS_TERMCAP_us=$'\e[1;4;31m'
 export MANPAGER="/usr/bin/less"
 export MANROFFOPT="-c"
 
+### GNU readline configuration ###
+bind 'set colored-completion-prefix on'
+bind 'set colored-stats off'
+bind 'set bell-style none'
 # Disable check for too many completions, and paging the results.
 # This is so that I can use a 2nd TAB to cycle through the possible results.
 bind 'set completion-query-items 0'
 bind 'set page-completions off'
-
-### Readline configuration
 # Prevent pasted text from being highlighted in reverse text
 bind 'set enable-bracketed-paste off'
 # If there are multiple matches for completion, Tab should cycle through them
@@ -248,7 +251,7 @@ layered_preference_source "global_hooks/5.sh"
 # Clean the slate
 complete -r
 source $BASH_CONFIG_ROOT_DIR/global/github.scop.bash-completion/share/bash-completion/bash_completion
-for _layer in global corp site team user; do
+for _layer in global corp site project user; do
     for _comp_file in $BASH_CONFIG_ROOT_DIR/$_layer/completions/*.bash; do
         # Must check for exist since no-glob-match in bash resolves to the whole glob string with the * in it
         source_if_exists $_comp_file
