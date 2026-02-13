@@ -1,1 +1,0 @@
-/home/myles/dotfiles/nvim/lua/kickstart/plugins/autopairs.lua
