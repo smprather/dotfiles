@@ -119,9 +119,13 @@ for potential_bin_dir in \
     ~/.cargo \
     ~/.venv \
     ~/.opencode \
+    ~/node_modules/.bin \
     ~/.local; do
     [[ -r $potential_bin_dir/bin ]] && export PATH="$potential_bin_dir/bin:$PATH"
 done
+# Node.js uses the weird .bin directory name
+[[ -r ~/node_modules/.bin ]] && export PATH="~/node_modules/.bin:$PATH"
+
 
 # Create tmux_path_store aliases. Run 'tdd' to see a list of aliases.
 if is_truthy $cfg_enable_tmux_path_store ; then

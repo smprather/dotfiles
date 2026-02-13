@@ -11,6 +11,10 @@ cfg_enable_fastnvim="0"
 cfg_enable_fzf="0"
 cfg_enable_grc="1"
 
+if ! command -v $cfg_preferred_ls >/dev/null; then
+    cfg_preferred_ls="ls"
+fi
+
 # Debug, print out the config
 # declare -p cfg
 # for key in "${!cfg[@]}"; do

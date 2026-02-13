@@ -18,35 +18,40 @@ The repository manages shell (Bash), editor (Vim/Neovim), and terminal multiplex
 ## Installation
 
 **Primary installation command:**
+
 ```bash
 ./install --verbose
 ```
 
 **Development mode** (simpler, symlinks entire directories):
+
 ```bash
 ./install --dev
 ```
 
 **Restore from backup:**
+
 ```bash
 ./install --restore-backup ~/dotfiles_backups/backup.1
 ```
 
 The installation script:
+
 - Backs up existing configs to `~/dotfiles_backups/backup.N/` with relative paths preserved
 - Smart backup: Only backs up files that don't already point to the repo
 - Creates symlinks in `~/.config/` pointing to repo files
 - Creates rc file symlinks:
-  - `~/.bashrc` → `.config/bash/bashrc`
-  - `~/.vimrc` → `.config/vim/vimrc`
-  - `~/.profile` → `.config/bash/bashrc`
-  - `~/.tmux.conf` → `.config/tmux/tmux.conf`
-  - `~/.editorconfig` → `.config/editorconfig/editorconfig`
+    - `~/.bashrc` → `.config/bash/bashrc`
+    - `~/.vimrc` → `.config/vim/vimrc`
+    - `~/.profile` → `.config/bash/bashrc`
+    - `~/.tmux.conf` → `.config/tmux/tmux.conf`
+    - `~/.editorconfig` → `.config/editorconfig/editorconfig`
 - Smart tmux plugin handling: Only symlinks bundled plugins if offline
 - Auto-installs/updates tmux plugins via TPM (only if github.com is reachable)
 - Installs git hooks from `hooks/` directory
 
 **Installation modes:**
+
 - **Production mode** (default): Creates granular symlinks to specific files for better control
 - **Dev mode** (`--dev`): Creates directory-level symlinks for easier development
 
@@ -61,6 +66,7 @@ The repository includes git hooks to maintain clean commits.
 **Why needed:** For offline EE environments, external dependencies (like tmux plugins, vim plugins) are bundled directly in the repo. These plugins come with their own `.git` directories, which would cause "embedded git repository" warnings. The pre-commit hook strips these out, converting submodules to regular directories.
 
 **What it does:**
+
 1. Scans for any `.git` directories in subdirectories (excluding root `.git`)
 2. Removes them automatically
 3. Re-stages affected files
@@ -93,6 +99,7 @@ layered_preference_source() {
 ```
 
 **Layers:**
+
 - `global/` - Global/canonical configuration (shouldn't be modified locally, designed to be upstreamed)
 - `corp/` - Corporation/organization-specific settings
 - `site/` - Site-specific settings (datacenter, lab, etc.)
@@ -106,29 +113,31 @@ This layering allows EE organizations and projects to maintain shared standards 
 When bash starts (see `bash/bashrc`):
 
 1. **Non-interactive section** (always runs):
-   - Clears PATH, aliases, functions
-   - Sources `non_interactive.sh` from each layer
-   - Exits if not interactive (`[[ $- != *i* ]]`)
+    - Clears PATH, aliases, functions
+    - Sources `non_interactive.sh` from each layer
+    - Exits if not interactive (`[[ $- != *i* ]]`)
 
 2. **Interactive section** (only for interactive shells):
-   - Sources `config.sh` from each layer (contains `cfg_*` variables)
-   - Sources `interactive.sh` from each layer (main interactive setup)
-   - Hook system: Each layer can have `global_hooks/1.sh` through `global_hooks/7.sh` for extension points
+    - Sources `config.sh` from each layer (contains `cfg_*` variables)
+    - Sources `interactive.sh` from each layer (main interactive setup)
+    - Hook system: Each layer can have `global_hooks/1.sh` through `global_hooks/7.sh` for extension points
 
 ### Key Global Files
 
-- `bash/bashrc` - Main entry point, sets up layered sourcing
+- `bash/bashrc` - Main entry point, sets up layered sourcing. When installing, the user's ~/.bashrc
+  and ~/.profile should be symlinked to this file.
 - `bash/global/config.sh` - Configuration variables (`cfg_preferred_ls`, `cfg_preferred_vi`, etc.)
 - `bash/global/interactive.sh` - Main interactive setup (colors, history, PATH, aliases, prompt)
 - `bash/global/functions.sh` - Utility functions (path manipulation, version comparison, array slicing)
 
 ### Hook System
 
-Each layer (global, corp, site, project, user) can have its own `global_hooks/` directory with numbered hook files (1.sh through 7.sh). These are sourced at specific points during initialization, allowing each organizational level to inject custom behavior.
+Each layer (global, corp, site, project, user) can have its own `global_hooks/` directory with numbered hook files (1.sh through 7.sh). These are sourced at specific points during initialization, allowing each organizational level to inject custom behavior. Even though overrides can be given, sometimes it is necessary
 
 ### Configuration Variables
 
 Key `cfg_*` variables in `config.sh`:
+
 - `cfg_preferred_ls` - "eza", "lsd", or "ls"
 - `cfg_preferred_vi` - "nvim" or "vim"
 - `cfg_preferred_cat` - "bat"
@@ -144,6 +153,7 @@ Key `cfg_*` variables in `config.sh`:
 **Config file:** `tmux/tmux.conf` (symlinked to `~/.tmux.conf`)
 
 **Key bindings:**
+
 - Prefix: `Ctrl-\` (not the default `Ctrl-b`)
 - Pane navigation: `Shift + arrows`
 - Window navigation: `Ctrl + left/right`
@@ -152,6 +162,7 @@ Key `cfg_*` variables in `config.sh`:
 - Reload config: `Prefix + r`
 
 **Features:**
+
 - Vi-mode key bindings
 - Mouse support (tmux-better-mouse-mode)
 - Session persistence (tmux-resurrect + tmux-continuum)
@@ -160,11 +171,13 @@ Key `cfg_*` variables in `config.sh`:
 - History limit: 10,000 lines
 
 **Plugins managed by TPM:**
+
 - tmux-resurrect - Save: `Prefix + Ctrl-s`, Restore: `Prefix + Ctrl-r`
 - tmux-continuum - Automatic session saving/restoration
 - tmux-better-mouse-mode - Enhanced mouse handling
 
 **Plugin installation:**
+
 - TPM is always symlinked for plugin management
 - Bundled plugins are only symlinked if offline
 - If online, plugins are downloaded fresh from GitHub
@@ -176,6 +189,7 @@ Key `cfg_*` variables in `config.sh`:
 **Plugin manager:** Lazy.nvim with locked versions in `nvim/lazy-lock.json`
 
 **Major plugins:**
+
 - blink.cmp - Completion engine
 - telescope.nvim - Fuzzy finder
 - gitsigns.nvim - Git integration
@@ -192,6 +206,7 @@ Key `cfg_*` variables in `config.sh`:
 Uses native Vim 8 package management with plugins in `vim/pack/vendor/{start,opt}/`.
 
 **Bundled plugins:**
+
 - nerdtree - File explorer
 - SimpylFold - Python code folding
 - vim-liberty - Additional functionality
@@ -212,6 +227,7 @@ The dotfiles expect these modern CLI tools to be installed:
 - `pigz` - Parallel gzip (aliased as `gzip`)
 
 Shell completions are sourced from:
+
 - `bash/global/completions/*.bash` - Custom completions (bat, rg, zoxide, hyperfine, watchexec)
 - `bash/global/github.scop.bash-completion/` - Large bash-completion library (bundled for offline environments)
 
@@ -240,6 +256,7 @@ Notable aliases from `bash/global/interactive.sh`:
 - `latest` - Create/follow a "latest" symlink to most recent directory
 
 Custom `cd()` function:
+
 - Can cd to a file (goes to parent directory)
 - Offers to create non-existent directories
 - Runs `ls` after changing directories
@@ -265,6 +282,7 @@ Bash history is per-shell-session with intelligent inheritance:
 ## Design Philosophy
 
 **Opinionated but flexible**: The global layer represents 30 years of EE workflow experience and provides an opinionated "way of working". However:
+
 - Users can override anything via the layer system without breaking future updates
 - Improvements should be discussed and upstreamed to the global layer
 - The goal is shared standards with room for customization
@@ -296,6 +314,7 @@ bash/user/global_hooks/7.sh     # User late hook (after completions)
 ```
 
 Hook execution points in `bash/global/interactive.sh`:
+
 - `1.sh` - Early in interactive setup (after functions loaded)
 - `2.sh` - After GLIBC detection
 - `3.sh` - After PATH setup
@@ -333,6 +352,7 @@ This allows the dotfiles to work fully in offline environments, with tmux/vim pl
 ### Backup Safety
 
 Before any installation, the script:
+
 - Creates numbered backups (`dotfiles_backups/backup.1/`, `backup.2/`, etc.)
 - Only backs up files that don't already point to the repo (smart detection)
 - Preserves relative paths in backups

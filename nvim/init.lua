@@ -660,50 +660,121 @@ require("lazy").setup({
     -- https://github.com/j-hui/fidget.nvim
     { "j-hui/fidget.nvim", enabled = false, opts = {} },
 
-    { -- Autoformat
+    {
         "stevearc/conform.nvim",
-        event = { "BufWritePre", "BufNewFile", "InsertLeave" },
-        cmd = { "ConformInfo" },
+        lazy = true,
+        cmd = "ConformInfo",
         keys = {
+            {
+                "<leader>fi",
+                function()
+                    require("conform").format({ formatters = { "injected" }, timeout_ms = 500 })
+                end,
+                mode = { "n", "x" },
+                desc = "Format Injected Langs",
+            },
             {
                 "<leader>f",
                 function()
-                    require("conform").format({ async = true, lsp_format = "fallback" })
+                    require("conform").format({ timeout_ms = 500 })
                 end,
-                mode = "",
-                desc = "[f]ormat buffer",
+                mode = { "n", "x" },
+                desc = "Format file",
             },
         },
         opts = {
-            notify_on_error = true,
-            format_on_save = function(bufnr)
-                -- Disable "format_on_save lsp_fallback" for languages that don't
-                -- have a well standardized coding style. You can add additional
-                -- languages here or re-enable it for the disabled ones.
-                local disable_filetypes = { c = true, cpp = true }
-                if disable_filetypes[vim.bo[bufnr].filetype] then
-                    return nil
-                else
-                    return {
-                        timeout_ms = 500,
-                        lsp_format = "fallback",
-                    }
-                end
-            end,
+            default_format_opts = {
+                timeout_ms = 500,
+                async = false, -- not recommended to change
+                quiet = false, -- not recommended to change
+                lsp_format = "fallback", -- not recommended to change
+            },
             formatters_by_ft = {
                 lua = { "stylua" },
                 -- Conform can also run multiple formatters sequentially
                 python = { "ruff_format", "ruff_organize_imports" },
                 -- You can use 'stop_after_first' to run the first available formatter from the list
                 javascript = { "prettierd", "prettier", stop_after_first = true },
-                bash = { "beautysh" },
-                sh = { "beautysh" },
+                -- sh = { "beautysh" },
+                bash = { "shfmt" },
+                sh = { "shfmt" },
+                markdown = { "prettier" },
             },
+            -- The options you set here will be merged with the builtin formatters.
+            -- You can also define any custom formatters here.
+            ---@type table<string, conform.FormatterConfigOverride|fun(bufnr: integer): nil|conform.FormatterConfigOverride>
             formatters = {
                 stylua = { prepend_args = { "--indent-type", "Spaces" } },
+                injected = { options = { ignore_errors = true } },
+                prettier = { prepend_args = { "--tab-width", "4" } },
+                -- # Example of using shfmt with extra args
+                -- shfmt = {
+                --   prepend_args = { "-i", "4", "-ci" },
+                -- },
             },
         },
     },
+    {
+        "MeanderingProgrammer/render-markdown.nvim",
+        dependencies = { "nvim-treesitter/nvim-treesitter", "nvim-tree/nvim-web-devicons" }, -- if you prefer nvim-web-devicons
+        ---@module 'render-markdown'
+        ---@type render.md.UserConfig
+        opts = {},
+    },
+
+    -- {
+    --     "stevearc/conform.nvim",
+    --     event = { "BufEnter" },
+    --     cmd = { "ConformInfo" },
+    --     keys = {
+    --         {
+    --             "<leader>f",
+    --             function()
+    --                 require("conform").format({ async = true, lsp_format = "fallback" })
+    --             end,
+    --             mode = "",
+    --             desc = "[f]ormat buffer",
+    --         },
+    --         {
+    --             "<leader>fi",
+    --             function()
+    --                 require("conform").format({ formatters = { "injected" }, })
+    --             end,
+    --             #mode = { "n", "x" },
+    --             mode = "",
+    --             desc = "[f]ormat [i]njected langs (like embedded code in a markdown file)",
+    --         },
+    --     },
+    --     opts = {
+    --         notify_on_error = true,
+    --         format_on_save = function(bufnr)
+    --             -- Disable "format_on_save lsp_fallback" for languages that don't
+    --             -- have a well standardized coding style. You can add additional
+    --             -- languages here or re-enable it for the disabled ones.
+    --             local disable_filetypes = { c = true, cpp = true }
+    --             if disable_filetypes[vim.bo[bufnr].filetype] then
+    --                 return nil
+    --             else
+    --                 return {
+    --                     timeout_ms = 500,
+    --                     lsp_format = "fallback",
+    --                 }
+    --             end
+    --         end,
+    --         formatters_by_ft = {
+    --             lua = { "stylua" },
+    --             -- Conform can also run multiple formatters sequentially
+    --             python = { "ruff_format", "ruff_organize_imports" },
+    --             -- You can use 'stop_after_first' to run the first available formatter from the list
+    --             javascript = { "prettierd", "prettier", stop_after_first = true },
+    --             bash = { "beautysh" },
+    --             sh = { "beautysh" },
+    --         },
+    --         formatters = {
+    --             stylua = { prepend_args = { "--indent-type", "Spaces" } },
+    --         },
+    --     },
+    -- },
 
     { -- Autocompletion
         "saghen/blink.cmp",
@@ -1225,15 +1296,6 @@ require("lazy").setup({
     {
         "mfussenegger/nvim-lint",
     },
-    {
-        "greggh/claude-code.nvim",
-        dependencies = {
-            "nvim-lua/plenary.nvim", -- Required for git operations
-        },
-        config = function()
-            require("claude-code").setup()
-        end,
-    },
 })
 
 -- Options are automatically loaded before lazy.nvim startup
@@ -1357,6 +1419,13 @@ vim.api.nvim_create_autocmd("BufReadPost", {
         if valid_line and not_commit then
             vim.cmd([[normal! g`"zz]])
         end
+    end,
+})
+vim.api.nvim_create_autocmd({ "BufWritePre", "FileChangedShell", "InsertLeave" }, {
+    group = my_augroup1,
+    pattern = "*",
+    callback = function(args)
+        require("conform").format({ bufnr = args.buf })
     end,
 })
 
