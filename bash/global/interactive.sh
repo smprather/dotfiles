@@ -125,7 +125,18 @@ for potential_bin_dir in \
 done
 # Node.js uses the weird .bin directory name
 [[ -r ~/node_modules/.bin ]] && export PATH="~/node_modules/.bin:$PATH"
+# Rust
+[[ -r "$HOME/.cargo/env" ]] && source $HOME/.cargo/env
+# Node Version Manager (nvm)
+if [[ -r "$HOME/.nvm" ]]; then
+    export NVM_DIR="$HOME/.nvm"
+    [[ -s "$NVM_DIR/nvm.sh" ]] && source "$NVM_DIR/nvm.sh"
+fi
 
+# Can't check for existence of stuff until PATH is fully set.
+if ! command -v $cfg_preferred_ls >/dev/null; then
+    cfg_preferred_ls="ls"
+fi
 
 # Create tmux_path_store aliases. Run 'tdd' to see a list of aliases.
 if is_truthy $cfg_enable_tmux_path_store ; then
