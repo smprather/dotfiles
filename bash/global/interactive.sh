@@ -9,13 +9,13 @@ set +x
 # https://stackoverflow.com/questions/59895/how-do-i-get-the-directory-where-a-bash-script-is-located-from-within-the-script
 _source_path="${BASH_SOURCE[0]}"
 while [[ -L "$_source_path" ]]; do
-    _symlink_dir="$(cd -P "$(dirname "$_source_path" )" >/dev/null 2>&1 && pwd)"
+    _symlink_dir="$(cd -P "$(dirname "$_source_path")" >/dev/null 2>&1 && pwd)"
     _source_path="$(readlink "$_source_path")"
     if [[ $_source_path != /* ]]; then
         _source_path="$_symlink_dir/$_source_path"
     fi
 done
-_this_script_dir="$(cd -P "$(dirname "$_source_path" )" >/dev/null 2>&1 && pwd)"
+_this_script_dir="$(cd -P "$(dirname "$_source_path")" >/dev/null 2>&1 && pwd)"
 
 source "$BASH_CONFIG_ROOT_DIR/global/functions.sh"
 
@@ -42,7 +42,7 @@ export PROMPT_BOLD="\\[$BOLD\\]"
 export PROMPT_NORMAL="\\[$NORMAL\\]"
 
 # Detect a valid X desktop
-if xwininfo -root >& /dev/null && [[ -d ~/.local/share/fonts ]]; then
+if xwininfo -root >&/dev/null && [[ -d ~/.local/share/fonts ]]; then
     # Make .local/share/fonts visible to the X server
     xset +fp ~/.local/share/fonts
 fi
@@ -108,7 +108,7 @@ export COLORTERM=truecolor
 
 ### START PATH SETUP ###
 # Adds color to a lot of basic linux cmds
-if is_truthy $cfg_enable_grc ; then
+if is_truthy $cfg_enable_grc; then
     path_prepend PATH "$BASH_CONFIG_ROOT_DIR/global/grc/bin"
     export GRC_ALIASES="true"
     source $BASH_CONFIG_ROOT_DIR/global/grc/etc/profile.d/grc.sh
@@ -139,7 +139,7 @@ if ! command -v $cfg_preferred_ls >/dev/null; then
 fi
 
 # Create tmux_path_store aliases. Run 'tdd' to see a list of aliases.
-if is_truthy $cfg_enable_tmux_path_store ; then
+if is_truthy $cfg_enable_tmux_path_store && command -v tmux_path_store >/dev/null; then
     eval $(tmux_path_store --bash)
 fi
 
@@ -174,7 +174,7 @@ if [[ -n $_bat_exec ]]; then
     export BAT_PAGER="$PAGER -RF"
 fi
 
-if command -v fzf >&/dev/null && is_truthy $cfg_enable_fzf ; then
+if command -v fzf >&/dev/null && is_truthy $cfg_enable_fzf; then
     if [[ -n $_bat_exec ]]; then
         # https://junegunn.github.io/fzf/shell-integration/
         # Preview file content using bat (https://github.com/sharkdp/bat)
@@ -490,7 +490,6 @@ alias gd='git d'
 alias gr='git review'
 alias pg='pgrep -u $(/bin/whoami) --full --list-full'
 alias pk='pkill'
-alias wget='wget -O-'
 alias pyprofile='python3 -m cProfile -s cumtime'
 alias my_total_cpu="while true; do top -b -n 1 -u \$(/bin/whoami) | awk 'NR>7 { sum += \$9; } END { print sum; }'; sleep 1; done"
 alias sp1="set_prompt"
@@ -537,12 +536,12 @@ latest() {
 lns() {
     # Assume deletion of any existing sym-link
     if [[ -n $2 ]]; then
-        if /bin/readlink $2 > /dev/null; then
+        if /bin/readlink $2 >/dev/null; then
             rm -f $2
         fi
     else
         local b=$(basename $1)
-        if readlink $b > /dev/null; then
+        if readlink $b >/dev/null; then
             rm -f $b
         fi
     fi
@@ -554,7 +553,7 @@ alias gsp='git stash; git pull; git stash pop'
 alias gunzip='unpigz'
 alias gzip='pigz'
 alias gz='pigz'
-rp() { [[ -n "$1" ]] && realpath $1 || realpath . ; }
+rp() { [[ -n "$1" ]] && realpath $1 || realpath .; }
 alias less='less --incsearch --use-color +X'
 alias bjobsv='export LSB_BJOBS_FORMAT="jobid:7 stat:5 user:12 queue:15 slots:3 proj_name:15 sla:15 exec_host:13 max_mem:12 pend_time:12 max_req_proc:12 mem"'
 alias v="nvim -n -R -"
@@ -586,8 +585,8 @@ layered_preference_source "hooks/7.sh"
 # Auto-attach to tmux if session exists, but only if using ssh to connect. $TERM_PROGRAM
 # is set by tmux. Don't auto-attach when creating new GUI terminals.
 _is_ssh_connection=$(ps -f $PPID | grep -c sshd)
-if false && \
-    is_truthy $_is_ssh_connection && \
+if false &&
+    is_truthy $_is_ssh_connection &&
     [[ "$TERM_PROGRAM" != "tmux" ]] \
     ; then
 

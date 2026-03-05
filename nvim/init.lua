@@ -345,22 +345,11 @@ require("lazy").setup({
             vim.api.nvim_set_hl(0, "DiagnosticUnderlineWarn", { sp = "Cyan", undercurl = true })
         end,
     },
-
     {
         "rcarriga/nvim-notify",
         lazy = false,
         priority = 999,
     },
-
-    -- {
-    --     "RRethy/vim-illuminate",
-    --     lazy = false,
-    --     config = function()
-    --         require("illuminate").configure({
-    --             providers = { "lsp", "treesitter", "regex" },
-    --         })
-    --     end,
-    -- },
     {
         "RRethy/vim-illuminate",
         event = { "BufReadPost", "BufWritePost", "BufNewFile" },
@@ -413,14 +402,12 @@ require("lazy").setup({
             { "[[", desc = "Prev Reference" },
         },
     },
-
     {
         "folke/snacks.nvim",
         priority = 1000,
         lazy = false,
         ---@type snacks.Config
         opts = {
-            indent = { enabled = false },
             animate = { enabled = true },
             bigfile = { enabled = true },
             dashboard = { enabled = true },
@@ -646,6 +633,7 @@ require("lazy").setup({
     --   end,
     -- },
     -- NOTE: Plugins can be added with a link (or for a github repo: 'owner/repo' link).
+
     {
         "NMAC427/guess-indent.nvim", -- Detect tabstop and shiftwidth automatically
     },
@@ -791,6 +779,7 @@ require("lazy").setup({
             },
         },
         opts = {
+            notify_on_error = false,
             default_format_opts = {
                 timeout_ms = 500,
                 async = false, -- not recommended to change
@@ -806,7 +795,10 @@ require("lazy").setup({
                 -- sh = { "beautysh" },
                 bash = { "shfmt" },
                 sh = { "shfmt" },
-                markdown = { "prettier" },
+                -- markdown = { "mdformat" },
+                -- markdown = { "prettier", "markdownlint-cli2", "markdown-toc" },
+                markdown = { "rumdl" },
+                yaml = { "yamlfmt" },
             },
             -- The options you set here will be merged with the builtin formatters.
             -- You can also define any custom formatters here.
@@ -814,11 +806,13 @@ require("lazy").setup({
             formatters = {
                 stylua = { prepend_args = { "--indent-type", "Spaces", "--collapse-simple-statement", "Always" } },
                 injected = { options = { ignore_errors = true } },
+                yamlfmt = { prepend_args = { "-quiet" }, options = { ignore_errors = true } },
                 prettier = { prepend_args = { "--tab-width", "4" } },
                 -- # Example of using shfmt with extra args
                 -- shfmt = {
                 --   prepend_args = { "-i", "4", "-ci" },
                 -- },
+                mdformat = { prepend_args = { "--wrap", "keep" } },
             },
         },
     },
@@ -828,6 +822,21 @@ require("lazy").setup({
         ---@module 'render-markdown'
         ---@type render.md.UserConfig
         opts = { completions = { lsp = { enabled = true } } },
+    },
+    {
+        "hedyhli/markdown-toc.nvim",
+        ft = "markdown", -- Lazy load on markdown filetype
+        cmd = { "Mtoc" }, -- Or, lazy load on "Mtoc" command
+        opts = {
+            -- Your configuration here (optional)
+        },
+    },
+    {
+        "tadmccorkle/markdown.nvim",
+        ft = "markdown", -- or 'event = "VeryLazy"'
+        opts = {
+            -- configuration here or empty for defaults
+        },
     },
 
     -- {
@@ -1136,7 +1145,7 @@ require("lazy").setup({
                 sync_install = not dpc,
                 indent = {
                     enable = true,
-                    disable = { "tcl", "ruby" },
+                    disable = { "tcl", "ruby", "yaml" },
                 },
                 -- enable autotagging (w/ nvim-ts-autotag plugin)
                 autotag = { enable = true },
@@ -1558,7 +1567,8 @@ vim.cmd([[
 
 vim.notify = require("notify")
 
-vim.lsp.enable({ "lua_ls", "ruff", "ty" })
+-- You can find the lsp configs in ~/.config/nvim/lsp/*
+vim.lsp.enable({ "lua_ls", "ruff", "ty", "yamlls", "marksman" })
 vim.lsp.config("*", {
     root_markers = { ".git" },
     capabilities = {
@@ -1627,7 +1637,7 @@ vim.api.nvim_create_autocmd("LspAttach", {
         --
         -- When you move your cursor, the highlights will be cleared (the second autocommand).
         local client = vim.lsp.get_client_by_id(event.data.client_id)
-        if client and client.supports_method("textDocument/documentHighlight") then
+        if client and client:supports_method("textDocument/documentHighlight") then
             local highlight_augroup = vim.api.nvim_create_augroup("kickstart-lsp-highlight", { clear = false })
             vim.api.nvim_create_autocmd({ "CursorHold", "CursorHoldI" }, {
                 buffer = event.buf,

@@ -21,8 +21,11 @@
 ####################################################################################################
 # This section of the script is for non-interactive shell, so "keep it clean"
 
-# Start with a clean slate: basic path, clear all aliases and functions
-export PATH="/usr/local/bin:/bin:/usr/bin:/usr/sbin"
+# Start with a clean slate: clear all aliases and functions.
+# Preserve inherited PATH when present; otherwise use a minimal fallback.
+if [[ -z "${PATH:-}" ]]; then
+    export PATH="/usr/local/bin:/bin:/usr/bin:/usr/sbin"
+fi
 unalias -a
 unset -f $(declare -F | awk '{print $3}')
 
@@ -97,4 +100,5 @@ if is_truthy $cfg_attach_to_tmux; then
 fi
 
 unset_bashrc_local_vars
+
 # vim: ft=bash ts=4

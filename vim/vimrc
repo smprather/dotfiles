@@ -1,6 +1,6 @@
 " My idea of "sensible" is a little different that Tim Pope's
 " so load his stuff first so I can override as needed.
-packadd vim-sensible
+"packadd vim-sensible
 " The rest of the plugins in vim/pack/*/start/* are loaded automatically
 " AFTER .vimrc is loaded.
 
@@ -14,33 +14,6 @@ packadd vim-sensible
 set encoding=utf-8
 
 set shell=sh
-
-"set backupdir=/tmp/$USER/vimtemp
-"set directory=/tmp/$USER/vimtemp
-"set undodir=/tmp/$USER/vimtemp
-
-"function! PyAddParensToDebugs()
-"    execute "normal! mZ"
-"    execute "%s/^\\(\\s*\\)\\(ic\\)\\( \\(.*\\)\\)\\{-}$/\\1\\2(\\4)/"
-"    execute "%s/^\\(\\s*\\)\\(ice\\)\\( \\(.*\\)\\)\\{-}$/\\1ic(\\4)\\r\\1exit()/"
-"    execute "%s/^\\(\\s*\\)\\(exit\\|e\\)$/\\1exit()/"
-"    execute "normal! `Z"
-"endfunction
-
-" Use persistent history.
-"if !isdirectory("/var/tmp/mylesp-vim-undo-dir")
-"  call mkdir("/var/tmp/mylesp-vim-undo-dir", "", 0700)
-"endif
-"if !isdirectory("/var/tmp/mylesp-vim-view-dir")
-"  call mkdir("/var/tmp/mylesp-vim-view-dir", "", 0700)
-"endif
-"set undodir=/tmp/mylesp-vim-undo-dir
-"set undofile
-"set viewdir=/var/tmp/mylesp-vim-view-dir
-
-" Make directory-nav buffers go away when done
-" I need to switch over to NerdTree instead of netrw
-let g:netrw_fastbrowse=2
 
 " You can revert the settings after the call like so:
 "   filetype indent off   " Disable file-type-specific indentation
@@ -81,33 +54,6 @@ set ts=4 sts=4 sw=4 expandtab
 
 "let g:LargeFile = 1000
 "let g:black_linelength = 130
-
-set regexpengine=1
-set lazyredraw
-set ttyfast
-set synmaxcol=1200
-
-"Performance improvements from (speed)
-"https://vi.stackexchange.com/questions/10495/most-annoying-slow-down-of-a-plain-text-editor
-"if !has('nvim')
-"endif
-"if has('nvim')
-"    " Initialize all lua-driven plugins
-"    " ~/.vim/init.lua
-"    runtime init.lua
-"
-"    let g:semshi#error_sign=v:true
-"    let g:semshi#error_sign_delay=30.0
-"    let g:semshi#update_delay_factor=0.0005
-"    let g:SimpylFold_docstring_preview=1
-"    set guicursor=
-"    " Figure out the system Python for Neovim.
-"    if exists("$VIRTUAL_ENV")
-"        let g:python3_host_prog=substitute(system("/bin/which -a python3 | head -n1"), "\n", '', 'g')
-"    else
-"        let g:python3_host_prog="/proj/cot_globals/envs/glb_python3.11.4/bin/python3"
-"    endif
-"endif
 
 " Based on fold advice from here
 " https://vi.stackexchange.com/questions/13864/bufwinleave-mkview-with-unnamed-file-error-32
@@ -240,18 +186,18 @@ command! ZoomToggle call s:ZoomToggle()
 nnoremap <silent> <leader>a :ZoomToggle<CR>
 
 " My key mappings
-map  <c-d> dd
-nmap  e     :e<space>
-map  t     j0.
-map  T     j.
-map  <M-m> `m
-map  1     @q
-map <c-h>  <c-w><c-w>
-map  =     <c-w>+
-map  -     <c-w>-
-map  _     <c-w>>
-map  +     <c-w><
-map Y       ^W^W^Y^W^W
+map  <c-d>     dd
+map  t         j0.
+map  T         j.
+map  <M-m>     `m
+map <c-h>      <c-w><c-w>
+map  =         <c-w>+
+map  -         <c-w>-
+map  _         <c-w>>
+map  +         <c-w><
+map Y          ^W^W^Y^W^W
+noremap >          >>
+noremap <          <<
 map <leader>rt :%s/\\t/  /g<cr>
 map <leader>Q  :q<cr>
 map <leader>q  :qall!<cr>
