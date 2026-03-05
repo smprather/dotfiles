@@ -1,0 +1,18 @@
+add_newline = false
+# Use a custom format to put the prompt character on a new line
+format = """
+$directory
+$character"""
+
+[directory]
+# This ensures the full path is always shown
+truncation_length = 0
+# This prevents Starship from shortening the path to the repo root
+truncate_to_repo = false
+# Optional: display the path in a specific style
+style = "bold cyan"
+
+[character]
+success_symbol = "[❯](bold green)"
+error_symbol = "[❯](bold red)"
+

@@ -211,13 +211,18 @@ set_prompt() {
     }
 
     # history -a: Always flush the latest command to the history file
-    PROMPT_COMMAND="printf '$BOLD$BLUE'"'; history -a; echo $(realpath .); '"printf '$NORMAL'"
-    PROMPT_COMMAND="printf '$BOLD$CYAN'"'; history -a; echo $(realpath .); '"printf '$NORMAL'"
+    #PROMPT_COMMAND="printf '$BOLD$BLUE'"'; history -a; echo $(realpath .); '"printf '$NORMAL'"
+    #PROMPT_COMMAND="printf '$BOLD$CYAN'"'; history -a; echo $(realpath .); '"printf '$NORMAL'"
 
     PS1="${PROMPT_YELLOW}\$(get_prompt_uid)${prompt_color}\$ ${PROMPT_WHITE}"
 }
 layered_preference_source "global_hooks/4.sh"
-set_prompt "$cfg_prompt_include_host"
+unset PROMPT_COMMAND
+if is_truthy $cfg_enable_starship && command -v starship >/dev/null; then
+    eval "$(starship init bash)"
+else
+    set_prompt "$cfg_prompt_include_host"
+fi
 
 # Disable ctrl-s terminal pausing
 stty -ixon

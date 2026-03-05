@@ -11,6 +11,7 @@ cfg_prompt_color_farm="$PROMPT_RED"
 cfg_enable_fastnvim="0"
 cfg_enable_fzf="0"
 cfg_enable_grc="1"
+cfg_enable_starship="1"
 
 # Debug, print out the config
 # declare -p cfg

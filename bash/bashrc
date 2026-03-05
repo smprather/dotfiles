@@ -102,3 +102,6 @@ fi
 unset_bashrc_local_vars
 
 # vim: ft=bash ts=4
+
+# Generated for envman. Do not edit.
+[ -s "$HOME/.config/envman/load.sh" ] && source "$HOME/.config/envman/load.sh"
