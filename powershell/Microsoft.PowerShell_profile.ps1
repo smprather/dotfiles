@@ -122,42 +122,74 @@ Set-Alias -Name cat  -Value bat                -Option AllScope
 $profileIsInteractive = $Host.Name -in @('ConsoleHost', 'Visual Studio Code Host')
 $profileIsSandbox = $env:USERNAME -eq 'CodexSandboxOffline'
 $profileHasTerminalOutput = -not [Console]::IsOutputRedirected
-$profileCanUsePromptTools = $profileIsInteractive -and -not $profileIsSandbox
-$profileCanUsePSReadLine = $profileCanUsePromptTools -and $profileHasTerminalOutput -and $Host.UI.SupportsVirtualTerminal
+$profileSupportsVT = $false
+try {
+    $profileSupportsVT = [bool]$Host.UI.SupportsVirtualTerminal
+} catch {
+    $profileSupportsVT = $false
+}
+$profileCanUsePromptTools = $profileIsInteractive -and -not $profileIsSandbox -and $profileHasTerminalOutput
+$profileCanUsePSReadLine = $profileCanUsePromptTools -and $profileSupportsVT
 
 if ($profileCanUsePSReadLine) {
-    Set-PSReadLineOption -EditMode Emacs
-    Set-PSReadLineOption -HistorySearchCursorMovesToEnd
-    Set-PSReadLineOption -BellStyle None
-    Set-PSReadLineKeyHandler -Key UpArrow   -Function HistorySearchBackward
-    Set-PSReadLineKeyHandler -Key DownArrow -Function HistorySearchForward
-    Set-PSReadLineKeyHandler -Key Tab       -Function MenuComplete
+    try {
+        Set-PSReadLineOption -EditMode Emacs
+        Set-PSReadLineOption -HistorySearchCursorMovesToEnd
+        Set-PSReadLineOption -BellStyle None
+        Set-PSReadLineKeyHandler -Key UpArrow   -Function HistorySearchBackward
+        Set-PSReadLineKeyHandler -Key DownArrow -Function HistorySearchForward
+        Set-PSReadLineKeyHandler -Key Tab       -Function MenuComplete
+    } catch {
+        Write-Verbose "PowerShell profile: skipped PSReadLine keybind setup due to terminal limitations."
+        $profileCanUsePSReadLine = $false
+    }
 
     # Inline prediction (requires PSReadLine 2.2+ / PS 7.2+)
-    try {
-        Set-PSReadLineOption -PredictionSource HistoryAndPlugin
-        Set-PSReadLineOption -PredictionViewStyle ListView
-    } catch {
-        Set-PSReadLineOption -PredictionSource History
+    if ($profileCanUsePSReadLine) {
+        try {
+            Set-PSReadLineOption -PredictionSource HistoryAndPlugin
+            Set-PSReadLineOption -PredictionViewStyle ListView
+        } catch {
+            Set-PSReadLineOption -PredictionSource History
+        }
     }
 }
 
 if ($profileCanUsePromptTools) {
     # zoxide (smarter cd — use 'z' and 'zi' for interactive)
     if (Get-Command zoxide -ErrorAction SilentlyContinue) {
-        Invoke-Expression (& { (zoxide init powershell | Out-String) })
+        try {
+            Invoke-Expression (& { (zoxide init powershell | Out-String) })
+        } catch {
+            Write-Verbose "PowerShell profile: skipped zoxide initialization."
+        }
     }
 
     # PSFzf — Ctrl+T file picker, Ctrl+R fuzzy history; falls back to built-in Ctrl+R if unavailable
-    if (Get-Module -ListAvailable -Name PSFzf -ErrorAction SilentlyContinue) {
-        Import-Module PSFzf
-        Set-PsFzfOption -PSReadlineChordProvider 'Ctrl+t' -PSReadlineChordReverseHistory 'Ctrl+r'
-    } else {
-        Set-PSReadLineKeyHandler -Chord 'Ctrl+r' -Function ReverseSearchHistory
+    if ($profileCanUsePSReadLine) {
+        if (Get-Module -ListAvailable -Name PSFzf -ErrorAction SilentlyContinue) {
+            try {
+                Import-Module PSFzf
+                Set-PsFzfOption -PSReadlineChordProvider 'Ctrl+t' -PSReadlineChordReverseHistory 'Ctrl+r'
+            } catch {
+                Write-Verbose "PowerShell profile: skipped PSFzf setup."
+            }
+        } else {
+            try {
+                Set-PSReadLineKeyHandler -Chord 'Ctrl+r' -Function ReverseSearchHistory
+            } catch {
+                Write-Verbose "PowerShell profile: skipped reverse search keybinding."
+            }
+        }
     }
 
     # Starship prompt
     if (Get-Command starship -ErrorAction SilentlyContinue) {
-        Invoke-Expression (&starship init powershell)
+        try {
+            Invoke-Expression (&starship init powershell)
+        } catch {
+            Write-Verbose "PowerShell profile: skipped Starship prompt."
+        }
     }
 }
+
