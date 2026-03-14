@@ -4,13 +4,17 @@ SetTitleMatchMode("Slow")
 InstallMouseHook()
 InstallKeybdHook()
 
-; Set global variables
-g_uid := EnvGet("CORP_UID")
-if (g_uid = "")
-    MsgBox "CORP_UID environment variable is not set."
-g_password := EnvGet("CORP_PASSWORD")
-if (g_password = "")
-    MsgBox "CORP_PASSWORD environment variable is not set."
+; Corp mode: detected by presence of CORP_UID env var.
+; When in corp mode, load credentials and enable VPN autologin + mouse nudge.
+g_corp_mode := (EnvGet("CORP_UID") != "")
+g_uid := ""
+g_password := ""
+if (g_corp_mode) {
+    g_uid := EnvGet("CORP_UID")
+    g_password := EnvGet("CORP_PASSWORD")
+    if (g_password = "")
+        MsgBox "CORP_PASSWORD environment variable is not set."
+}
 g_idle := false
 g_autologin := true
 g_autologin_saved := true
@@ -61,9 +65,12 @@ check_idle()
 
 do_loop()
 {
+    global g_corp_mode
     check_idle()
-    mouse_nudge()
-    log_into_cadence_vpn()
+    if (g_corp_mode) {
+        mouse_nudge()
+        log_into_cadence_vpn()
+    }
 }
 
 log_into_cadence_vpn()
@@ -235,6 +242,9 @@ mouse_nudge()
 }
 #SuspendExempt False
 
+; --- Corp-only hotkeys (disabled on home PC) ---
+#HotIf g_corp_mode
+
 ; Toggle VPN auto-login on/off
 ^!v::
 {
@@ -264,6 +274,8 @@ mouse_nudge()
     SendText(g_password)
     Send("{Enter}")
 }
+
+#HotIf
 
 ; This enables "hot zoom" toggle in tmux
 ; Make sure you're using Myles' tmux.conf to set the tmux leader to ^\ (Ctrl-backslash)
