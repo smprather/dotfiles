@@ -114,6 +114,26 @@ if file then
     file:close()
 end
 
+-- Platform detection
+local is_windows = vim.fn.has("win32") == 1 or vim.fn.has("win64") == 1
+local username = os.getenv("USER") or os.getenv("USERNAME") or "nvimuser"
+
+-- Swap/temp dir: prefer /dev/shm on Linux (RAM-backed tmpfs, avoids slow NFS home dir).
+-- Falls back to /tmp on Linux systems without /dev/shm, and uses $TEMP on Windows.
+local swap_dir
+local vitmp_file
+if is_windows then
+    swap_dir = vim.fn.expand("$TEMP") .. "\\nvim\\swap"
+    vitmp_file = vim.fn.expand("$TEMP") .. "\\nvim_vitmp"
+elseif vim.fn.isdirectory("/dev/shm") == 1 then
+    swap_dir = "/dev/shm/" .. username .. "/vim"
+    vitmp_file = "/dev/shm/" .. username .. "/vitmp"
+else
+    swap_dir = "/tmp/" .. username .. "/vim"
+    vitmp_file = "/tmp/vitmp_" .. username
+end
+vim.fn.mkdir(swap_dir, "p")
+
 -- Set <space> as the leader key
 -- See `:help mapleader`
 --  NOTE: Must happen before plugins are loaded (otherwise wrong leader will be used)
@@ -1452,7 +1472,7 @@ local options = {
     swapfile = true, -- creates a swapfile for the buffer
     backup = false, -- creates a backup file
     writebackup = true,
-    directory = "/tmp/" .. os.getenv("USER") .. "/vim", -- list of dir names for the swap file
+    directory = swap_dir, -- list of dir names for the swap file
     wildmenu = true,
     wildmode = "longest:full,full", -- Better control over file name completion when using :e <file>
     timeoutlen = 1000, -- Time in milliseconds to wait for a mapped sequence to complete.
@@ -1479,8 +1499,6 @@ local options = {
     -- guifont = "",
 }
 
-local swap_dir = "/tmp/" .. os.getenv("USER") .. "/vim"
-vim.fn.mkdir(swap_dir, "p")
 
 for k, v in pairs(options) do
     pcall(function() vim.opt[k] = v end)
@@ -1755,8 +1773,10 @@ vim.cmd([[map  +       <c-w><]])
 vim.cmd([[map <leader>rt :%s/\\t/  /g<cr>]])
 vim.cmd([[map <leader>a  :wa<cr>]])
 vim.cmd([[map <leader>=  <c-w>=]])
-vim.cmd([[vmap <leader>y :w! /tmp/vitmp_$USER<CR>]])
-vim.cmd([[nmap <leader>p :r! cat /tmp/vitmp_$USER<CR>]])
+-- Cross-platform yank/paste via temp file (avoids NFS clipboard issues on Linux)
+local read_cmd = is_windows and ("type " .. vitmp_file) or ("cat " .. vitmp_file)
+vim.keymap.set("v", "<leader>y", ":w! " .. vitmp_file .. "<CR>", { noremap = true })
+vim.keymap.set("n", "<leader>p", ":r! " .. read_cmd .. "<CR>", { noremap = true })
 vim.cmd([[map <leader># :windo set invnumber<CR>]])
 -- Enable fold-toggle with ctrl-spacebar
 -- This is how you map ctrl-space in vim
