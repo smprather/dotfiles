@@ -116,41 +116,48 @@ Set-Alias -Name p    -Value Get-Location       -Option AllScope
 Set-Alias -Name cat  -Value bat                -Option AllScope
 
 # =============================================================================
-# PSReadLine
-# https://github.com/PowerShell/PSReadLine
+# Interactive shell integrations
 # =============================================================================
 
-Set-PSReadLineOption -EditMode Emacs
-Set-PSReadLineOption -HistorySearchCursorMovesToEnd
-Set-PSReadLineOption -BellStyle None
-Set-PSReadLineKeyHandler -Key UpArrow   -Function HistorySearchBackward
-Set-PSReadLineKeyHandler -Key DownArrow -Function HistorySearchForward
-Set-PSReadLineKeyHandler -Key Tab       -Function MenuComplete
+$profileIsInteractive = $Host.Name -in @('ConsoleHost', 'Visual Studio Code Host')
+$profileIsSandbox = $env:USERNAME -eq 'CodexSandboxOffline'
+$profileHasTerminalOutput = -not [Console]::IsOutputRedirected
+$profileCanUsePromptTools = $profileIsInteractive -and -not $profileIsSandbox
+$profileCanUsePSReadLine = $profileCanUsePromptTools -and $profileHasTerminalOutput -and $Host.UI.SupportsVirtualTerminal
 
-# Inline prediction (requires PSReadLine 2.2+ / PS 7.2+)
-try {
-    Set-PSReadLineOption -PredictionSource HistoryAndPlugin
-    Set-PSReadLineOption -PredictionViewStyle ListView
-} catch {
-    Set-PSReadLineOption -PredictionSource History
+if ($profileCanUsePSReadLine) {
+    Set-PSReadLineOption -EditMode Emacs
+    Set-PSReadLineOption -HistorySearchCursorMovesToEnd
+    Set-PSReadLineOption -BellStyle None
+    Set-PSReadLineKeyHandler -Key UpArrow   -Function HistorySearchBackward
+    Set-PSReadLineKeyHandler -Key DownArrow -Function HistorySearchForward
+    Set-PSReadLineKeyHandler -Key Tab       -Function MenuComplete
+
+    # Inline prediction (requires PSReadLine 2.2+ / PS 7.2+)
+    try {
+        Set-PSReadLineOption -PredictionSource HistoryAndPlugin
+        Set-PSReadLineOption -PredictionViewStyle ListView
+    } catch {
+        Set-PSReadLineOption -PredictionSource History
+    }
 }
 
-# =============================================================================
-# Tool integrations
-# =============================================================================
+if ($profileCanUsePromptTools) {
+    # zoxide (smarter cd — use 'z' and 'zi' for interactive)
+    if (Get-Command zoxide -ErrorAction SilentlyContinue) {
+        Invoke-Expression (& { (zoxide init powershell | Out-String) })
+    }
 
-# zoxide (smarter cd — use 'z' and 'zi' for interactive)
-if (Get-Command zoxide -ErrorAction SilentlyContinue) {
-    Invoke-Expression (& { (zoxide init powershell | Out-String) })
+    # PSFzf — Ctrl+T file picker, Ctrl+R fuzzy history; falls back to built-in Ctrl+R if unavailable
+    if (Get-Module -ListAvailable -Name PSFzf -ErrorAction SilentlyContinue) {
+        Import-Module PSFzf
+        Set-PsFzfOption -PSReadlineChordProvider 'Ctrl+t' -PSReadlineChordReverseHistory 'Ctrl+r'
+    } else {
+        Set-PSReadLineKeyHandler -Chord 'Ctrl+r' -Function ReverseSearchHistory
+    }
+
+    # Starship prompt
+    if (Get-Command starship -ErrorAction SilentlyContinue) {
+        Invoke-Expression (&starship init powershell)
+    }
 }
-
-# PSFzf — Ctrl+T file picker, Ctrl+R fuzzy history; falls back to built-in Ctrl+R if unavailable
-if (Get-Module -ListAvailable -Name PSFzf -ErrorAction SilentlyContinue) {
-    Import-Module PSFzf
-    Set-PsFzfOption -PSReadlineChordProvider 'Ctrl+t' -PSReadlineChordReverseHistory 'Ctrl+r'
-} else {
-    Set-PSReadLineKeyHandler -Chord 'Ctrl+r' -Function ReverseSearchHistory
-}
-
-# Starship prompt
-Invoke-Expression (&starship init powershell)
