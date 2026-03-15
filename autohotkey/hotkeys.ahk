@@ -25,6 +25,7 @@ if (g_corp_mode) {
 g_idle := false
 g_autologin := true
 g_autologin_saved := true
+;g_vpn_log := A_ScriptDir . "\vpn_debug.log"
 
 ;while true {
 ;    ih := InputHook("L1", "{LControl}{RControl}{LAlt}{RAlt}{LShift}{RShift}{LWin}{RWin}{AppsKey}"
@@ -81,6 +82,11 @@ do_loop()
     }
 }
 
+;VpnLog(msg) {
+;    global g_vpn_log
+;    FileAppend(A_Now " " . msg . "`n", g_vpn_log)
+;}
+
 log_into_corp_vpn()
 {
     global g_idle, g_autologin, g_uid, g_password
@@ -96,8 +102,6 @@ log_into_corp_vpn()
     try {
 
     ; --- Case 1: Credential prompt is visible → fill username/password and submit ---
-    ; Title starts with "Cisco Secure Client | " (e.g. "Cisco Secure Client | foo.bar.com")
-    ; Edit1 = Username, Edit2 = Password, Button1 = OK
     SetTitleMatchMode(1)
     if (WinExist("Cisco Secure Client | ")) {
         WinActivate()
@@ -116,10 +120,14 @@ log_into_corp_vpn()
     }
 
     ; --- Case 2: Check connection state, bring window forward, click Connect ---
+    ; Match only the main VPN window via "AnyConnect VPN:" in text (with colon).
+    ; The preferences window also has title "Cisco Secure Client" but its text
+    ; starts with "AnyConnect VPN" (no colon) and its history log contains old
+    ; "Connected to" entries that would cause false positives.
     SetTitleMatchMode(3)
     DetectHiddenWindows(true)
-    if (WinExist("Cisco Secure Client")) {
-        windowText := WinGetText("Cisco Secure Client")
+    if (WinExist("Cisco Secure Client", "AnyConnect VPN:")) {
+        windowText := WinGetText("Cisco Secure Client", "AnyConnect VPN:")
         DetectHiddenWindows(false)
         if (InStr(windowText, "Connected to")) {
             SetTitleMatchMode(2)
@@ -135,9 +143,9 @@ log_into_corp_vpn()
     Run("C:\Program Files (x86)\Cisco\Cisco Secure Client\UI\csc_ui.exe")
     Sleep(1500)
     SetTitleMatchMode(3)
-    if (WinExist("Cisco Secure Client")) {
-        WinActivate("Cisco Secure Client")
-        ControlClick("Button1", "Cisco Secure Client")  ; Connect button
+    if (WinExist("Cisco Secure Client", "AnyConnect VPN:")) {
+        WinActivate("Cisco Secure Client", "AnyConnect VPN:")
+        ControlClick("Button1", "Cisco Secure Client", "AnyConnect VPN:")  ; Connect button
     }
     last_action_ms := A_TickCount
     SetTitleMatchMode(2)
@@ -146,6 +154,7 @@ log_into_corp_vpn()
         DetectHiddenWindows(false)
         SetTitleMatchMode(2)
         last_action_ms := A_TickCount
+        ;VpnLog("ERROR: " e.Message " (line " e.Line ")")
     }
 }
 

@@ -81,7 +81,7 @@ powershell/
 wezterm/
   wezterm.lua               - WezTerm config (not yet in install script)
 autohotkey/
-  hotkeys.ahk               - Windows AutoHotKey (not in install script)
+  hotkeys.ahk               - Windows AutoHotKey hotkeys
 
 hooks/
   pre-commit                - Removes embedded .git dirs before commits
@@ -114,7 +114,7 @@ install.ps1                 - Windows installation script (PowerShell)
 - `%USERPROFILE%\.config\wezterm\wezterm.lua` ← `repo/wezterm/wezterm.lua`
 - `%USERPROFILE%\.config\starship\starship.toml` ← `repo/starship/starship.toml`
 - `%USERPROFILE%\.editorconfig` ← `repo/editorconfig/editorconfig`
-- `%APPDATA%\Microsoft\Windows\Start Menu\Programs\Startup\hotkeys.ahk` ← `repo/autohotkey/hotkeys.ahk`
+- `%APPDATA%\Microsoft\Windows\Start Menu\Programs\Startup\hotkeys.lnk` — shortcut to `AutoHotkey64.exe` with `repo/autohotkey/hotkeys.ahk` as argument (AHK extracted to `%USERPROFILE%\AutoHotkey_*\`, not installed, to avoid SentinelOne flagging)
 - `$PROFILE` ← `repo/powershell/Microsoft.PowerShell_profile.ps1`
 
 ## Bash Configuration Architecture

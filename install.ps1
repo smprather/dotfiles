@@ -68,15 +68,74 @@ Copy-Config "$repoDir\powershell\Microsoft.PowerShell_profile.ps1" $PROFILE
 Write-Host "EditorConfig..."
 Copy-Config "$repoDir\editorconfig\editorconfig" "$env:USERPROFILE\.editorconfig"
 
-# --- AutoHotKey (launch at startup) ---
+# --- AutoHotKey (launch at startup via .lnk shortcut) ---
+# AHK is not "installed" (avoids SentinelOne flagging the installer). Instead,
+# we extract the AHK zip to $HOME and create a startup shortcut that calls
+# AutoHotkey64.exe directly with the repo hotkeys.ahk as the argument.
 Write-Host "AutoHotKey..."
-$startupDir = "$env:APPDATA\Microsoft\Windows\Start Menu\Programs\Startup"
-$ahkDest = "$startupDir\hotkeys.ahk"
-Copy-Config "$repoDir\autohotkey\hotkeys.ahk" $ahkDest
+$startupDir  = "$env:APPDATA\Microsoft\Windows\Start Menu\Programs\Startup"
+$ahkScript   = "$repoDir\autohotkey\hotkeys.ahk"
 
-Get-Process -Name 'AutoHotkey*' -ErrorAction SilentlyContinue | Stop-Process -Force
-Start-Process $ahkDest
-Write-Host "  Reloaded AutoHotKey"
+# Find existing extracted AutoHotkey directory in $HOME
+$ahkDirs = @(Get-ChildItem -Path $HOME -Filter "AutoHotkey_*" -Directory -ErrorAction SilentlyContinue)
+$ahkDir  = $null
+
+if ($ahkDirs.Count -gt 1) {
+    Write-Warning "  Multiple AutoHotkey directories found in $HOME."
+    Write-Warning "  Remove all but one and re-run to set up AutoHotKey."
+} elseif ($ahkDirs.Count -eq 1) {
+    $ahkDir = $ahkDirs[0].FullName
+    Write-Host "  Found existing AutoHotkey: $ahkDir"
+} else {
+    # Download latest stable release from GitHub
+    Write-Host "  No AutoHotkey found — downloading latest stable release..."
+    try {
+        $release  = Invoke-RestMethod "https://api.github.com/repos/AutoHotkey/AutoHotkey/releases/latest" -UseBasicParsing
+        $zipAsset = $release.assets | Where-Object { $_.name -like "AutoHotkey_*.zip" } | Select-Object -First 1
+        if (-not $zipAsset) { throw "No zip asset found in latest release." }
+
+        $zipName = $zipAsset.name
+        $dirName = [System.IO.Path]::GetFileNameWithoutExtension($zipName)
+        $zipPath = Join-Path $HOME $zipName
+        $ahkDir  = Join-Path $HOME $dirName
+
+        Write-Host "  Downloading $zipName..."
+        Invoke-WebRequest -Uri $zipAsset.browser_download_url -OutFile $zipPath -UseBasicParsing
+        New-Item -ItemType Directory -Path $ahkDir -Force | Out-Null
+        Expand-Archive -Path $zipPath -DestinationPath $ahkDir -Force
+        Remove-Item $zipPath
+        Write-Host "  Extracted to $ahkDir"
+    } catch {
+        Write-Warning "  Failed to download AutoHotkey: $_"
+    }
+}
+
+if ($ahkDir) {
+    $ahkExe = Join-Path $ahkDir "AutoHotkey64.exe"
+    if (-not (Test-Path $ahkExe)) {
+        Write-Warning "  AutoHotkey64.exe not found in $ahkDir — skipping."
+    } else {
+        # Remove old .ahk copy from startup folder if present (would trigger "open with" dialog)
+        $oldAhk = "$startupDir\hotkeys.ahk"
+        if (Test-Path $oldAhk) { Remove-Item $oldAhk -Force }
+
+        # Create .lnk startup shortcut: AutoHotkey64.exe "path\to\hotkeys.ahk"
+        $shortcutPath = "$startupDir\hotkeys.lnk"
+        $shell = New-Object -ComObject WScript.Shell
+        $lnk = $shell.CreateShortcut($shortcutPath)
+        $lnk.TargetPath       = $ahkExe
+        $lnk.Arguments        = "`"$ahkScript`""
+        $lnk.WorkingDirectory = Split-Path $ahkScript -Parent
+        $lnk.Save()
+        Write-Host "  Created startup shortcut -> $ahkExe"
+
+        # Restart AHK now
+        Get-Process -Name 'AutoHotkey*' -ErrorAction SilentlyContinue | Stop-Process -Force
+        Start-Process -FilePath $ahkExe -ArgumentList "`"$ahkScript`""
+        Write-Host "  AutoHotKey started"
+        Write-Host "  AutoHotKey will launch automatically on next login via the startup shortcut."
+    }
+}
 
 # --- PSFzf ---
 Write-Host "PSFzf..."
@@ -90,5 +149,3 @@ if (Get-Module -ListAvailable -Name PSFzf -ErrorAction SilentlyContinue) {
 # --- Done ---
 Write-Host ""
 Write-Host "Done!"
-Write-Host "AutoHotKey will launch automatically on next login."
-Write-Host "To start it now, run: & '$repoDir\autohotkey\hotkeys.ahk'"
