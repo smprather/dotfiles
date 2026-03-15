@@ -4,6 +4,13 @@ SetTitleMatchMode("Slow")
 InstallMouseHook()
 InstallKeybdHook()
 
+StrJoin(arr, sep) {
+    out := ""
+    for i, v in arr
+        out .= (i > 1 ? sep : "") . v
+    return out
+}
+
 ; Corp mode: detected by presence of CORP_UID env var.
 ; When in corp mode, load credentials and enable VPN autologin + mouse nudge.
 g_corp_mode := (EnvGet("CORP_UID") != "")
@@ -51,6 +58,7 @@ SetMouseDelay(10)
 ; Continuously execute these every XXXX msG
 SetTimer(do_loop, 1000)
 ;SetTimer(check_idle, 1000)
+Return  ; End of auto-execute section
 
 check_idle()
 {
@@ -75,125 +83,69 @@ do_loop()
 
 log_into_cadence_vpn()
 {
-    global g_idle, g_autologin
+    global g_idle, g_autologin, g_uid, g_password
 
     ; Skip if user is idle (away from desk) or auto-login is toggled off (Ctrl+Alt+V)
-    if (g_idle || !g_autologin) {
+    if (g_idle || !g_autologin)
         Return
-    }
 
-    ; Cooldown: act at most once every 15 seconds to prevent frenzy-looping when
-    ; Cisco's window gets stuck in a bad state.
+    ; Cooldown: act at most once every 5 seconds (cases 2 and 3 only).
+    ; Case 1 (credential prompt) bypasses the cooldown — it must respond immediately.
     static last_action_ms := 0
-    if (A_TickCount - last_action_ms < 15000) {
-        Return
-    }
 
-    ; Wrap everything in try-catch so an unexpected error doesn't cause cascading
-    ; timer firings. SetTitleMatchMode is always restored to 2 on any exit path.
     try {
 
-    ; SetTitleMatchMode controls how WinExist() matches window titles:
-    ;   1 = title must START WITH the given string
-    ;   2 = title must CONTAIN the given string (default)
-    ;   3 = title must EXACTLY EQUAL the given string
-    ; We switch modes per-check and always restore to 2 before returning.
-    ; Use Window Spy (right-click AHK tray icon) to find exact window titles.
-
-    ; --- Case 1: Error/alert dialog ---
-    ; Cisco pops a bare "Cisco Secure Client" dialog (exact title) for errors/alerts.
-    ; ControlGetHwnd("OK") throws if no OK button is present, which avoids false-matching
-    ; other Cisco windows with the same title. ControlClick matches by button text.
-    ; WinActivate() with no args activates the window matched by the last WinExist().
-    SetTitleMatchMode(3)
-    if (WinExist("Cisco Secure Client")) {
-        try {
-            ControlGetHwnd("OK", "Cisco Secure Client")
-            WinActivate()
-            ControlClick("OK")
-            last_action_ms := A_TickCount
-            SetTitleMatchMode(2)
-            Return
-        } catch {
-        }
-    }
-
-    ; --- Case 2: Password prompt ---
-    ; When VPN session expires, Cisco shows a login window whose title starts with
-    ; "Cisco Secure Client | " (note the pipe and trailing space — use Window Spy
-    ; to confirm the exact title on your system).
-    ; Edit2 is the second text input field (Password); Edit1 would be Username.
-    ; Use Window Spy > Control List to verify the control name if this breaks.
-    ; {BS 15} clears any stale password text before typing the new one.
+    ; --- Case 1: Credential prompt is visible → fill username/password and submit ---
+    ; Title starts with "Cisco Secure Client | " (e.g. "Cisco Secure Client | sj2-vpn.cadence.com")
+    ; Edit1 = Username, Edit2 = Password, Button1 = OK
     SetTitleMatchMode(1)
     if (WinExist("Cisco Secure Client | ")) {
         WinActivate()
-        ControlClick("Edit1")       ; Focus the Username field
-        Sleep(500)
-        Send("{BS 15}")             ; Clear up to 15 chars of existing text
-        SendText(g_uid)
-        Sleep(500)
-        ControlClick("Edit2")       ; Focus the Password field
-        Send("{BS 15}")             ; Clear up to 15 chars of existing text
-        SendText(g_password)
-        Send("{Enter}")
+        ControlSetText(g_uid, "Edit1")
+        ControlSetText(g_password, "Edit2")
+        ControlClick("Button1")
         last_action_ms := A_TickCount
         SetTitleMatchMode(2)
         Return
     }
 
-    ; --- Case 3: Main VPN window visible but not yet showing login prompt ---
-    ; Cisco sometimes flashes the main window briefly before the login prompt appears.
-    ; This is the debounce: wait 1 second and re-check. If the login prompt (Case 2)
-    ; still hasn't appeared, click Connect to trigger it. If Connect isn't found
-    ; (ControlGetHwnd throws), the window is in an unknown state — close it and let
-    ; the next loop iteration start fresh.
-    ; All of this complexity exists because Cisco's GUI is unpredictable about which
-    ; window appears and when.
+    ; Cases 2 and 3 are rate-limited to avoid frenzy-looping.
+    if (A_TickCount - last_action_ms < 5000) {
+        SetTitleMatchMode(2)
+        Return
+    }
+
+    ; --- Case 2: Check connection state, bring window forward, click Connect ---
+    SetTitleMatchMode(3)
+    DetectHiddenWindows(true)
+    if (WinExist("Cisco Secure Client")) {
+        windowText := WinGetText("Cisco Secure Client")
+        DetectHiddenWindows(false)
+        if (InStr(windowText, "Connected to")) {
+            SetTitleMatchMode(2)
+            Return  ; Already connected — nothing to do
+        }
+    } else {
+        DetectHiddenWindows(false)
+    }
+
+    ; Not connected — bring window forward, wait for it to render, then click Connect.
+    ; csc_ui.exe is single-instance: re-running it restores/shows the existing window.
+    SetTitleMatchMode(2)
+    Run("C:\Program Files (x86)\Cisco\Cisco Secure Client\UI\csc_ui.exe")
+    Sleep(1500)
     SetTitleMatchMode(3)
     if (WinExist("Cisco Secure Client")) {
-        Sleep(1000)                 ; Wait for UI to settle
-        SetTitleMatchMode(1)
-        if (! WinExist("Cisco Secure Client | ")) {
-            ; Login prompt still hasn't appeared — try clicking Connect
-            SetTitleMatchMode(3)
-            if (WinExist("Cisco Secure Client")) {
-                WinActivate("Cisco Secure Client")
-                try {
-                    ControlGetHwnd("Connect")   ; Throws if Connect button doesn't exist
-                    ControlClick("Connect")
-                } catch {
-                    try {
-                        WinClose()              ; Unknown state — close and retry next loop
-                    } catch {
-                    }
-                }
-                last_action_ms := A_TickCount
-                SetTitleMatchMode(2)
-                Return
-            }
-        }
-        SetTitleMatchMode(2)
+        WinActivate("Cisco Secure Client")
+        ControlClick("Button1", "Cisco Secure Client")  ; Connect button
     }
-
-    ; --- Case 4: "Secure gateway terminated" dialog ---
-    ; Shown when the VPN server drops the connection (e.g. after 15-hour timeout).
-    ; Dismiss the OK dialog; the next loop iteration will trigger a reconnect.
-    SetTitleMatchMode(3)
-    if (WinExist("The secure gateway has terminated the VPN connection")) {
-        WinActivate()
-        ControlClick("OK")
-        last_action_ms := A_TickCount
-        SetTitleMatchMode(2)
-        Return
-    }
-
-    ; No relevant Cisco window found — nothing to do this iteration.
+    last_action_ms := A_TickCount
     SetTitleMatchMode(2)
 
     } catch as e {
-        SetTitleMatchMode(2)        ; Always restore title match mode on error
-        last_action_ms := A_TickCount  ; Apply cooldown so errors don't cascade
+        DetectHiddenWindows(false)
+        SetTitleMatchMode(2)
+        last_action_ms := A_TickCount
     }
 }
 
@@ -216,6 +168,43 @@ mouse_nudge()
 ; ^ = Ctrl
 ; + = Shift
 ; ! = Alt
+
+; Diagnostic hotkey: Ctrl+Alt+D
+; Shows all visible Cisco windows with their exact titles, visible text, and controls.
+; Run this while a Cisco dialog is on screen to capture what AHK sees.
+^!d::
+{
+    SetTitleMatchMode(2)
+    out := "=== Cisco Windows ===`n"
+    DetectHiddenWindows(true)
+    for hwnd in WinGetList("Cisco") {
+        title := WinGetTitle(hwnd)
+        text  := WinGetText(hwnd)
+        out .= "`nTitle: [" title "]`n"
+        try {
+            pid := WinGetPID(hwnd)
+            exePath := ProcessGetPath(pid)
+            out .= "PID: " pid "  EXE: " exePath "`n"
+        } catch {
+            out .= "PID/EXE: (error)`n"
+        }
+        out .= "Text:`n" text "`n"
+        try {
+            controls := WinGetControls(hwnd)
+            out .= "Controls: " . (controls.Length > 0 ? StrJoin(controls, ", ") : "(none)") . "`n"
+        } catch {
+            out .= "Controls: (error)`n"
+        }
+        out .= "---`n"
+    }
+    DetectHiddenWindows(false)
+    if (out = "=== Cisco Windows ===`n")
+        out .= "(no Cisco windows found)`n"
+    diagGui := Gui(, "AHK Cisco Diagnostic")
+    diagGui.Add("Edit", "ReadOnly w600 h400 VScroll", out)
+    diagGui.Add("Button", "Default w80", "OK").OnEvent("Click", (*) => diagGui.Destroy())
+    diagGui.Show()
+}
 
 ; If you make any edits to this file, do a ctrl-alt-r to reload the script
 ^!r::
