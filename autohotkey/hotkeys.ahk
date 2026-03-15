@@ -77,11 +77,11 @@ do_loop()
     check_idle()
     if (g_corp_mode) {
         mouse_nudge()
-        log_into_cadence_vpn()
+        log_into_corp_vpn()
     }
 }
 
-log_into_cadence_vpn()
+log_into_corp_vpn()
 {
     global g_idle, g_autologin, g_uid, g_password
 
@@ -96,7 +96,7 @@ log_into_cadence_vpn()
     try {
 
     ; --- Case 1: Credential prompt is visible → fill username/password and submit ---
-    ; Title starts with "Cisco Secure Client | " (e.g. "Cisco Secure Client | sj2-vpn.cadence.com")
+    ; Title starts with "Cisco Secure Client | " (e.g. "Cisco Secure Client | foo.bar.com")
     ; Edit1 = Username, Edit2 = Password, Button1 = OK
     SetTitleMatchMode(1)
     if (WinExist("Cisco Secure Client | ")) {
@@ -149,20 +149,35 @@ log_into_cadence_vpn()
     }
 }
 
-; Disable auto-locking by wiggling mouse
+; Disable auto-locking by wiggling mouse.
+; Uses position tracking instead of A_TimeIdlePhysical to detect user movement —
+; A_TimeIdlePhysical is unreliable here because MouseMove resets it at the hook level.
 mouse_nudge()
 {
     static mouse_delta_x := 5
-    ; Greater than 8.3 minutes and less than 2 hours
-    if (! g_idle && A_TimeIdlePhysical > 500000)
-    {
-        ;MsgBox(A_TimeIdlePhysical)
-        ; Ensure absolute screen coordinates
-        CoordMode("Mouse", "Screen")
-        MouseGetPos(&cur_x, &cur_y)
-        MouseMove(cur_x + mouse_delta_x, cur_y, 10)
-        mouse_delta_x *= -1
+    static expected_x := ""
+    static expected_y := ""
+
+    ; Only nudge when idle 8.3+ minutes but not fully away (2+ hours)
+    if (g_idle || A_TimeIdlePhysical <= 500000) {
+        expected_x := ""  ; Reset tracking when not in nudge territory
+        Return
     }
+
+    CoordMode("Mouse", "Screen")
+    MouseGetPos(&cur_x, &cur_y)
+
+    ; If mouse moved from where we left it, user is active — stop nudging
+    if (expected_x != "" && (cur_x != expected_x || cur_y != expected_y)) {
+        expected_x := ""
+        Return
+    }
+
+    new_x := cur_x + mouse_delta_x
+    MouseMove(new_x, cur_y, 10)
+    expected_x := new_x
+    expected_y := cur_y
+    mouse_delta_x *= -1
 }
 
 ; ^ = Ctrl
@@ -172,39 +187,40 @@ mouse_nudge()
 ; Diagnostic hotkey: Ctrl+Alt+D
 ; Shows all visible Cisco windows with their exact titles, visible text, and controls.
 ; Run this while a Cisco dialog is on screen to capture what AHK sees.
-^!d::
-{
-    SetTitleMatchMode(2)
-    out := "=== Cisco Windows ===`n"
-    DetectHiddenWindows(true)
-    for hwnd in WinGetList("Cisco") {
-        title := WinGetTitle(hwnd)
-        text  := WinGetText(hwnd)
-        out .= "`nTitle: [" title "]`n"
-        try {
-            pid := WinGetPID(hwnd)
-            exePath := ProcessGetPath(pid)
-            out .= "PID: " pid "  EXE: " exePath "`n"
-        } catch {
-            out .= "PID/EXE: (error)`n"
-        }
-        out .= "Text:`n" text "`n"
-        try {
-            controls := WinGetControls(hwnd)
-            out .= "Controls: " . (controls.Length > 0 ? StrJoin(controls, ", ") : "(none)") . "`n"
-        } catch {
-            out .= "Controls: (error)`n"
-        }
-        out .= "---`n"
-    }
-    DetectHiddenWindows(false)
-    if (out = "=== Cisco Windows ===`n")
-        out .= "(no Cisco windows found)`n"
-    diagGui := Gui(, "AHK Cisco Diagnostic")
-    diagGui.Add("Edit", "ReadOnly w600 h400 VScroll", out)
-    diagGui.Add("Button", "Default w80", "OK").OnEvent("Click", (*) => diagGui.Destroy())
-    diagGui.Show()
-}
+; This is just for debug.
+; ^!d::
+; {
+;     SetTitleMatchMode(2)
+;     out := "=== Cisco Windows ===`n"
+;     DetectHiddenWindows(true)
+;     for hwnd in WinGetList("Cisco") {
+;         title := WinGetTitle(hwnd)
+;         text  := WinGetText(hwnd)
+;         out .= "`nTitle: [" title "]`n"
+;         try {
+;             pid := WinGetPID(hwnd)
+;             exePath := ProcessGetPath(pid)
+;             out .= "PID: " pid "  EXE: " exePath "`n"
+;         } catch {
+;             out .= "PID/EXE: (error)`n"
+;         }
+;         out .= "Text:`n" text "`n"
+;         try {
+;             controls := WinGetControls(hwnd)
+;             out .= "Controls: " . (controls.Length > 0 ? StrJoin(controls, ", ") : "(none)") . "`n"
+;         } catch {
+;             out .= "Controls: (error)`n"
+;         }
+;         out .= "---`n"
+;     }
+;     DetectHiddenWindows(false)
+;     if (out = "=== Cisco Windows ===`n")
+;         out .= "(no Cisco windows found)`n"
+;     diagGui := Gui(, "AHK Cisco Diagnostic")
+;     diagGui.Add("Edit", "ReadOnly w600 h400 VScroll", out)
+;     diagGui.Add("Button", "Default w80", "OK").OnEvent("Click", (*) => diagGui.Destroy())
+;     diagGui.Show()
+; }
 
 ; If you make any edits to this file, do a ctrl-alt-r to reload the script
 ^!r::
