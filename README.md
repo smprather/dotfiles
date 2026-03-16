@@ -43,7 +43,7 @@ These dot-files rely on modern Linux utilities like RipGrep, Tmux, EZA, etc.
 # Installation
 
 ```bash
-./install --verbose
+./install
 ```
 
 See [CLAUDE.md](CLAUDE.md) for detailed installation instructions, including development mode and backup restore options.

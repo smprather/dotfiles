@@ -12,8 +12,11 @@ Dotfiles for **Electrical Engineering work environments**: multi-platform (RedHa
 
 **Linux:**
 ```bash
-# Install dotfiles
-./install --verbose
+# Install dotfiles (copies everything — no repo references remain)
+./install
+
+# Install with symlinks to repo instead of copies (easier for editing)
+./install --links
 
 # Install in dev mode (directory-level symlinks, easier for editing)
 ./install --dev
@@ -73,15 +76,17 @@ editorconfig/
   editorconfig              - → ~/.editorconfig
 
 starship/
-  starship.toml             - Starship prompt config (not yet in install script)
+  starship.toml             - Starship prompt config
 
 powershell/
-  Microsoft.PowerShell_profile.ps1  - PowerShell profile (aliases, functions, PSReadLine, Starship)
+  Microsoft.PowerShell_profile.ps1  - PowerShell profile (aliases, coreutils wrappers, PSReadLine, Starship)
 
 wezterm/
-  wezterm.lua               - WezTerm config (not yet in install script)
+  wezterm.lua               - WezTerm config
+  wezterm-corp-ssh.ps1      - Corp SSH launcher (opens WezTerm tab/window, SSHes to CORP_LINUX_SSH)
+
 autohotkey/
-  hotkeys.ahk               - Windows AutoHotKey hotkeys
+  hotkeys.ahk               - Windows AutoHotKey hotkeys (VPN autologin, mouse nudge, tmux zoom)
 
 hooks/
   pre-commit                - Removes embedded .git dirs before commits
@@ -92,9 +97,11 @@ install.ps1                 - Windows installation script (PowerShell)
 
 ## Installation Details
 
-**Production mode** (default): Granular symlinks to specific files. `~/.config/bash/global` → `repo/bash/global`, individual file symlinks for nvim, vim plugins, etc.
+**Production mode** (default, no flags): Copies files from repo — no symlinks to the repo remain. Re-run `./install` after repo changes to update.
 
-**Dev mode** (`--dev`): Directory-level symlinks — `~/.config/bash` → `repo/bash`. Easier when editing files frequently.
+**Links mode** (`--links`): Granular symlinks to specific repo files. `~/.config/bash/global` → `repo/bash/global`, individual file symlinks for nvim, vim plugins, etc. Changes in the repo take effect immediately without reinstalling.
+
+**Dev mode** (`--dev`): Directory-level symlinks — `~/.config/bash` → `repo/bash`. Easiest when editing files frequently.
 
 **Backup behavior**: Numbered backups in `dotfiles_backups/backup.N/`. Skips files already pointing to the repo. Never overwrites existing backups.
 
@@ -109,13 +116,15 @@ install.ps1                 - Windows installation script (PowerShell)
 - `~/.tmux` → `~/.config/tmux/tmux`
 - `~/.editorconfig` → `~/.config/editorconfig/editorconfig`
 
-**Windows copy destinations** (files are copied, not symlinked — re-run installer after repo changes):
+**Windows copy destinations** (files are copied, not symlinked — re-run `.\install.ps1` after repo changes):
 - `%LOCALAPPDATA%\nvim` ← `repo/nvim`
 - `%USERPROFILE%\.config\wezterm\wezterm.lua` ← `repo/wezterm/wezterm.lua`
 - `%USERPROFILE%\.config\starship\starship.toml` ← `repo/starship/starship.toml`
 - `%USERPROFILE%\.editorconfig` ← `repo/editorconfig/editorconfig`
 - `%USERPROFILE%\hotkeys.ahk` ← `repo/autohotkey/hotkeys.ahk`
 - `%APPDATA%\Microsoft\Windows\Start Menu\Programs\Startup\hotkeys.lnk` — shortcut to `AutoHotkey64.exe` with `%USERPROFILE%\hotkeys.ahk` as argument (AHK extracted to `%USERPROFILE%\AutoHotkey_*\`, not installed, to avoid SentinelOne flagging)
+- `%USERPROFILE%\wezterm-corp-ssh.ps1` ← `repo/wezterm/wezterm-corp-ssh.ps1` (only when `wezterm-gui.exe` in PATH)
+- `%USERPROFILE%\WezTerm Corp SSH.lnk` — shortcut to run `wezterm-corp-ssh.ps1`; pin to taskbar for one-click corp SSH
 - `%USERPROFILE%\Documents\WindowsPowerShell\Microsoft.PowerShell_profile.ps1` ← `repo/powershell/Microsoft.PowerShell_profile.ps1` (PS 5.1)
 - `%USERPROFILE%\Documents\PowerShell\Microsoft.PowerShell_profile.ps1` ← same (PS 7+)
 
