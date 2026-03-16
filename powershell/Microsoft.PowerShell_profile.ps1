@@ -122,7 +122,7 @@ foreach ($__cmd in @(
     if (Get-Command $__exe -ErrorAction SilentlyContinue) {
         Remove-Item -Path "$($__cmd.remove):$($__cmd.name)" -Force -ErrorAction SilentlyContinue
         $__sb = [scriptblock]::Create("& $__exe @args")
-        New-Item -Path "Function:$($__cmd.name)" -Value $__sb.GetNewClosure() | Out-Null
+        New-Item -Path "Function:$($__cmd.name)" -Value $__sb.GetNewClosure() -Force | Out-Null
     }
 }
 Remove-Variable __cmd, __exe, __sb -ErrorAction SilentlyContinue
