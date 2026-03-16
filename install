@@ -4,9 +4,43 @@ if ! command -v rsync >/dev/null; then
     exit 1
 fi
 
-if [[ "$1" == "--dev" ]]; then
-    dev_mode=1
-fi
+# --- Argument parsing ---
+
+dev_mode=0
+links_mode=0
+restore_backup=""
+
+while [[ $# -gt 0 ]]; do
+    case "$1" in
+        --dev)
+            dev_mode=1
+            shift
+            ;;
+        --links)
+            links_mode=1
+            shift
+            ;;
+        --verbose)
+            # Kept for backwards compatibility; output is always verbose
+            shift
+            ;;
+        --restore-backup)
+            if [[ -z "$2" ]]; then
+                echo "Error: --restore-backup requires a backup directory path"
+                echo "Usage: $0 --restore-backup <backup_dir>"
+                echo "Example: $0 --restore-backup dotfiles_backups/backup.1"
+                exit 1
+            fi
+            restore_backup="$2"
+            shift 2
+            ;;
+        *)
+            echo "Unknown option: $1"
+            echo "Usage: $0 [--dev] [--links] [--verbose] [--restore-backup <dir>]"
+            exit 1
+            ;;
+    esac
+done
 
 if curl -fsLI http://github.com >/dev/null; then
     online=1
@@ -14,26 +48,106 @@ else
     online=0
 fi
 
-# Parse command line arguments for --restore-backup
-if [[ "$1" == "--restore-backup" ]]; then
-    if [[ -z "$2" ]]; then
-        echo "Error: --restore-backup requires a backup directory path"
-        echo "Usage: $0 --restore-backup <backup_dir>"
-        echo "Example: $0 --restore-backup dotfiles_backups/backup.1"
+# --- Helper functions ---
+
+lns() {
+    local unsafe=false
+    local verbose=false
+    local args=()
+
+    while [[ $# -gt 0 ]]; do
+        case "$1" in
+            --unsafe)  unsafe=true;   shift ;;
+            --verbose) verbose=true;  shift ;;
+            *)         args+=("$1");  shift ;;
+        esac
+    done
+
+    if [[ ${#args[@]} -lt 2 ]]; then
+        echo "Error: lns requires at least 2 arguments (target and link_name)" >&2
+        return 1
+    fi
+
+    local link_name="${args[@]: -1}"
+
+    if [[ -e "$link_name" || -L "$link_name" ]]; then
+        if [[ -d "$link_name" && ! -L "$link_name" ]]; then
+            if [[ "$unsafe" == false ]]; then
+                echo "Error: '$link_name' exists as a directory and cannot be removed (use --unsafe to override)" >&2
+                exit 1
+            else
+                [[ "$verbose" == true ]] && echo "rm -rf '$link_name'" >&2
+                if ! rm -rf "$link_name" 2>/dev/null; then
+                    echo "Error: Failed to remove directory '$link_name'" >&2
+                    exit 1
+                fi
+            fi
+        else
+            [[ "$verbose" == true ]] && echo "rm -f '$link_name'" >&2
+            if ! rm -f "$link_name" 2>/dev/null; then
+                echo "Error: Failed to remove '$link_name'" >&2
+                exit 1
+            fi
+        fi
+    fi
+
+    [[ "$verbose" == true ]] && echo "ln -s ${args[*]}" >&2
+    ln -s "${args[@]}"
+}
+
+mkdirn() {
+    local base_dir="$1"
+    local target_dir="$base_dir"
+    local counter=1
+
+    if [[ ! -e "$target_dir" ]]; then
+        mkdir -p "$target_dir"
+        echo "$target_dir"
+        return 0
+    fi
+
+    while [[ -e "$target_dir" ]]; do
+        target_dir="${base_dir}.${counter}"
+        ((counter++))
+    done
+
+    mkdir -p "$target_dir"
+    echo "$target_dir"
+}
+
+# Install a file or directory from the repo.
+# --links mode: symlink to repo. Default: copy (no repo reference remains).
+# Local convenience symlinks (.bashrc -> .config/bash/bashrc) use lns directly.
+inst() {
+    local src="$1"
+    local dest="$2"
+    if [[ "$links_mode" == "1" ]]; then
+        lns --verbose "$src" "$dest"
+    else
+        if [[ -d "$src" ]]; then
+            rm -rf "$dest"
+            mkdir -p "$dest"
+            rsync -a "$src/" "$dest/"
+            echo "  rsync: $src/ -> $dest/"
+        else
+            rm -f "$dest"
+            mkdir -p "$(dirname "$dest")"
+            cp -p "$src" "$dest"
+            echo "  cp: $src -> $dest"
+        fi
+    fi
+}
+
+# --- Restore backup ---
+
+if [[ -n "$restore_backup" ]]; then
+    if [[ ! -d "$restore_backup" ]]; then
+        echo "Error: Backup directory not found: $restore_backup"
         exit 1
     fi
 
-    backup_dir="$2"
-
-    if [[ ! -d "$backup_dir" ]]; then
-        echo "Error: Backup directory not found: $backup_dir"
-        exit 1
-    fi
-
-    echo "Restoring dotfiles from backup: $backup_dir"
+    echo "Restoring dotfiles from backup: $restore_backup"
     echo ""
-
-    # Remove current files/symlinks/directories that we're about to restore
     echo "Removing current dotfiles..."
     for item in ~/.bashrc ~/.profile ~/.vimrc ~/.tmux.conf ~/.editorconfig ~/.tmux ~/.vim \
                 ~/.config/bash ~/.config/nvim ~/.config/tmux ~/.config/editorconfig ~/.config/vim; do
@@ -43,19 +157,15 @@ if [[ "$1" == "--restore-backup" ]]; then
         fi
     done
 
-    # Restore files from backup
-    # Using cp with --no-dereference to preserve symlinks exactly as backed up
     echo ""
     echo "Restoring files from backup..."
-
-    if ls -A "$backup_dir" 2>/dev/null | grep -q .; then
-        cd "$backup_dir"
-        # Use cp to preserve symlinks (-P/--no-dereference), permissions (-p), and recursion (-r)
+    if ls -A "$restore_backup" 2>/dev/null | grep -q .; then
+        cd "$restore_backup"
         cp -rPp . "$HOME/"
         echo ""
-        echo "✓ Backup restored successfully!"
+        echo "Backup restored successfully!"
         echo ""
-        echo "Restored from: $backup_dir"
+        echo "Restored from: $restore_backup"
     else
         echo "Error: Backup directory is empty"
         exit 1
@@ -64,95 +174,7 @@ if [[ "$1" == "--restore-backup" ]]; then
     exit 0
 fi
 
-lns() {
-    local unsafe=false
-    local verbose=false
-    local args=()
-
-    # Parse arguments to extract --unsafe and --verbose flags
-    while [[ $# -gt 0 ]]; do
-        case "$1" in
-            --unsafe)
-                unsafe=true
-                shift
-                ;;
-            --verbose)
-                verbose=true
-                shift
-                ;;
-            *)
-                args+=("$1")
-                shift
-                ;;
-        esac
-    done
-
-    # Check if we have at least 2 arguments (target and link_name)
-    if [[ ${#args[@]} -lt 2 ]]; then
-        echo "Error: lns requires at least 2 arguments (target and link_name)" >&2
-        return 1
-    fi
-
-    # Get the last argument (the link name)
-    local link_name="${args[@]: -1}"
-
-    # Check if link_name exists
-    if [[ -e "$link_name" || -L "$link_name" ]]; then
-        if [[ -d "$link_name" && ! -L "$link_name" ]]; then
-            # It's a directory (not a symlink to a directory)
-            if [[ "$unsafe" == false ]]; then
-                echo "Error: '$link_name' exists as a directory and cannot be removed (use --unsafe to override)" >&2
-                exit 1
-            else
-                # Remove directory with --unsafe
-                if [[ "$verbose" == true ]]; then
-                    echo "rm -rf '$link_name'" >&2
-                fi
-                if ! rm -rf "$link_name" 2>/dev/null; then
-                    echo "Error: Failed to remove directory '$link_name' (permission denied or other error)" >&2
-                    exit 1
-                fi
-            fi
-        else
-            # It's a file or a symlink (including symlink to directory)
-            if [[ "$verbose" == true ]]; then
-                echo "rm -f '$link_name'" >&2
-            fi
-            if ! rm -f "$link_name" 2>/dev/null; then
-                echo "Error: Failed to remove '$link_name' (permission denied or other error)" >&2
-                exit 1
-            fi
-        fi
-    fi
-
-    # Create the symbolic link with remaining arguments
-    if [[ "$verbose" == true ]]; then
-        echo "ln -s ${args[*]}" >&2
-    fi
-    ln -s "${args[@]}"
-}
-
-mkdirn() {
-    local base_dir="$1"
-    local target_dir="$base_dir"
-    local counter=1
-
-    # If base directory doesn't exist, create it
-    if [[ ! -e "$target_dir" ]]; then
-        mkdir -p "$target_dir"
-        echo "$target_dir"
-        return 0
-    fi
-
-    # Find next available name with .<N> suffix
-    while [[ -e "$target_dir" ]]; do
-        target_dir="${base_dir}.${counter}"
-        ((counter++))
-    done
-
-    mkdir -p "$target_dir"
-    echo "$target_dir"
-}
+# --- Main ---
 
 repo_dir=$(git rev-parse --show-toplevel)
 echo "Dotfiles repo base directory: $repo_dir"
@@ -180,15 +202,12 @@ if [[ "$dev_mode" != "1" ]]; then
         .config/editorconfig \
         ; do
 
-        # Skip if doesn't exist (even as broken symlink)
         if [[ ! -e "$x" && ! -L "$x" ]]; then
             continue
         fi
 
-        # Skip symlinks that point into the repo (already our dotfiles)
         if [[ -L "$x" ]]; then
             link_target=$(readlink "$x")
-            # Check if it's an absolute path into repo, or resolve relative
             if [[ "$link_target" == "$repo_dir"* ]] || \
                [[ -e "$x" && "$(realpath "$x" 2>/dev/null)" == "$repo_dir"* ]]; then
                 echo "  Skipping (points to repo): $x"
@@ -196,11 +215,8 @@ if [[ "$dev_mode" != "1" ]]; then
             fi
         fi
 
-        # Back up the item, preserving symlinks with --no-dereference
         echo "  Backing up: $x"
-        # Create parent directory in backup if needed
         mkdir -p "$backup_dir/$(dirname "$x")"
-        # Use cp with -P (--no-dereference) to preserve symlinks, -r for directories, -p for permissions
         cp -rPp "$x" "$backup_dir/$x"
     done
 
@@ -234,9 +250,9 @@ else
     rm -f .bashrc .profile
     rm -fr .config/bash
     mkdir -p .config/bash
-    lns --verbose $repo_dir/bash/global .config/bash/global
-    lns --verbose $repo_dir/bash/README.md .config/bash/README.md
-    lns --verbose $repo_dir/bash/bashrc .config/bash/bashrc
+    inst $repo_dir/bash/global .config/bash/global
+    inst $repo_dir/bash/README.md .config/bash/README.md
+    inst $repo_dir/bash/bashrc .config/bash/bashrc
     lns --verbose .config/bash/bashrc .bashrc
     lns --verbose .config/bash/bashrc .profile
 
@@ -247,24 +263,19 @@ else
     mkdir -p .config/nvim/after/ftplugin
     mkdir -p .config/nvim/lsp
     mkdir -p .config/nvim/lua/custom/plugins
-    lns --verbose \
-        $repo_dir/nvim/lua/custom/plugins/init.lua \
+    inst $repo_dir/nvim/lua/custom/plugins/init.lua \
         .config/nvim/lua/custom/plugins/init.lua
-    lns --verbose $repo_dir/nvim/lua/kickstart .config/nvim/lua/kickstart
-    lns --verbose $repo_dir/nvim/doc .config/nvim/doc
-    lns --verbose $repo_dir/nvim/lazy-lock.json .config/nvim/lazy-lock.json
-    lns --verbose $repo_dir/nvim/README.md .config/nvim/README.md
-    lns --verbose $repo_dir/nvim/LICENSE.md .config/nvim/LICENSE.md
-    lns --verbose $repo_dir/nvim/init.lua .config/nvim/init.lua
+    inst $repo_dir/nvim/lua/kickstart .config/nvim/lua/kickstart
+    inst $repo_dir/nvim/doc .config/nvim/doc
+    inst $repo_dir/nvim/lazy-lock.json .config/nvim/lazy-lock.json
+    inst $repo_dir/nvim/README.md .config/nvim/README.md
+    inst $repo_dir/nvim/LICENSE.md .config/nvim/LICENSE.md
+    inst $repo_dir/nvim/init.lua .config/nvim/init.lua
     for x in $repo_dir/nvim/lsp/* ; do
-        lns --verbose \
-            $x \
-            .config/nvim/lsp/$(basename $x)
+        inst $x .config/nvim/lsp/$(basename $x)
     done
     for x in $repo_dir/nvim/lua/kickstart/plugins/* ; do
-        lns --verbose \
-            $x \
-            .config/nvim/lua/kickstart/plugins/$(basename $x)
+        inst $x .config/nvim/lua/kickstart/plugins/$(basename $x)
     done
 
     ### VIM ###
@@ -275,12 +286,11 @@ else
     mkdir -p .config/vim/vim/pack/vendor/opt
     for start_or_opt in start opt ; do
         for plugin_dir in $repo_dir/vim/vim/pack/vendor/$start_or_opt/* ; do
-            lns --verbose \
-                $plugin_dir \
+            inst $plugin_dir \
                 .config/vim/vim/pack/vendor/$start_or_opt/$(basename $plugin_dir)
         done
     done
-    lns --verbose $repo_dir/vim/vimrc .config/vim/vimrc
+    inst $repo_dir/vim/vimrc .config/vim/vimrc
     lns --verbose .config/vim/vimrc .vimrc
 
     ### TMUX ###
@@ -294,25 +304,22 @@ else
     mkdir -p .config/tmux/tmux/plugins
     for plugin_dir in $repo_dir/tmux/tmux/plugins/* ; do
         if [[ $(basename "$plugin_dir") == "tpm" ]]; then
-            lns --verbose \
-                $plugin_dir \
-                .config/tmux/tmux/plugins/tpm
+            inst $plugin_dir .config/tmux/tmux/plugins/tpm
         else
             if [[ "$online" == "0" ]]; then
-                lns --verbose \
-                    $plugin_dir \
+                inst $plugin_dir \
                     .config/tmux/tmux/plugins/$(basename $plugin_dir)
             fi
         fi
     done
-    lns --verbose $repo_dir/tmux/tmux.conf .config/tmux/tmux.conf
+    inst $repo_dir/tmux/tmux.conf .config/tmux/tmux.conf
     lns --verbose .config/tmux/tmux.conf .tmux.conf
     lns --verbose .config/tmux/tmux .tmux
 
     rm -fr .editorconfig
     rm -fr .config/editorconfig
     mkdir -p .config/editorconfig
-    lns --verbose $repo_dir/editorconfig/editorconfig .config/editorconfig/editorconfig
+    inst $repo_dir/editorconfig/editorconfig .config/editorconfig/editorconfig
     lns --verbose .config/editorconfig/editorconfig .editorconfig
 fi
 
@@ -337,4 +344,3 @@ if [[ "$online" == "1" ]]; then
     .tmux/plugins/tpm/bin/install_plugins
     .tmux/plugins/tpm/bin/update_plugins all
 fi
-

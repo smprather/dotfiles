@@ -114,8 +114,10 @@ install.ps1                 - Windows installation script (PowerShell)
 - `%USERPROFILE%\.config\wezterm\wezterm.lua` ← `repo/wezterm/wezterm.lua`
 - `%USERPROFILE%\.config\starship\starship.toml` ← `repo/starship/starship.toml`
 - `%USERPROFILE%\.editorconfig` ← `repo/editorconfig/editorconfig`
-- `%APPDATA%\Microsoft\Windows\Start Menu\Programs\Startup\hotkeys.lnk` — shortcut to `AutoHotkey64.exe` with `repo/autohotkey/hotkeys.ahk` as argument (AHK extracted to `%USERPROFILE%\AutoHotkey_*\`, not installed, to avoid SentinelOne flagging)
-- `$PROFILE` ← `repo/powershell/Microsoft.PowerShell_profile.ps1`
+- `%USERPROFILE%\hotkeys.ahk` ← `repo/autohotkey/hotkeys.ahk`
+- `%APPDATA%\Microsoft\Windows\Start Menu\Programs\Startup\hotkeys.lnk` — shortcut to `AutoHotkey64.exe` with `%USERPROFILE%\hotkeys.ahk` as argument (AHK extracted to `%USERPROFILE%\AutoHotkey_*\`, not installed, to avoid SentinelOne flagging)
+- `%USERPROFILE%\Documents\WindowsPowerShell\Microsoft.PowerShell_profile.ps1` ← `repo/powershell/Microsoft.PowerShell_profile.ps1` (PS 5.1)
+- `%USERPROFILE%\Documents\PowerShell\Microsoft.PowerShell_profile.ps1` ← same (PS 7+)
 
 ## Bash Configuration Architecture
 

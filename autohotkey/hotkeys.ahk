@@ -101,7 +101,16 @@ log_into_corp_vpn()
 
     try {
 
-    ; --- Case 1: Credential prompt is visible → fill username/password and submit ---
+    ; --- Case 1a: "Secure gateway terminated" dialog → dismiss so reconnect can proceed ---
+    SetTitleMatchMode(3)
+    if (WinExist("Cisco Secure Client", "The secure gateway has terminated the VPN")) {
+        WinActivate()
+        ControlClick("Button1")
+        SetTitleMatchMode(2)
+        Return
+    }
+
+    ; --- Case 1b: Credential prompt is visible → fill username/password and submit ---
     SetTitleMatchMode(1)
     if (WinExist("Cisco Secure Client | ")) {
         WinActivate()

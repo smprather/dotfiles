@@ -61,8 +61,30 @@ Write-Host "Starship..."
 Copy-Config "$repoDir\starship\starship.toml" "$env:USERPROFILE\.config\starship\starship.toml"
 
 # --- PowerShell Profile ---
+# $PROFILE only reflects the PS version running the installer. To cover all
+# installed versions, we build candidate paths from every Documents root we
+# can find (local and OneDrive-redirected), for both PS 5.1 (WindowsPowerShell)
+# and PS 7+ (PowerShell) subdirs. We always install to $PROFILE, and install
+# to the others only if their parent directory already exists (PS is there).
 Write-Host "PowerShell profile..."
-Copy-Config "$repoDir\powershell\Microsoft.PowerShell_profile.ps1" $PROFILE
+$psProfileSource = "$repoDir\powershell\Microsoft.PowerShell_profile.ps1"
+$docRoots = @(
+    [Environment]::GetFolderPath('MyDocuments'),  # real Documents (may be OneDrive)
+    "$HOME\Documents"                              # local fallback
+) | Sort-Object -Unique
+
+$psProfileCandidates = @($PROFILE)
+foreach ($root in $docRoots) {
+    $psProfileCandidates += "$root\WindowsPowerShell\Microsoft.PowerShell_profile.ps1"
+    $psProfileCandidates += "$root\PowerShell\Microsoft.PowerShell_profile.ps1"
+}
+
+$psProfileCandidates | Sort-Object -Unique | ForEach-Object {
+    $profileDir = Split-Path $_ -Parent
+    if ($_ -eq $PROFILE -or (Test-Path $profileDir)) {
+        Copy-Config $psProfileSource $_
+    }
+}
 
 # --- EditorConfig ---
 Write-Host "EditorConfig..."
@@ -74,7 +96,8 @@ Copy-Config "$repoDir\editorconfig\editorconfig" "$env:USERPROFILE\.editorconfig
 # AutoHotkey64.exe directly with the repo hotkeys.ahk as the argument.
 Write-Host "AutoHotKey..."
 $startupDir  = "$env:APPDATA\Microsoft\Windows\Start Menu\Programs\Startup"
-$ahkScript   = "$repoDir\autohotkey\hotkeys.ahk"
+$ahkScript   = "$HOME\hotkeys.ahk"
+Copy-Config "$repoDir\autohotkey\hotkeys.ahk" $ahkScript
 
 # Find existing extracted AutoHotkey directory in $HOME
 $ahkDirs = @(Get-ChildItem -Path $HOME -Filter "AutoHotkey_*" -Directory -ErrorAction SilentlyContinue)
@@ -127,7 +150,7 @@ if ($ahkDir) {
         $lnk.Arguments        = "`"$ahkScript`""
         $lnk.WorkingDirectory = Split-Path $ahkScript -Parent
         $lnk.Save()
-        Write-Host "  Created startup shortcut -> $ahkExe"
+        Write-Host "  Created startup shortcut: $shortcutPath -> $ahkExe"
 
         # Restart AHK now
         Get-Process -Name 'AutoHotkey*' -ErrorAction SilentlyContinue | Stop-Process -Force
