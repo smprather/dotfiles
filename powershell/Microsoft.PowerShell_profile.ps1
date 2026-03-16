@@ -108,6 +108,35 @@ function Get-DefinitionPath {
 # Aliases
 # =============================================================================
 
+# Replace PowerShell Unix-like aliases with real coreutils when available (e.g. Git for Windows).
+# sort/tee/kill/ps are intentionally skipped — they're used heavily in PS object pipelines.
+foreach ($__cmd in @(
+    @{ name = 'rm';    remove = 'Alias' }
+    @{ name = 'cp';    remove = 'Alias' }
+    @{ name = 'mv';    remove = 'Alias' }
+    @{ name = 'diff';  remove = 'Alias' }
+    @{ name = 'rmdir'; remove = 'Alias' }
+    @{ name = 'mkdir'; remove = 'Function' }
+)) {
+    $__exe = $__cmd.name + '.exe'
+    if (Get-Command $__exe -ErrorAction SilentlyContinue) {
+        Remove-Item -Path "$($__cmd.remove):$($__cmd.name)" -Force -ErrorAction SilentlyContinue
+        $__sb = [scriptblock]::Create("& $__exe @args")
+        New-Item -Path "Function:$($__cmd.name)" -Value $__sb.GetNewClosure() | Out-Null
+    }
+}
+Remove-Variable __cmd, __exe, __sb -ErrorAction SilentlyContinue
+
+# Add Unix tools that have no PS equivalent (available via Git for Windows).
+foreach ($__cmd in @('wc', 'sed', 'awk', 'cut', 'xargs')) {
+    $__exe = $__cmd + '.exe'
+    if (Get-Command $__exe -ErrorAction SilentlyContinue) {
+        $__sb = [scriptblock]::Create("& $__exe @args")
+        New-Item -Path "Function:$__cmd" -Value $__sb.GetNewClosure() -Force | Out-Null
+    }
+}
+Remove-Variable __cmd, __exe, __sb -ErrorAction SilentlyContinue
+
 Set-Alias -Name ls   -Value ls_func            -Option AllScope
 Set-Alias -Name vi   -Value nvim               -Option AllScope
 Set-Alias -Name f    -Value fd_func            -Option AllScope
