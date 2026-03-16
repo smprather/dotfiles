@@ -196,9 +196,15 @@ if ($profileCanUsePromptTools) {
 
     # PSFzf — Ctrl+T file picker, Ctrl+R fuzzy history; falls back to built-in Ctrl+R if unavailable
     if ($profileCanUsePSReadLine) {
-        if (Get-Module -ListAvailable -Name PSFzf -ErrorAction SilentlyContinue) {
+        # Test-Path on each module dir is much faster than Get-Module -ListAvailable,
+        # which walks and parses every module manifest on the system.
+        $__psfzf = $env:PSModulePath -split ';' |
+            ForEach-Object { Join-Path $_ 'PSFzf' } |
+            Where-Object { Test-Path $_ } |
+            Select-Object -First 1
+        if ($__psfzf) {
             try {
-                Import-Module PSFzf
+                Import-Module $__psfzf
                 Set-PsFzfOption -PSReadlineChordProvider 'Ctrl+t' -PSReadlineChordReverseHistory 'Ctrl+r'
             } catch {
                 Write-Verbose "PowerShell profile: skipped PSFzf setup."
