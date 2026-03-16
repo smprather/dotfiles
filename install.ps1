@@ -56,6 +56,31 @@ Copy-Config "$repoDir\nvim" "$env:LOCALAPPDATA\nvim"
 Write-Host "WezTerm..."
 Copy-Config "$repoDir\wezterm\wezterm.lua" "$env:USERPROFILE\.config\wezterm\wezterm.lua"
 
+# Corp SSH shortcut: opens WezTerm (new tab if already running) and SSHes to $env:CORP_LINUX_SSH.
+# Only created when wezterm-gui.exe is in PATH; CORP_LINUX_SSH is read at launch time, not here.
+$weztermExe = (Get-Command wezterm-gui.exe -ErrorAction SilentlyContinue)?.Source
+if ($weztermExe) {
+    $sshScript = "$env:USERPROFILE\wezterm-corp-ssh.ps1"
+    Copy-Config "$repoDir\wezterm\wezterm-corp-ssh.ps1" $sshScript
+
+    $pwshExe = (Get-Command pwsh.exe -ErrorAction SilentlyContinue)?.Source
+    if (-not $pwshExe) { $pwshExe = (Get-Command powershell.exe).Source }
+
+    $shortcutPath = "$env:USERPROFILE\WezTerm Corp SSH.lnk"
+    $shell = New-Object -ComObject WScript.Shell
+    $lnk = $shell.CreateShortcut($shortcutPath)
+    $lnk.TargetPath       = $pwshExe
+    $lnk.Arguments        = "-WindowStyle Hidden -NonInteractive -File `"$sshScript`""
+    $lnk.WorkingDirectory = $env:USERPROFILE
+    $lnk.IconLocation     = "$weztermExe,0"
+    $lnk.Save()
+    Write-Host "  Created shortcut: $shortcutPath"
+    Write-Host "  Script: $sshScript"
+    Write-Host "  Pin it to the taskbar manually to launch it from there."
+} else {
+    Write-Host "  Skipping Corp SSH shortcut (wezterm-gui.exe not in PATH)"
+}
+
 # --- Starship ---
 Write-Host "Starship..."
 Copy-Config "$repoDir\starship\starship.toml" "$env:USERPROFILE\.config\starship\starship.toml"
