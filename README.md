@@ -1,49 +1,59 @@
 # Purpose
 
-These are dot-files that are meant to be used in a typical Electrical Engineering work environment.
+Dotfiles for **Electrical Engineering work environments** — and anyone who
+wants an opinionated, modern, layered shell setup on Linux or Windows.
 
-# Definition of a "typical" EE work environment:
+Built on 30+ years of EE workflow experience. Designed to be adopted
+without modification and overridden without forking.
 
-- Multi-platform
-    - At the time of writing this
-        - Redhat 7, 8, 9
-        - Suse
-        - x86_64, ARM, PowerPC
-- Offline
-    - We usually can see either none, or a very limited view, of the general internet
-    - For this reason, the distribution will contain a lot of files (plugins, for example)
-      that would normally be updated at dot-files install time.
-- No sudo / root access
-    - Our work systems are locked down
-    - Can't install arbitrary packages into system directories
+# What's Included
 
-# Flexibility
+| Component | Description |
+|-----------|-------------|
+| **Bash** | Layered config (global→corp→site→project→user), modern aliases, fzf/zoxide/eza/bat integration |
+| **Neovim** | Kickstart.nvim base, Lazy.nvim, LSP, treesitter, locked plugin versions |
+| **Vim** | Bundled plugins (NERDTree, SimpylFold), no internet required |
+| **Tmux** | Bundled plugins (resurrect, continuum, better-mouse-mode), `Ctrl-\` prefix |
+| **PowerShell** | Aliases, Unix coreutils wrappers, PSReadLine, Starship, zoxide, PSFzf |
+| **WezTerm** | Terminal config + one-click Corp SSH shortcut |
+| **Starship** | Cross-shell prompt config |
+| **AutoHotKey** | VPN autologin (Cisco Secure Client), mouse nudge, tmux zoom hotkeys |
+| **EditorConfig** | Consistent formatting across editors |
 
-When possible, I want to offer a layered configuration structure with precedence.
-From lowest->highest precedence:
+# Design Goals
 
-- Global
-- Corp
-- Site
-- Project
-- User
+**Multi-platform** — RedHat 7/8/9, Suse, x86_64/ARM/PowerPC, Windows
 
-# Opinionated
+**Offline-first** — plugins are bundled; no internet required at install time
 
-I want to offer a "way of working" to the EE community (and perhaps beyond) that I have continuously
-worked on over my 30 years of experience. _But_, the end user should have the ability to apply overrides
-without breaking future updates of the base system. _And_, the end user is encouraged to discuss and
-upstream good/new "ways of working".
+**No root** — installs entirely to `$HOME`; no package manager or sudo needed
 
-# Modern
+**Layered** — configuration precedence from lowest to highest:
+Global → Corp → Site → Project → User
 
-Ideally will be used in conjunction with [EE Linux Tools](https://github.com/smprather/ee-linux-tools).
-These dot-files rely on modern Linux utilities like RipGrep, Tmux, EZA, etc.
+Each layer can override the previous without touching upstream files, so
+personal customizations survive future updates to the base config.
+
+**Opinionated but escapable** — sensible defaults out of the box;
+every preference is a `cfg_*` variable you can override in your user layer.
 
 # Installation
 
+**Linux:**
 ```bash
 ./install
 ```
 
-See [CLAUDE.md](CLAUDE.md) for detailed installation instructions, including development mode and backup restore options.
+**Windows** (PowerShell, no elevation required):
+```powershell
+.\install.ps1
+```
+
+See [CLAUDE.md](CLAUDE.md) for full details: dev mode, `--links` mode,
+backup/restore, layer overrides, and Windows copy destinations.
+
+# Related
+
+[EE Linux Tools](https://github.com/smprather/ee-linux-tools) — companion
+repo providing pre-built modern CLI binaries (RipGrep, Tmux, EZA, etc.)
+for offline/locked-down Linux environments.
