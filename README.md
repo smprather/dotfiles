@@ -48,6 +48,7 @@ every preference is a `cfg_*` variable you can override in your user layer.
 ```powershell
 .\install.ps1
 ```
+> If scripts are blocked, search: [windows enable running powershell scripts](https://www.google.com/search?q=windows+enable+running+powershell+scripts)
 
 See [CLAUDE.md](CLAUDE.md) for full details: dev mode, `--links` mode,
 backup/restore, layer overrides, and Windows copy destinations.
