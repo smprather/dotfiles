@@ -26,6 +26,7 @@ g_idle := false
 g_autologin := true
 g_autologin_saved := true
 ;g_vpn_log := A_ScriptDir . "\vpn_debug.log"
+g_mouse_wiggle := (EnvGet("AHK_ENABLE_MOUSE_WIGGLE") != "false")
 
 ;while true {
 ;    ih := InputHook("L1", "{LControl}{RControl}{LAlt}{RAlt}{LShift}{RShift}{LWin}{RWin}{AppsKey}"
@@ -74,10 +75,11 @@ check_idle()
 
 do_loop()
 {
-    global g_corp_mode
+    global g_corp_mode, g_mouse_wiggle
     check_idle()
     if (g_corp_mode) {
-        mouse_nudge()
+        if (g_mouse_wiggle)
+            mouse_nudge()
         log_into_corp_vpn()
     }
 }

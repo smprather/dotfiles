@@ -26,10 +26,31 @@ Set-Alias -Name cd -Value Set-LocationEx -Option AllScope
 function b    { Set-LocationEx .. }
 function bb   { Set-LocationEx ..\.. }
 function bbb  { Set-LocationEx ..\..\.. }
-function bbbb { Set-LocationEx ..\..\..\.. }
+function bbbb      { Set-LocationEx ..\..\..\.. }
+function bbbbb     { Set-LocationEx ..\..\..\..\.. }
+function bbbbbb    { Set-LocationEx ..\..\..\..\..\.. }
+function bbbbbbb   { Set-LocationEx ..\..\..\..\..\..\.. }
+function bbbbbbbb  { Set-LocationEx ..\..\..\..\..\..\..\.. }
+function bbbbbbbbb { Set-LocationEx ..\..\..\..\..\..\..\..\.. }
+function bbbbbbbbbb { Set-LocationEx ..\..\..\..\..\..\..\..\..\.. }
 
 function cdd {
-    $dir = Get-ChildItem -Directory | Sort-Object LastWriteTime -Descending | Select-Object -First 1
+    $dir = Get-ChildItem -Directory | Sort-Object LastWriteTime -Descending | Select-Object -Index 0
+    if ($dir) { Set-LocationEx $dir.FullName }
+    else      { Write-Warning "No subdirectories found" }
+}
+function cddd {
+    $dir = Get-ChildItem -Directory | Sort-Object LastWriteTime -Descending | Select-Object -Index 1
+    if ($dir) { Set-LocationEx $dir.FullName }
+    else      { Write-Warning "No subdirectories found" }
+}
+function cdddd {
+    $dir = Get-ChildItem -Directory | Sort-Object LastWriteTime -Descending | Select-Object -Index 2
+    if ($dir) { Set-LocationEx $dir.FullName }
+    else      { Write-Warning "No subdirectories found" }
+}
+function cddddd {
+    $dir = Get-ChildItem -Directory | Sort-Object LastWriteTime -Descending | Select-Object -Index 3
     if ($dir) { Set-LocationEx $dir.FullName }
     else      { Write-Warning "No subdirectories found" }
 }
@@ -146,6 +167,93 @@ Set-Alias -Name f    -Value fd_func            -Option AllScope
 Set-Alias -Name w    -Value Get-DefinitionPath -Option AllScope
 Set-Alias -Name p    -Value Get-Location       -Option AllScope
 Set-Alias -Name cat  -Value bat                -Option AllScope
+
+# =============================================================================
+# ls variants
+# =============================================================================
+
+function ll  { eza -l @args }
+function la  { eza -a @args }
+function lh  { eza -lh @args }
+function lah { eza -lah @args }
+function lg  { eza -l --git @args }
+function lsg { eza --git @args }
+function tree { eza -T @args }
+
+# =============================================================================
+# Git
+# =============================================================================
+
+function gs  { git status }
+function gc  { git commit @args }
+function gp  { git push @args }
+function gd  { git diff @args }
+function gsp { git stash; git pull; git stash pop }
+function ga {
+    if ($args.Count -eq 0) { git add --all . }
+    else                   { git add @args }
+    git status
+}
+
+# =============================================================================
+# Editor
+# =============================================================================
+
+function vii     { nvim (Get-ChildItem | Sort-Object LastWriteTime -Descending | Select-Object -First 1).Name }
+function vid     { nvim -d @args }
+function vimdiff { nvim -d @args }
+
+# =============================================================================
+# History / search
+# =============================================================================
+
+function hg    { param([string]$Pattern) Get-History | Where-Object { $_.CommandLine -match $Pattern } }
+function h     { param([string]$Pattern) Get-History | Where-Object { $_.CommandLine -match $Pattern } }
+function agrep { param([string]$Pattern) Get-Alias  | Where-Object { $_.Name -match $Pattern -or $_.Definition -match $Pattern } }
+
+# =============================================================================
+# Path / system
+# =============================================================================
+
+function pl { $i = 1; $env:PATH -split ';' | ForEach-Object { "$i`t$_"; $i++ } }
+function rp { if ($args[0]) { Resolve-Path $args[0] } else { Resolve-Path . } }
+function c  { Clear-Host }
+
+# =============================================================================
+# Archive
+# =============================================================================
+
+function tx { tar -xvf @args }
+function tt { tar -tvf @args }
+
+# =============================================================================
+# Misc
+# =============================================================================
+
+function new {
+    param([string]$file)
+    New-Item $file -ItemType File | Out-Null
+    nvim $file
+}
+function wip { nvim "$HOME\wip.txt" }
+function du {
+    Get-ChildItem @args | ForEach-Object {
+        $size = if ($_.PSIsContainer) {
+            (Get-ChildItem $_.FullName -Recurse -Force -ErrorAction SilentlyContinue | Measure-Object -Property Length -Sum).Sum
+        } else { $_.Length }
+        [PSCustomObject]@{ 'Size(MB)' = [math]::Round($size / 1MB, 2); Name = $_.Name }
+    } | Sort-Object 'Size(MB)' -Descending
+}
+
+# =============================================================================
+# fzf shortcuts (conditional)
+# =============================================================================
+
+if (Get-Command fzf -ErrorAction SilentlyContinue) {
+    function fls  { Get-ChildItem (fzf) }
+    function fvi  { nvim (fzf) }
+    function fcat { bat (fzf) }
+}
 
 # =============================================================================
 # Interactive shell integrations

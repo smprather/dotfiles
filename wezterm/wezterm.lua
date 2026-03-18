@@ -16,7 +16,7 @@ config.font_size = 16
 config.font_size = 11
 config.font = wezterm.font_with_fallback({
     --{ family = "Myna",                weight = 'Medium', },
-    { family = "Iosevka",             weight = 'Medium', },
+    { family = "Iosevka Nerd Font Mono",             weight = 'Medium', },
     --{ family = "Iosevka Term",        weight = 'Medium', },
     { family = "Hack Nerd Font Mono", weight = 'Medium', } })
 config.line_height = 0.9
