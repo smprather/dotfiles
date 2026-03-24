@@ -42,12 +42,6 @@ while [[ $# -gt 0 ]]; do
     esac
 done
 
-if curl -fsLI http://github.com >/dev/null; then
-    online=1
-else
-    online=0
-fi
-
 # --- Helper functions ---
 
 lns() {
@@ -294,23 +288,14 @@ else
     lns --verbose .config/vim/vimrc .vimrc
 
     ### TMUX ###
-    # For tmux plugins:
-    #   * Always link to the tpm plugin manager
-    #   * If online, DO NOT link to the repo plugins, download fresh
-    #   * If offline, DO link to the repo plugins
+    # All tmux plugins are vendored in the repo
     rm -f .tmux.conf
     rm -fr .tmux
     rm -fr .config/tmux
     mkdir -p .config/tmux/tmux/plugins
     for plugin_dir in $repo_dir/tmux/tmux/plugins/* ; do
-        if [[ $(basename "$plugin_dir") == "tpm" ]]; then
-            inst $plugin_dir .config/tmux/tmux/plugins/tpm
-        else
-            if [[ "$online" == "0" ]]; then
-                inst $plugin_dir \
-                    .config/tmux/tmux/plugins/$(basename $plugin_dir)
-            fi
-        fi
+        inst $plugin_dir \
+            .config/tmux/tmux/plugins/$(basename $plugin_dir)
     done
     inst $repo_dir/tmux/tmux.conf .config/tmux/tmux.conf
     lns --verbose .config/tmux/tmux.conf .tmux.conf
@@ -336,11 +321,4 @@ if [[ -d "$repo_dir/hooks" ]]; then
     done
 else
     echo "  No hooks directory found, skipping"
-fi
-
-if [[ "$online" == "1" ]]; then
-    echo "Looks like github.com is reachable"
-    echo "  Installing/updating Tmux plugins"
-    .tmux/plugins/tpm/bin/install_plugins
-    .tmux/plugins/tpm/bin/update_plugins all
 fi
