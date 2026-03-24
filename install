@@ -143,12 +143,18 @@ if [[ -n "$restore_backup" ]]; then
     echo "Restoring dotfiles from backup: $restore_backup"
     echo ""
     echo "Removing current dotfiles..."
+    # Handle .config/bash specially to preserve user layer dirs
+    if [[ -L ~/.config/bash ]]; then
+        rm -f ~/.config/bash
+    elif [[ -d ~/.config/bash ]]; then
+        rm -fr ~/.config/bash/global
+        rm -f ~/.config/bash/README.md ~/.config/bash/bashrc
+    fi
     for item in ~/.bashrc ~/.profile ~/.vimrc ~/.tmux.conf ~/.editorconfig ~/.tmux ~/.vim \
-                ~/.config/bash/global ~/.config/bash/README.md ~/.config/bash/bashrc \
                 ~/.config/nvim ~/.config/tmux ~/.config/editorconfig ~/.config/vim; do
         if [[ -e "$item" || -L "$item" ]]; then
             echo "  Removing: $item"
-            rm -rf "$item"
+            if [[ -L "$item" ]]; then rm -f "$item"; else rm -rf "$item"; fi
         fi
     done
 
@@ -234,11 +240,30 @@ if [[ "$dev_mode" == "1" ]]; then
         lns --verbose $repo_dir/$config_dir .config/$config_dir
     done
 
-    # Bash: only symlink repo-managed files, preserve user layer dirs
-    rm -fr .config/bash/global
-    rm -f .config/bash/README.md
-    rm -f .config/bash/bashrc
-    mkdir -p .config/bash
+    # Bash: only symlink repo-managed files, preserve user layer dirs.
+    # If .config/bash is an old directory-level symlink, replace it with
+    # a real directory (copying user layer dirs out first).
+    if [[ -L .config/bash ]]; then
+        # Save user layer dirs before removing the symlink
+        for layer in corp site project user; do
+            if [[ -d .config/bash/$layer ]]; then
+                cp -rPp .config/bash/$layer /tmp/dotfiles_bash_${layer}_$$
+            fi
+        done
+        rm -f .config/bash
+        mkdir -p .config/bash
+        for layer in corp site project user; do
+            if [[ -d /tmp/dotfiles_bash_${layer}_$$ ]]; then
+                mv /tmp/dotfiles_bash_${layer}_$$ .config/bash/$layer
+            fi
+        done
+    else
+        mkdir -p .config/bash
+        # Remove only repo-managed items
+        if [[ -L .config/bash/global ]]; then rm -f .config/bash/global; else rm -fr .config/bash/global; fi
+        rm -f .config/bash/README.md
+        rm -f .config/bash/bashrc
+    fi
     lns --verbose $repo_dir/bash/global .config/bash/global
     lns --verbose $repo_dir/bash/README.md .config/bash/README.md
     lns --verbose $repo_dir/bash/bashrc .config/bash/bashrc
@@ -252,10 +277,27 @@ if [[ "$dev_mode" == "1" ]]; then
 else
     ### BASH ###
     rm -f .bashrc .profile
-    rm -fr .config/bash/global
-    rm -f .config/bash/README.md
-    rm -f .config/bash/bashrc
-    mkdir -p .config/bash
+    # If .config/bash is an old directory-level symlink, replace it with
+    # a real directory (copying user layer dirs out first).
+    if [[ -L .config/bash ]]; then
+        for layer in corp site project user; do
+            if [[ -d .config/bash/$layer ]]; then
+                cp -rPp .config/bash/$layer /tmp/dotfiles_bash_${layer}_$$
+            fi
+        done
+        rm -f .config/bash
+        mkdir -p .config/bash
+        for layer in corp site project user; do
+            if [[ -d /tmp/dotfiles_bash_${layer}_$$ ]]; then
+                mv /tmp/dotfiles_bash_${layer}_$$ .config/bash/$layer
+            fi
+        done
+    else
+        mkdir -p .config/bash
+        if [[ -L .config/bash/global ]]; then rm -f .config/bash/global; else rm -fr .config/bash/global; fi
+        rm -f .config/bash/README.md
+        rm -f .config/bash/bashrc
+    fi
     inst $repo_dir/bash/global .config/bash/global
     inst $repo_dir/bash/README.md .config/bash/README.md
     inst $repo_dir/bash/bashrc .config/bash/bashrc
