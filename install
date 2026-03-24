@@ -144,7 +144,8 @@ if [[ -n "$restore_backup" ]]; then
     echo ""
     echo "Removing current dotfiles..."
     for item in ~/.bashrc ~/.profile ~/.vimrc ~/.tmux.conf ~/.editorconfig ~/.tmux ~/.vim \
-                ~/.config/bash ~/.config/nvim ~/.config/tmux ~/.config/editorconfig ~/.config/vim; do
+                ~/.config/bash/global ~/.config/bash/README.md ~/.config/bash/bashrc \
+                ~/.config/nvim ~/.config/tmux ~/.config/editorconfig ~/.config/vim; do
         if [[ -e "$item" || -L "$item" ]]; then
             echo "  Removing: $item"
             rm -rf "$item"
@@ -191,7 +192,9 @@ if [[ "$dev_mode" != "1" ]]; then
         .editorconfig \
         .config/vim \
         .config/nvim \
-        .config/bash \
+        .config/bash/global \
+        .config/bash/README.md \
+        .config/bash/bashrc \
         .config/tmux \
         .config/editorconfig \
         ; do
@@ -221,7 +224,6 @@ mkdir -p .config
 
 if [[ "$dev_mode" == "1" ]]; then
     for config_dir in \
-        bash \
         nvim \
         vim \
         tmux \
@@ -232,6 +234,14 @@ if [[ "$dev_mode" == "1" ]]; then
         lns --verbose $repo_dir/$config_dir .config/$config_dir
     done
 
+    # Bash: only symlink repo-managed files, preserve user layer dirs
+    rm -fr .config/bash/global
+    rm -f .config/bash/README.md
+    rm -f .config/bash/bashrc
+    mkdir -p .config/bash
+    lns --verbose $repo_dir/bash/global .config/bash/global
+    lns --verbose $repo_dir/bash/README.md .config/bash/README.md
+    lns --verbose $repo_dir/bash/bashrc .config/bash/bashrc
     lns --verbose .config/bash/bashrc .profile
     lns --verbose .config/bash/bashrc .bashrc
     lns --verbose .config/vim/vimrc .vimrc
@@ -242,7 +252,9 @@ if [[ "$dev_mode" == "1" ]]; then
 else
     ### BASH ###
     rm -f .bashrc .profile
-    rm -fr .config/bash
+    rm -fr .config/bash/global
+    rm -f .config/bash/README.md
+    rm -f .config/bash/bashrc
     mkdir -p .config/bash
     inst $repo_dir/bash/global .config/bash/global
     inst $repo_dir/bash/README.md .config/bash/README.md
