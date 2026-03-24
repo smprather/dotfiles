@@ -428,7 +428,7 @@ alias lr='ls'
 alias la='lr -a'
 if command -v fdfind >/dev/null; then
     alias fd="fdfind"
-    alias f='fd --unrestricted --full-path'
+    alias f='fd --exclude .snapshot --unrestricted --full-path'
 else
     alias f='find .'
 fi
