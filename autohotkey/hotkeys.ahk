@@ -372,3 +372,6 @@ F3::
 }
 #HotIf
 
+; Source user-specific hotkeys if present
+#Include *i %USERPROFILE%\more_hotkeys.ahk
+
