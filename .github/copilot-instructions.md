@@ -74,6 +74,8 @@ Tmux and Vim plugins are vendored in-tree (no internet required):
 - `vim/vim/pack/vendor/start/` — nerdtree, SimpylFold, vim-liberty (auto-loaded)
 - `vim/vim/pack/vendor/opt/` — optional plugins
 
+Run `./update_tmux_plugins` to re-clone all tmux plugins from GitHub (pre-commit hook strips `.git` dirs on the next commit).
+
 Neovim uses Lazy.nvim with versions locked in `nvim/lazy-lock.json`.
 
 ## Key Conventions
@@ -113,4 +115,4 @@ Handles distro naming differences: `batcat` (Debian) vs `bat` (RedHat), `fdfind`
 
 ### Windows
 
-Files are **copied**, not symlinked. Re-run `.\install.ps1` after repo changes. AutoHotKey is extracted to `%USERPROFILE%\AutoHotkey_*\` rather than installed system-wide (avoids SentinelOne flagging).
+Files are **copied**, not symlinked. Re-run `.\install.ps1` after repo changes. AutoHotKey (`AutoHotkey64.exe`) is extracted to `%USERPROFILE%\AutoHotkey_*\` rather than installed system-wide (avoids SentinelOne flagging); if no such directory exists, the installer auto-downloads the latest stable release from GitHub and removes `AutoHotkey32.exe`. The PowerShell profile includes `Invoke-PatchDOSStub` — a byte-patcher that changes an exe's DOS stub string to alter its hash, useful as a SentinelOne bypass for flagged binaries like AHK.

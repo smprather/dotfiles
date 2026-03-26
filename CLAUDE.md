@@ -79,19 +79,20 @@ starship/
   starship.toml             - Starship prompt config
 
 powershell/
-  Microsoft.PowerShell_profile.ps1  - PowerShell profile (aliases, coreutils wrappers, PSReadLine, Starship)
+  Microsoft.PowerShell_profile.ps1  - PowerShell profile (aliases, coreutils wrappers, PSReadLine, Starship, zoxide, PSFzf, Invoke-PatchDOSStub)
 
 wezterm/
   wezterm.lua               - WezTerm config
 
 autohotkey/
-  hotkeys.ahk               - Windows AutoHotKey hotkeys (VPN autologin, mouse nudge, tmux zoom)
+  hotkeys.ahk               - Windows AutoHotKey hotkeys (VPN autologin, mouse nudge, tmux zoom, corp credential shortcuts)
 
 hooks/
   pre-commit                - Removes embedded .git dirs before commits
 
 install                     - Linux installation script (bash)
 install.ps1                 - Windows installation script (PowerShell)
+update_tmux_plugins         - Re-clones all tmux plugins listed in tmux.conf from GitHub (strips .git on next commit)
 ```
 
 ## Installation Details
@@ -104,7 +105,7 @@ install.ps1                 - Windows installation script (PowerShell)
 
 **Backup behavior**: Numbered backups in `dotfiles_backups/backup.N/`. Skips files already pointing to the repo. Never overwrites existing backups.
 
-**Tmux plugin behavior**: TPM always linked. Bundled plugins only linked if offline (no github.com access). If online, plugins are downloaded fresh via TPM.
+**Tmux plugin behavior**: All bundled plugins are always copied/linked from the repo. Run `./update_tmux_plugins` to re-clone them from GitHub (pre-commit hook strips `.git` dirs on next commit).
 
 **Linux symlink map:**
 - `~/.bashrc` → `~/.config/bash/bashrc` → `repo/bash/bashrc`
@@ -121,7 +122,7 @@ install.ps1                 - Windows installation script (PowerShell)
 - `%USERPROFILE%\.config\starship\starship.toml` ← `repo/starship/starship.toml`
 - `%USERPROFILE%\.editorconfig` ← `repo/editorconfig/editorconfig`
 - `%USERPROFILE%\hotkeys.ahk` ← `repo/autohotkey/hotkeys.ahk`
-- `%APPDATA%\Microsoft\Windows\Start Menu\Programs\Startup\hotkeys.lnk` — shortcut to `AutoHotkey64.exe` with `%USERPROFILE%\hotkeys.ahk` as argument (AHK extracted to `%USERPROFILE%\AutoHotkey_*\`, not installed, to avoid SentinelOne flagging)
+- `%APPDATA%\Microsoft\Windows\Start Menu\Programs\Startup\hotkeys.lnk` — `.lnk` shortcut pointing directly to `AutoHotkey64.exe "%USERPROFILE%\hotkeys.ahk"` (AHK is not installed system-wide to avoid SentinelOne flagging). AHK is extracted to `%USERPROFILE%\AutoHotkey_*\`; if no such directory exists, the installer downloads the latest stable release from GitHub and removes `AutoHotkey32.exe`.
 - `%USERPROFILE%\Documents\WindowsPowerShell\Microsoft.PowerShell_profile.ps1` ← `repo/powershell/Microsoft.PowerShell_profile.ps1` (PS 5.1)
 - `%USERPROFILE%\Documents\PowerShell\Microsoft.PowerShell_profile.ps1` ← same (PS 7+)
 
@@ -190,11 +191,40 @@ Custom `cd()`: accepts a file path (goes to parent), offers to create missing di
 ### Tmux (`tmux/tmux.conf`)
 
 - Prefix: `Ctrl-\`
-- Pane navigation: `Shift+arrows`; Window navigation: `Ctrl+left/right`
-- Layout presets: `Prefix+1-5`; Reload: `Prefix+r`
+- Pane navigation: `Shift+arrows`; Pane resize: `Prefix+arrows` (repeatable)
+- Window navigation: `Ctrl+left/right`; Window reorder: `Ctrl+Shift+left/right`
+- Layout presets: `Prefix+1-5`; 4-pane layout: `Prefix+o`; Reload: `Prefix+r`
+- Capture pane buffer to nvim: `Prefix+v`
 - Plugins: tmux-resurrect (save: `Prefix+Ctrl-s`, restore: `Prefix+Ctrl-r`), tmux-continuum (auto-save every 60min), tmux-better-mouse-mode
 
-### Neovim (`nvim/init.lua`)
+### PowerShell (`powershell/Microsoft.PowerShell_profile.ps1`)
+
+Key aliases: `ls`/`lr` → eza, `vi` → nvim, `f` → fd, `cat` → bat, `g`/`grep` → rg, `b`/`bb`/`bbb` → cd up, `cdd` → cd to most recently modified dir, `gs`/`gc`/`gp`/`gd`/`ga`/`gsp` → git shortcuts, `w` → `Get-DefinitionPath`.
+
+Integrations (conditional, cached init): zoxide (`z`/`zi`), PSFzf (`Ctrl+T` file picker, `Ctrl+R` history), Starship prompt. Falls back gracefully when tools are absent.
+
+`Invoke-PatchDOSStub` — byte-patches the DOS stub string in an exe to change its hash, useful for bypassing SentinelOne hash-based flagging of tools like AutoHotkey.
+
+coreutils wrappers (via Git for Windows path): `rm`, `cp`, `mv`, `diff`, `rmdir`, `mkdir`, `wc`, `sed`, `awk`, `cut`, `xargs`.
+
+### AutoHotKey (`autohotkey/hotkeys.ahk`)
+
+Requires AHKv2. Corp mode activates when `CORP_UID` env var is set; reads credentials from `CORP_PASSWORD`.
+
+Key hotkeys:
+- `RAlt` / `RWin` → `Ctrl-\z` (tmux zoom toggle)
+- `Ctrl+;` → `Ctrl-\;` (tmux last-pane + zoom toggle)
+- `Ctrl+Alt+R` → reload script
+- `Ctrl+Alt+A` → pause/resume all hotkeys
+- `Ctrl+Alt+V` → toggle VPN auto-login (corp mode only)
+- `Ctrl+Alt+B` → type `PWMANAGER_PASSWORD` + Enter
+- `F1`/`F2`/`F3` → LMB/RMB/double-click+RMB (active in mspaint, etxc, wezterm-gui)
+
+VPN auto-login handles: credential prompt, "secure gateway terminated" dialog, Connect button click. Mouse nudge prevents screen lock (active 8.3–120 min idle). Set `AHK_ENABLE_MOUSE_WIGGLE=false` to disable nudge.
+
+`%USERPROFILE%\more_hotkeys.ahk` is auto-included if present (user extension point).
+
+
 
 Kickstart.nvim base. Plugin manager: Lazy.nvim (versions locked in `lazy-lock.json`). Key plugins: blink.cmp, telescope.nvim, gitsigns.nvim, conform.nvim, nvim-lint, nvim-treesitter, lualine.nvim, tokyonight.nvim.
 
