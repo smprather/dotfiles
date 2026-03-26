@@ -83,7 +83,6 @@ powershell/
 
 wezterm/
   wezterm.lua               - WezTerm config
-  wezterm-corp-ssh.ps1      - Corp SSH launcher (opens WezTerm tab/window, SSHes to CORP_LINUX_SSH)
 
 autohotkey/
   hotkeys.ahk               - Windows AutoHotKey hotkeys (VPN autologin, mouse nudge, tmux zoom)
@@ -123,8 +122,6 @@ install.ps1                 - Windows installation script (PowerShell)
 - `%USERPROFILE%\.editorconfig` ← `repo/editorconfig/editorconfig`
 - `%USERPROFILE%\hotkeys.ahk` ← `repo/autohotkey/hotkeys.ahk`
 - `%APPDATA%\Microsoft\Windows\Start Menu\Programs\Startup\hotkeys.lnk` — shortcut to `AutoHotkey64.exe` with `%USERPROFILE%\hotkeys.ahk` as argument (AHK extracted to `%USERPROFILE%\AutoHotkey_*\`, not installed, to avoid SentinelOne flagging)
-- `%USERPROFILE%\wezterm-corp-ssh.ps1` ← `repo/wezterm/wezterm-corp-ssh.ps1` (only when `wezterm-gui.exe` in PATH)
-- `%USERPROFILE%\WezTerm Corp SSH.lnk` — shortcut to run `wezterm-corp-ssh.ps1`; pin to taskbar for one-click corp SSH
 - `%USERPROFILE%\Documents\WindowsPowerShell\Microsoft.PowerShell_profile.ps1` ← `repo/powershell/Microsoft.PowerShell_profile.ps1` (PS 5.1)
 - `%USERPROFILE%\Documents\PowerShell\Microsoft.PowerShell_profile.ps1` ← same (PS 7+)
 

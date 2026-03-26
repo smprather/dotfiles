@@ -1,0 +1,116 @@
+# Copilot Instructions
+
+Dotfiles for Electrical Engineering work environments: multi-platform (RedHat 7/8/9, Suse, x86_64/ARM/PowerPC), offline-first (plugins bundled), no-root installs, with a layered configuration hierarchy (global → corp → site → project → user).
+
+## Key Commands
+
+```bash
+# Linux install (copies files — no repo references remain)
+./install
+
+# Install with file-level symlinks (repo changes take effect immediately)
+./install --links
+
+# Install with directory-level symlinks (easiest for editing)
+./install --dev
+
+# Restore from numbered backup
+./install --restore-backup dotfiles_backups/backup.1
+
+# Reload bash after changes
+exec bash
+
+# Install git hooks manually
+cp hooks/* .git/hooks/ && chmod +x .git/hooks/*
+```
+
+```powershell
+# Windows install (copies files, no elevation required)
+.\install.ps1
+```
+
+There are no automated tests or linters for this repo.
+
+## Architecture
+
+### Bash Layer System
+
+`bash/bashrc` is the single entry point (symlinked to `~/.bashrc` and `~/.profile`). It sources files in layer order across five layers: `global → corp → site → project → user`. Each layer directory lives under `~/.config/bash/` after install.
+
+Loading sequence:
+1. Always: clears all aliases/functions, sources `non_interactive.sh` per layer, exits if non-interactive
+2. Interactive only: sources `config.sh` per layer, then `interactive.sh` per layer
+
+`layered_preference_source <filename>` is the core function that implements this — it iterates all five layers and sources the named file if it exists and is non-empty.
+
+The `bash/global/` directory is the canonical upstream; the other layer dirs (`corp/`, `site/`, `project/`, `user/`) are user-created and not committed to this repo.
+
+### Hook Injection Points
+
+Each layer can inject code into `interactive.sh` via numbered files in `<layer>/global_hooks/`:
+
+| File | Injection point |
+|------|----------------|
+| `1.sh` | After functions loaded |
+| `2.sh` | After GLIBC detection |
+| `3.sh` | After PATH setup |
+| `4.sh` | After prompt configuration |
+| `5.sh` | Before bash completions |
+| `6.sh` | After bash completions loaded |
+| `7.sh` | Late / deprecated |
+
+### Install Modes
+
+- **Production** (default): copies files; re-run `./install` to pick up repo changes
+- **`--links`**: granular symlinks to specific repo files; `~/.config/bash/global` → `repo/bash/global`
+- **`--dev`**: directory-level symlinks; `~/.config/bash` → `repo/bash`
+
+Backups are numbered (`dotfiles_backups/backup.N/`). The installer skips targets already pointing into the repo and never overwrites an existing backup.
+
+### Bundled Plugins
+
+Tmux and Vim plugins are vendored in-tree (no internet required):
+- `tmux/tmux/plugins/` — tpm, resurrect, continuum, better-mouse-mode
+- `vim/vim/pack/vendor/start/` — nerdtree, SimpylFold, vim-liberty (auto-loaded)
+- `vim/vim/pack/vendor/opt/` — optional plugins
+
+Neovim uses Lazy.nvim with versions locked in `nvim/lazy-lock.json`.
+
+## Key Conventions
+
+### Variable Naming in Bash
+
+- `cfg_*` variables are user-facing preferences defined in `config.sh` per layer. They are unset at the end of bashrc (along with all `_*` locals) so they don't pollute the shell environment.
+- Variables prefixed with `_` are treated as bashrc-local and cleaned up by `unset_bashrc_local_vars` before bashrc exits.
+
+### Pre-commit Hook
+
+`hooks/pre-commit` scans for nested `.git` directories (from bundled plugins), removes them, and re-stages. **Always install this hook** when working with bundled plugins — adding a plugin directory without stripping its `.git` causes "embedded git repository" warnings. The hook runs `git add -A` after cleanup, so the commit proceeds cleanly.
+
+### Adding a Bundled Plugin
+
+1. Copy the plugin directory into `vim/vim/pack/vendor/start/` or `tmux/tmux/plugins/`
+2. The pre-commit hook strips `.git` dirs automatically on next commit
+3. Update `install` / `install.ps1` if new symlink/copy logic is needed
+
+### Overriding Configuration
+
+Create layer files that will be automatically picked up — no changes to `bash/global/` needed:
+```bash
+bash/user/config.sh       # cfg_* variable overrides
+bash/user/interactive.sh  # alias/function overrides
+bash/corp/global_hooks/3.sh  # inject code after PATH setup
+```
+
+### Tool Fallback Pattern
+
+The bash config gracefully degrades when modern tools are absent:
+- `eza` → `lsd` → `ls`
+- `bat` → `cat`
+- `fd` / `fdfind` → `find`
+
+Handles distro naming differences: `batcat` (Debian) vs `bat` (RedHat), `fdfind` vs `fd`.
+
+### Windows
+
+Files are **copied**, not symlinked. Re-run `.\install.ps1` after repo changes. AutoHotKey is extracted to `%USERPROFILE%\AutoHotkey_*\` rather than installed system-wide (avoids SentinelOne flagging).

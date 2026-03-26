@@ -15,7 +15,7 @@ without modification and overridden without forking.
 | **Vim** | Bundled plugins (NERDTree, SimpylFold), no internet required |
 | **Tmux** | Bundled plugins (resurrect, continuum, better-mouse-mode), `Ctrl-\` prefix |
 | **PowerShell** | Aliases, Unix coreutils wrappers, PSReadLine, Starship, zoxide, PSFzf |
-| **WezTerm** | Terminal config + one-click Corp SSH shortcut |
+| **WezTerm** | Terminal config |
 | **Starship** | Cross-shell prompt config |
 | **AutoHotKey** | VPN autologin (Cisco Secure Client), mouse nudge, tmux zoom hotkeys |
 | **EditorConfig** | Consistent formatting across editors |

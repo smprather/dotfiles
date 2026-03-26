@@ -4,6 +4,75 @@
 
 $global:__prevLocation = $null
 
+# This function is used to change the hash-code of an exe file which might help
+# get around SentinelOne's over-zealous "malware" flagging. I made it specifically
+# for AutoHotkey, but I'm sure it will come in helpful for other "malware".
+function Invoke-PatchDOSStub {
+    param (
+        [Parameter(Mandatory=$true)]
+        [string]$InputPath,
+
+        [Parameter(Mandatory=$false)]
+        [string]$OutputPath,
+
+        [string]$OldString = "This program cannot be run in DOS mode",
+        [string]$NewString = "This program cannot be run in D0S mode"
+    )
+
+    # 1. Validate File and String Lengths
+    if (-not (Test-Path $InputPath)) { Throw "File not found: $InputPath" }
+    if ($OldString.Length -ne $NewString.Length) {
+        Throw "Error: Replacement string must be the exact same length as the original."
+    }
+
+    # Set default output path if none provided (adds _modified suffix)
+    if (-not $OutputPath) {
+        $OutputPath = $InputPath.Replace(".exe", "_modified.exe")
+    }
+
+    Write-Host "Reading file..." -ForegroundColor Cyan
+    $bytes = [System.IO.File]::ReadAllBytes($InputPath)
+    $searchPattern = [System.Text.Encoding]::ASCII.GetBytes($OldString)
+    $replacePattern = [System.Text.Encoding]::ASCII.GetBytes($NewString)
+
+    $found = $false
+
+    # 2. Search and Replace Logic
+    for ($i = 0; $i -le ($bytes.Length - $searchPattern.Length); $i++) {
+        $match = $true
+        for ($j = 0; $j -lt $searchPattern.Length; $j++) {
+            if ($bytes[$i + $j] -ne $searchPattern[$j]) {
+                $match = $false
+                break
+            }
+        }
+
+        if ($match) {
+            for ($j = 0; $j -lt $replacePattern.Length; $j++) {
+                $bytes[$i + $j] = $replacePattern[$j]
+            }
+            $found = $true
+            Write-Host "Found target string at offset: $i" -ForegroundColor Green
+            break
+        }
+    }
+
+    # 3. Finalize and Compare
+    if ($found) {
+        [System.IO.File]::WriteAllBytes($OutputPath, $bytes)
+
+        $oldHash = (Get-FileHash $InputPath -Algorithm SHA256).Hash
+        $newHash = (Get-FileHash $OutputPath -Algorithm SHA256).Hash
+
+        Write-Host "`n--- Success ---" -ForegroundColor Green
+        Write-Host "Modified file: $OutputPath"
+        Write-Host "Old SHA256: $oldHash"
+        Write-Host "New SHA256: $newHash"
+    } else {
+        Write-Warning "Target string '$OldString' was not found in the binary."
+    }
+}
+
 function Set-LocationEx {
     param([string]$Path = $env:USERPROFILE)
     if ($Path -eq '-') {
@@ -162,6 +231,7 @@ if ($__coreutilsDir) {
 Remove-Variable __coreutilsDir, __cmd, __name, __exe, __sb -ErrorAction SilentlyContinue
 
 Set-Alias -Name ls   -Value ls_func            -Option AllScope
+Set-Alias -Name lr   -Value ls_func            -Option AllScope
 Set-Alias -Name vi   -Value nvim               -Option AllScope
 Set-Alias -Name f    -Value fd_func            -Option AllScope
 Set-Alias -Name w    -Value Get-DefinitionPath -Option AllScope
@@ -353,4 +423,3 @@ if ($profileCanUsePromptTools) {
     Remove-Variable __initCache -ErrorAction SilentlyContinue
     Remove-Item Function:Invoke-CachedInit -ErrorAction SilentlyContinue
 }
-

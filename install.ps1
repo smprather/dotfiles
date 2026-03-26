@@ -127,6 +127,7 @@ if ($ahkDirs.Count -gt 1) {
         New-Item -ItemType Directory -Path $ahkDir -Force | Out-Null
         Expand-Archive -Path $zipPath -DestinationPath $ahkDir -Force
         Remove-Item $zipPath
+        Remove-Item (Join-Path $ahkDir "AutoHotkey32.exe") -Force -ErrorAction SilentlyContinue
         Write-Host "  Extracted to $ahkDir"
     } catch {
         Write-Warning "  Failed to download AutoHotkey: $_"
