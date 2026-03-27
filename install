@@ -352,6 +352,7 @@ else
             .config/tmux/tmux/plugins/$(basename $plugin_dir)
     done
     inst $repo_dir/tmux/tmux.conf .config/tmux/tmux.conf
+    inst $repo_dir/tmux/tmux-3col-layout.sh .config/tmux/tmux-3col-layout.sh
     lns --verbose .config/tmux/tmux.conf .tmux.conf
     lns --verbose .config/tmux/tmux .tmux
 
