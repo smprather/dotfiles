@@ -86,6 +86,7 @@ wezterm/
 
 autohotkey/
   hotkeys.ahk               - Windows AutoHotKey hotkeys (VPN autologin, mouse nudge, tmux zoom, corp credential shortcuts)
+  plugins/                  - Optional AHK plugin files (*.ahk loaded; non-.ahk disabled)
 
 hooks/
   pre-commit                - Removes embedded .git dirs before commits
@@ -121,8 +122,9 @@ update_tmux_plugins         - Re-clones all tmux plugins listed in tmux.conf fro
 - `%USERPROFILE%\.config\wezterm\wezterm.lua` ← `repo/wezterm/wezterm.lua`
 - `%USERPROFILE%\.config\starship\starship.toml` ← `repo/starship/starship.toml`
 - `%USERPROFILE%\.editorconfig` ← `repo/editorconfig/editorconfig`
-- `%USERPROFILE%\hotkeys.ahk` ← `repo/autohotkey/hotkeys.ahk`
-- `%APPDATA%\Microsoft\Windows\Start Menu\Programs\Startup\hotkeys.lnk` — `.lnk` shortcut pointing directly to `AutoHotkey64.exe "%USERPROFILE%\hotkeys.ahk"` (AHK is not installed system-wide to avoid SentinelOne flagging). AHK is extracted to `%USERPROFILE%\AutoHotkey_*\`; if no such directory exists, the installer downloads the latest stable release from GitHub and removes `AutoHotkey32.exe`.
+- `%USERPROFILE%\autohotkey\hotkeys.ahk` ← `repo/autohotkey/hotkeys.ahk`
+- `%USERPROFILE%\autohotkey\plugins\*` ← `repo/autohotkey/plugins/*` (copied with conflict-aware behavior)
+- `%APPDATA%\Microsoft\Windows\Start Menu\Programs\Startup\hotkeys.lnk` — `.lnk` shortcut pointing directly to `AutoHotkey64.exe "%USERPROFILE%\autohotkey\hotkeys.ahk"` (AHK is not installed system-wide to avoid SentinelOne flagging). AHK is extracted to `%USERPROFILE%\AutoHotkey_*\`; if no such directory exists, the installer downloads the latest stable release from GitHub and removes `AutoHotkey32.exe`.
 - `%USERPROFILE%\Documents\WindowsPowerShell\Microsoft.PowerShell_profile.ps1` ← `repo/powershell/Microsoft.PowerShell_profile.ps1` (PS 5.1)
 - `%USERPROFILE%\Documents\PowerShell\Microsoft.PowerShell_profile.ps1` ← same (PS 7+)
 
@@ -222,7 +224,7 @@ Key hotkeys:
 
 VPN auto-login handles: credential prompt, "secure gateway terminated" dialog, Connect button click. Mouse nudge prevents screen lock (active 8.3–120 min idle). Set `AHK_ENABLE_MOUSE_WIGGLE=false` to disable nudge.
 
-`%USERPROFILE%\more_hotkeys.ahk` is auto-included if present (user extension point).
+`autohotkey/plugins/*.ahk` files are auto-included (lexical order). Any file not ending in `.ahk` is treated as disabled.
 
 
 

@@ -42,6 +42,83 @@ function Copy-Config {
     Write-Host "  Copied: $Source -> $Dest"
 }
 
+function Get-PluginBaseName {
+    param([string]$FileName)
+
+    if ($FileName -match '^(?<base>.+)\.ahk$') {
+        return $Matches.base
+    }
+    if ($FileName -match '^(?<base>.+)\.ahk\..+$') {
+        return $Matches.base
+    }
+    return $null
+}
+
+function Sync-AhkPlugins {
+    param(
+        [string]$RepoPluginsDir,
+        [string]$DestPluginsDir
+    )
+
+    if (-not (Test-Path $RepoPluginsDir -PathType Container)) {
+        return
+    }
+
+    if (-not (Test-Path $DestPluginsDir -PathType Container)) {
+        New-Item -ItemType Directory -Path $DestPluginsDir -Force | Out-Null
+    }
+
+    $destByBase = @{}
+    Get-ChildItem -Path $DestPluginsDir -File -ErrorAction SilentlyContinue | ForEach-Object {
+        $base = Get-PluginBaseName $_.Name
+        if (-not $base) {
+            return
+        }
+        if (-not $destByBase.ContainsKey($base)) {
+            $destByBase[$base] = @()
+        }
+        $destByBase[$base] += $_
+    }
+
+    Get-ChildItem -Path $RepoPluginsDir -File -ErrorAction SilentlyContinue | ForEach-Object {
+        $src = $_
+        $base = Get-PluginBaseName $src.Name
+        if (-not $base) {
+            return
+        }
+
+        $destMatches = @()
+        if ($destByBase.ContainsKey($base)) {
+            $destMatches = @($destByBase[$base])
+        }
+
+        if ($destMatches.Count -eq 0) {
+            Copy-Config $src.FullName (Join-Path $DestPluginsDir $src.Name)
+            $destByBase[$base] = @($src)
+            return
+        }
+
+        $exactMatch = $destMatches | Where-Object { $_.Name -ceq $src.Name } | Select-Object -First 1
+        if ($exactMatch) {
+            return
+        }
+
+        $hasEnabledDest = @($destMatches | Where-Object { $_.Name -cmatch '\.ahk$' }).Count -gt 0
+        $destNames = ($destMatches | ForEach-Object { $_.Name }) -join ', '
+
+        if ($base -eq '99-personal-hotkeys' -and $hasEnabledDest) {
+            return
+        }
+
+        if ($hasEnabledDest -and $src.Name -cnotmatch '\.ahk$') {
+            Write-Host "  Skipping plugin '$($src.Name)' because enabled local variant exists: $destNames"
+            return
+        }
+
+        Write-Host "  Skipping plugin '$($src.Name)' because local variant exists: $destNames"
+    }
+}
+
 # --- Main ---
 
 $repoDir = $PSScriptRoot
@@ -93,11 +170,16 @@ Copy-Config "$repoDir\editorconfig\editorconfig" "$env:USERPROFILE\.editorconfig
 # --- AutoHotKey (launch at startup via .lnk shortcut) ---
 # AHK is not "installed" (avoids SentinelOne flagging the installer). Instead,
 # we extract the AHK zip to $HOME and create a startup shortcut that calls
-# AutoHotkey64.exe directly with the repo hotkeys.ahk as the argument.
+# AutoHotkey64.exe directly with the installed hotkeys.ahk as the argument.
 Write-Host "AutoHotKey..."
 $startupDir  = "$env:APPDATA\Microsoft\Windows\Start Menu\Programs\Startup"
-$ahkScript   = "$HOME\hotkeys.ahk"
+$ahkHomeDir  = "$HOME\autohotkey"
+$ahkScript   = "$ahkHomeDir\hotkeys.ahk"
+$ahkPluginsDir = "$ahkHomeDir\plugins"
+
 Copy-Config "$repoDir\autohotkey\hotkeys.ahk" $ahkScript
+Copy-Config "$repoDir\autohotkey\plugins\README.md" "$ahkPluginsDir\README.md"
+Sync-AhkPlugins "$repoDir\autohotkey\plugins" $ahkPluginsDir
 
 # Find existing extracted AutoHotkey directory in $HOME
 $ahkDirs = @(Get-ChildItem -Path $HOME -Filter "AutoHotkey_*" -Directory -ErrorAction SilentlyContinue)
