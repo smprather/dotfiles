@@ -329,9 +329,11 @@ else
     for x in $repo_dir/nvim/lsp/*; do
         inst $x .config/nvim/lsp/$(basename $x)
     done
-    for x in $repo_dir/nvim/lua/kickstart/plugins/*; do
-        inst $x .config/nvim/lua/kickstart/plugins/$(basename $x)
-    done
+    if compgen -G "$repo_dir/nvim/lua/kickstart/plugins/*" > /dev/null; then
+        for x in $repo_dir/nvim/lua/kickstart/plugins/*; do
+            inst $x .config/nvim/lua/kickstart/plugins/$(basename $x)
+        done
+    fi
 
     ### VIM ###
     rm -f .vimrc
