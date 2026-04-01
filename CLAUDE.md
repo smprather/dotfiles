@@ -70,7 +70,7 @@ vim/
 
 tmux/
   tmux.conf                 - Tmux config → ~/.tmux.conf
-  tmux/plugins/             - Bundled plugins (tpm, resurrect, continuum, better-mouse-mode)
+  tmux/vendor/plugins/      - Bundled plugins (tpm, resurrect, continuum, better-mouse-mode)
 
 editorconfig/
   editorconfig              - → ~/.editorconfig
@@ -255,7 +255,7 @@ bash/corp/global_hooks/5.sh  # hook injection at point 5
 
 ### Add a new bundled plugin (vim/tmux)
 
-1. Copy plugin directory into `vim/vim/pack/vendor/start/` or `tmux/tmux/plugins/`
+1. Copy plugin directory into `vim/vim/pack/vendor/start/` or `tmux/vendor/plugins/`
 2. The pre-commit hook will strip `.git` dirs automatically on next commit
 3. Update `install` if new symlink logic is needed
 

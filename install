@@ -12,33 +12,33 @@ restore_backup=""
 
 while [[ $# -gt 0 ]]; do
     case "$1" in
-        --dev)
-            dev_mode=1
-            shift
-            ;;
-        --links)
-            links_mode=1
-            shift
-            ;;
-        --verbose)
-            # Kept for backwards compatibility; output is always verbose
-            shift
-            ;;
-        --restore-backup)
-            if [[ -z "$2" ]]; then
-                echo "Error: --restore-backup requires a backup directory path"
-                echo "Usage: $0 --restore-backup <backup_dir>"
-                echo "Example: $0 --restore-backup dotfiles_backups/backup.1"
-                exit 1
-            fi
-            restore_backup="$2"
-            shift 2
-            ;;
-        *)
-            echo "Unknown option: $1"
-            echo "Usage: $0 [--dev] [--links] [--verbose] [--restore-backup <dir>]"
+    --dev)
+        dev_mode=1
+        shift
+        ;;
+    --links)
+        links_mode=1
+        shift
+        ;;
+    --verbose)
+        # Kept for backwards compatibility; output is always verbose
+        shift
+        ;;
+    --restore-backup)
+        if [[ -z "$2" ]]; then
+            echo "Error: --restore-backup requires a backup directory path"
+            echo "Usage: $0 --restore-backup <backup_dir>"
+            echo "Example: $0 --restore-backup dotfiles_backups/backup.1"
             exit 1
-            ;;
+        fi
+        restore_backup="$2"
+        shift 2
+        ;;
+    *)
+        echo "Unknown option: $1"
+        echo "Usage: $0 [--dev] [--links] [--verbose] [--restore-backup <dir>]"
+        exit 1
+        ;;
     esac
 done
 
@@ -51,9 +51,18 @@ lns() {
 
     while [[ $# -gt 0 ]]; do
         case "$1" in
-            --unsafe)  unsafe=true;   shift ;;
-            --verbose) verbose=true;  shift ;;
-            *)         args+=("$1");  shift ;;
+        --unsafe)
+            unsafe=true
+            shift
+            ;;
+        --verbose)
+            verbose=true
+            shift
+            ;;
+        *)
+            args+=("$1")
+            shift
+            ;;
         esac
     done
 
@@ -151,7 +160,7 @@ if [[ -n "$restore_backup" ]]; then
         rm -f ~/.config/bash/README.md ~/.config/bash/bashrc
     fi
     for item in ~/.bashrc ~/.profile ~/.vimrc ~/.tmux.conf ~/.editorconfig ~/.tmux ~/.vim \
-                ~/.config/nvim ~/.config/tmux ~/.config/editorconfig ~/.config/vim; do
+        ~/.config/nvim ~/.config/tmux ~/.config/editorconfig ~/.config/vim; do
         if [[ -e "$item" || -L "$item" ]]; then
             echo "  Removing: $item"
             if [[ -L "$item" ]]; then rm -f "$item"; else rm -rf "$item"; fi
@@ -202,8 +211,7 @@ if [[ "$dev_mode" != "1" ]]; then
         .config/bash/README.md \
         .config/bash/bashrc \
         .config/tmux \
-        .config/editorconfig \
-        ; do
+        .config/editorconfig; do
 
         if [[ ! -e "$x" && ! -L "$x" ]]; then
             continue
@@ -211,8 +219,8 @@ if [[ "$dev_mode" != "1" ]]; then
 
         if [[ -L "$x" ]]; then
             link_target=$(readlink "$x")
-            if [[ "$link_target" == "$repo_dir"* ]] || \
-               [[ -e "$x" && "$(realpath "$x" 2>/dev/null)" == "$repo_dir"* ]]; then
+            if [[ "$link_target" == "$repo_dir"* ]] ||
+                [[ -e "$x" && "$(realpath "$x" 2>/dev/null)" == "$repo_dir"* ]]; then
                 echo "  Skipping (points to repo): $x"
                 continue
             fi
@@ -233,8 +241,7 @@ if [[ "$dev_mode" == "1" ]]; then
         nvim \
         vim \
         tmux \
-        editorconfig \
-        ; do
+        editorconfig; do
 
         rm -fr .config/$config_dir
         lns --verbose $repo_dir/$config_dir .config/$config_dir
@@ -319,10 +326,10 @@ else
     inst $repo_dir/nvim/README.md .config/nvim/README.md
     inst $repo_dir/nvim/LICENSE.md .config/nvim/LICENSE.md
     inst $repo_dir/nvim/init.lua .config/nvim/init.lua
-    for x in $repo_dir/nvim/lsp/* ; do
+    for x in $repo_dir/nvim/lsp/*; do
         inst $x .config/nvim/lsp/$(basename $x)
     done
-    for x in $repo_dir/nvim/lua/kickstart/plugins/* ; do
+    for x in $repo_dir/nvim/lua/kickstart/plugins/*; do
         inst $x .config/nvim/lua/kickstart/plugins/$(basename $x)
     done
 
@@ -332,8 +339,8 @@ else
     rm -fr .config/vim
     mkdir -p .config/vim/vim/pack/vendor/start
     mkdir -p .config/vim/vim/pack/vendor/opt
-    for start_or_opt in start opt ; do
-        for plugin_dir in $repo_dir/vim/vim/pack/vendor/$start_or_opt/* ; do
+    for start_or_opt in start opt; do
+        for plugin_dir in $repo_dir/vim/vim/pack/vendor/$start_or_opt/*; do
             inst $plugin_dir \
                 .config/vim/vim/pack/vendor/$start_or_opt/$(basename $plugin_dir)
         done
@@ -347,7 +354,7 @@ else
     rm -fr .tmux
     rm -fr .config/tmux
     mkdir -p .config/tmux/tmux/plugins
-    for plugin_dir in $repo_dir/tmux/tmux/plugins/* ; do
+    for plugin_dir in $repo_dir/tmux/vendor/plugins/*; do
         inst $plugin_dir \
             .config/tmux/tmux/plugins/$(basename $plugin_dir)
     done

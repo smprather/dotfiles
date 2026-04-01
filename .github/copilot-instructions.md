@@ -70,7 +70,7 @@ Backups are numbered (`dotfiles_backups/backup.N/`). The installer skips targets
 ### Bundled Plugins
 
 Tmux and Vim plugins are vendored in-tree (no internet required):
-- `tmux/tmux/plugins/` — tpm, resurrect, continuum, better-mouse-mode
+- `tmux/vendor/plugins/` — tpm, resurrect, continuum, better-mouse-mode
 - `vim/vim/pack/vendor/start/` — nerdtree, SimpylFold, vim-liberty (auto-loaded)
 - `vim/vim/pack/vendor/opt/` — optional plugins
 
@@ -91,7 +91,7 @@ Neovim uses Lazy.nvim with versions locked in `nvim/lazy-lock.json`.
 
 ### Adding a Bundled Plugin
 
-1. Copy the plugin directory into `vim/vim/pack/vendor/start/` or `tmux/tmux/plugins/`
+1. Copy the plugin directory into `vim/vim/pack/vendor/start/` or `tmux/vendor/plugins/`
 2. The pre-commit hook strips `.git` dirs automatically on next commit
 3. Update `install` / `install.ps1` if new symlink/copy logic is needed
 
