@@ -8,10 +8,14 @@ InstallKeybdHook()
 SetMouseDelay(10)
 
 g_vpn_autologin_enabled := true
+g_tmux_hotkeys_enabled := FileExist(A_ScriptDir . "\\plugins\\50-tmux-hotkeys.ahk") != ""
 
 ; Keep the generated include list in sync with enabled repo and custom plugins.
 if (RefreshPluginIncludes())
     Reload
+
+; Auto-generated include file with one #Include per enabled plugin file.
+#Include *i %A_ScriptDir%\_autoload_plugins.generated.ahk
 
 Return  ; End of auto-execute section
 
@@ -49,8 +53,27 @@ $^!v::
     SetTimer(() => ToolTip(), -1000)
 }
 
-; Auto-generated include file with one #Include per enabled plugin file.
-#Include *i %A_ScriptDir%\_autoload_plugins.generated.ahk
+; tmux helper hotkeys are enabled by the 50-tmux-hotkeys plugin.
+$*RAlt::
+$*RWin::
+{
+    global g_tmux_hotkeys_enabled
+    if (!g_tmux_hotkeys_enabled)
+        return
+
+    Send("^\z")
+    if (InStr(A_ThisHotkey, "RWin"))
+        KeyWait("RWin")
+}
+
+^;::
+{
+    global g_tmux_hotkeys_enabled
+    if (!g_tmux_hotkeys_enabled)
+        return
+
+    Send("{Ctrl up}^\;{Ctrl down}")
+}
 
 RefreshPluginIncludes()
 {

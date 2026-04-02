@@ -226,9 +226,13 @@ Repo plugins:
 - `30-cisco-secure-client-vpn` — Cisco Secure Client reconnect + credential automation
 - `40-password-manager` — `Ctrl+Alt+B` types `PWMANAGER_PASSWORD` + Enter
 - `50-tmux-hotkeys` — `RAlt`/`RWin` zoom toggle and `Ctrl+;` last-pane toggle for tmux
-- `f1f2f3_as_mouse_bottons` — F1/F2/F3 mouse remaps for mspaint/etxc/wezterm-gui
+- `60-f1f2f3-as-mouse-bottons` — F1/F2/F3 mouse remaps for mspaint/etxc/wezterm-gui
 
 `hotkeys.ahk` auto-includes enabled `.ahk` files from `%USERPROFILE%\autohotkey\plugins` and `%USERPROFILE%\autohotkey\custom_plugins` in lexical order.
+
+AHK loader caveats:
+- The generated plugin include must be processed before the auto-execute `Return`, or plugin top-level initialization (for example `SetTimer(...)`) will not run on startup/reload.
+- Some hotkey registrations are more reliable when they remain in `hotkeys.ahk` and are gated by plugin presence/shared globals, rather than being registered directly from included plugin files.
 
 
 

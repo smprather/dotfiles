@@ -21,8 +21,14 @@ Repo plugin IDs:
 - `30-cisco-secure-client-vpn` - Cisco Secure Client VPN automation
 - `40-password-manager` - `Ctrl+Alt+B` password manager helper
 - `50-tmux-hotkeys` - tmux hotkeys
-- `f1f2f3_as_mouse_bottons` - F1/F2/F3 mouse remaps
+- `60-f1f2f3-as-mouse-bottons` - F1/F2/F3 mouse remaps
 
 Notes:
 - Keep hotkeys scoped with `#HotIf` when possible to avoid conflicts.
 - Prefer numeric prefixes so load order is explicit.
+- Plugin initialization code must run before the auto-execute `Return`; `hotkeys.ahk`
+  includes the generated plugin file before `Return` so reloads fully reinitialize
+  enabled plugins.
+- Some fragile hotkey registrations may still live in `hotkeys.ahk` and be gated by
+  plugin presence or shared globals when AHK proves unreliable for those bindings in
+  included plugin files.

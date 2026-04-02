@@ -1,16 +1,6 @@
 ; tmux helper hotkeys.
 ; Enable by adding "50-tmux-hotkeys" to dotkeys_config.toml.
 
-; This enables "hot zoom" toggle in tmux.
-; Make sure tmux leader is Ctrl+Backslash.
-RAlt::
-RWin::
-{
-    Send("^\z")
-}
-
-; Enables a last-pane with zoom-state toggle in tmux.
-^;::
-{
-    Send("{Ctrl up}^\;{Ctrl down}")
-}
+; The actual hotkey registrations live in hotkeys.ahk because these right-side
+; modifier bindings were reliable there before the plugin split. This plugin
+; remains the enable/disable switch for those bindings.
