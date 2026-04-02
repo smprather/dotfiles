@@ -195,7 +195,7 @@ if ($ahkDirs.Count -gt 1) {
     # Download latest stable release from GitHub
     Write-Host "  No AutoHotkey found — downloading latest stable release..."
     try {
-        $release  = Invoke-RestMethod "https://api.github.com/repos/AutoHotkey/AutoHotkey/releases/latest" -UseBasicParsing
+        # $release  = Invoke-RestMethod "https://api.github.com/repos/AutoHotkey/AutoHotkey/releases/latest" -UseBasicParsing
         $zipAsset = $release.assets | Where-Object { $_.name -like "AutoHotkey_*.zip" } | Select-Object -First 1
         if (-not $zipAsset) { throw "No zip asset found in latest release." }
 
