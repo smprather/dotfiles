@@ -34,6 +34,7 @@ cp hooks/* .git/hooks/ && chmod +x .git/hooks/*
 
 **Windows** (no elevation required — copies files):
 ```powershell
+.\install-powershell-latest.ps1   # if starting from Windows PowerShell 5.1
 .\install.ps1
 ```
 
@@ -85,13 +86,13 @@ wezterm/
   wezterm.lua               - WezTerm config
 
 autohotkey/
-  hotkeys.ahk               - Windows AutoHotKey core hotkeys + plugin loader
-  plugins/                  - Repo-managed AHK plugins (stored as *.ahk.disabled; enabled via dotkeys_config.toml)
+  hotkeys.ahk               - Windows AutoHotKey flat script with installer-patched feature flags
 
 hooks/
   pre-commit                - Removes embedded .git dirs before commits
 
 install                     - Linux installation script (bash)
+install-powershell-latest.ps1 - Windows PowerShell 5.1 bootstrapper for pwsh via winget
 install.ps1                 - Windows installation script (PowerShell)
 update_tmux_plugins         - Re-clones all tmux plugins listed in tmux.conf from GitHub (strips .git on next commit)
 ```
@@ -123,9 +124,8 @@ update_tmux_plugins         - Re-clones all tmux plugins listed in tmux.conf fro
 - `%USERPROFILE%\.config\starship\starship.toml` ← `repo/starship/starship.toml`
 - `%USERPROFILE%\.editorconfig` ← `repo/editorconfig/editorconfig`
 - `%USERPROFILE%\autohotkey\hotkeys.ahk` ← `repo/autohotkey/hotkeys.ahk`
-- `%USERPROFILE%\dotkeys_config.toml` — user-local AHK plugin selection config (created if missing)
-- `%USERPROFILE%\autohotkey\plugins\*` ← repo plugins mirrored from `repo/autohotkey/plugins/*` with enabled entries materialized as `.ahk` and disabled entries as `.ahk.disabled`
-- `%USERPROFILE%\autohotkey\custom_plugins\99-personal-hotkeys.ahk` — starter personal plugin file created if missing; personal scripts belong in `custom_plugins/`
+- `%USERPROFILE%\dotkeys_config.toml` — user-local AHK feature selection config (created if missing)
+- `install.ps1` patches feature flags in `%USERPROFILE%\autohotkey\hotkeys.ahk` based on the enabled feature list
 - `%APPDATA%\Microsoft\Windows\Start Menu\Programs\Startup\hotkeys.lnk` — `.lnk` shortcut pointing directly to `AutoHotkey64.exe "%USERPROFILE%\autohotkey\hotkeys.ahk"` (AHK is not installed system-wide to avoid SentinelOne flagging). AHK is extracted to `%USERPROFILE%\AutoHotkey_*\`; if no such directory exists, the installer downloads the latest stable release from GitHub and removes `AutoHotkey32.exe`.
 - `%USERPROFILE%\Documents\WindowsPowerShell\Microsoft.PowerShell_profile.ps1` ← `repo/powershell/Microsoft.PowerShell_profile.ps1` (PS 5.1)
 - `%USERPROFILE%\Documents\PowerShell\Microsoft.PowerShell_profile.ps1` ← same (PS 7+)
@@ -213,26 +213,22 @@ coreutils wrappers (via Git for Windows path): `rm`, `cp`, `mv`, `diff`, `rmdir`
 
 ### AutoHotKey (`autohotkey/hotkeys.ahk`)
 
-Requires AHKv2. `hotkeys.ahk` provides the core loader plus always-on reload/pause behavior. Most optional behavior now lives in plugins selected via `%USERPROFILE%\dotkeys_config.toml`.
+Requires AHKv2. `hotkeys.ahk` is a single flat script. `install.ps1` copies it to `%USERPROFILE%\autohotkey\hotkeys.ahk` and patches feature-flag booleans from `%USERPROFILE%\dotkeys_config.toml`.
 
 Key hotkeys:
 - `Ctrl+Alt+R` → reload script
 - `Ctrl+Alt+A` → pause/resume all hotkeys
-- `Ctrl+Alt+V` → toggle VPN auto-login state used by the Cisco VPN plugin when enabled
+- `Ctrl+Alt+V` → toggle VPN auto-login when the Cisco VPN feature is enabled
 
-Repo plugins:
-- `10-corp-logins` — corp credential entry hotkeys using `CORP_UID` / `CORP_PASSWORD`
-- `20-mouse-wiggle` — idle mouse nudge; set `AHK_ENABLE_MOUSE_WIGGLE=false` to suppress it
-- `30-cisco-secure-client-vpn` — Cisco Secure Client reconnect + credential automation
-- `40-password-manager` — `Ctrl+Alt+B` types `PWMANAGER_PASSWORD` + Enter
-- `50-tmux-hotkeys` — `RAlt`/`RWin` zoom toggle and `Ctrl+;` last-pane toggle for tmux
-- `60-f1f2f3-as-mouse-bottons` — F1/F2/F3 mouse remaps for mspaint/etxc/wezterm-gui
+Optional features:
+- `corp-logins` — corp credential entry hotkeys using `CORP_UID` / `CORP_PASSWORD`
+- `mouse-wiggle` — idle mouse nudge; set `AHK_ENABLE_MOUSE_WIGGLE=false` to suppress it
+- `cisco-secure-client-vpn` — Cisco Secure Client reconnect + credential automation
+- `password-manager` — `Ctrl+Alt+B` types `PWMANAGER_PASSWORD` + Enter
+- `tmux-hotkeys` — `RAlt`/`RWin` zoom toggle and `Ctrl+;` last-pane toggle for tmux
+- `f1f2f3-as-mouse-buttons` — F1/F2/F3 mouse remaps for mspaint/etxc/wezterm-gui
 
-`hotkeys.ahk` auto-includes enabled `.ahk` files from `%USERPROFILE%\autohotkey\plugins` and `%USERPROFILE%\autohotkey\custom_plugins` in lexical order.
-
-AHK loader caveats:
-- The generated plugin include must be processed before the auto-execute `Return`, or plugin top-level initialization (for example `SetTimer(...)`) will not run on startup/reload.
-- Some hotkey registrations are more reliable when they remain in `hotkeys.ahk` and are gated by plugin presence/shared globals, rather than being registered directly from included plugin files.
+Existing `%USERPROFILE%\dotkeys_config.toml` files that still use legacy plugin IDs remain accepted by the installer and are mapped onto the flat-script feature flags.
 
 
 

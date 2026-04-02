@@ -1,6 +1,0 @@
-; tmux helper hotkeys.
-; Enable by adding "50-tmux-hotkeys" to dotkeys_config.toml.
-
-; The actual hotkey registrations live in hotkeys.ahk because these right-side
-; modifier bindings were reliable there before the plugin split. This plugin
-; remains the enable/disable switch for those bindings.

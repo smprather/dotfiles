@@ -10,7 +10,11 @@
 Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
 
-# --- Helpers ---
+if ($PSVersionTable.PSVersion.Major -lt 7) {
+    Write-Warning "This installer requires PowerShell 7+."
+    Write-Warning "Run .\install-powershell-latest.ps1 from Windows PowerShell 5.1, then rerun .\install.ps1 from pwsh."
+    exit 1
+}
 
 function Copy-Config {
     param(
@@ -29,8 +33,6 @@ function Copy-Config {
     }
 
     if (Test-Path $Source -PathType Container) {
-        # Use robocopy for directories — handles sparse/missing files gracefully.
-        # Exit codes 0-7 are success; 8+ indicate errors.
         robocopy $Source $Dest /E /NFL /NDL /NJH /NJS | Out-Null
         if ($LASTEXITCODE -ge 8) {
             Write-Warning "  robocopy reported errors copying '$Source' (exit code: $LASTEXITCODE)"
@@ -42,78 +44,39 @@ function Copy-Config {
     Write-Host "  Copied: $Source -> $Dest"
 }
 
-function Get-PluginBaseName {
-    param([string]$FileName)
-
-    if ($FileName -match '^(?<base>.+)\.ahk$') {
-        return $Matches.base
-    }
-    if ($FileName -match '^(?<base>.+)\.ahk\..+$') {
-        return $Matches.base
-    }
-    return $null
-}
-
-function Get-RepoAhkPluginIds {
-    param([string]$RepoPluginsDir)
-
-    if (-not (Test-Path $RepoPluginsDir -PathType Container)) {
-        return @()
-    }
-
-    $ids = @()
-    Get-ChildItem -Path $RepoPluginsDir -File -ErrorAction SilentlyContinue | ForEach-Object {
-        if ($_.Name -ceq '_autoload_plugins.generated.ahk') {
-            return
-        }
-
-        $base = Get-PluginBaseName $_.Name
-        if (-not $base) {
-            return
-        }
-
-        if ($_.Name -cnotmatch '\.ahk(\.disabled)?$') {
-            return
-        }
-
-        if ($ids -cnotcontains $base) {
-            $ids += $base
-        }
-    }
-
-    return @($ids | Sort-Object)
+function Get-AhkFeatureDefinitions {
+    return @(
+        [PSCustomObject]@{ Id = 'corp-logins'; FlagName = 'cfg_feature_corp_logins'; LegacyIds = @('10-corp-logins'); Description = 'corp credential entry hotkeys' },
+        [PSCustomObject]@{ Id = 'mouse-wiggle'; FlagName = 'cfg_feature_mouse_wiggle'; LegacyIds = @('20-mouse-wiggle'); Description = 'idle mouse nudge' },
+        [PSCustomObject]@{ Id = 'cisco-secure-client-vpn'; FlagName = 'cfg_feature_cisco_secure_client_vpn'; LegacyIds = @('30-cisco-secure-client-vpn'); Description = 'Cisco Secure Client VPN automation' },
+        [PSCustomObject]@{ Id = 'password-manager'; FlagName = 'cfg_feature_password_manager'; LegacyIds = @('40-password-manager'); Description = 'Ctrl+Alt+B password helper' },
+        [PSCustomObject]@{ Id = 'tmux-hotkeys'; FlagName = 'cfg_feature_tmux_hotkeys'; LegacyIds = @('50-tmux-hotkeys'); Description = 'tmux helper hotkeys' },
+        [PSCustomObject]@{ Id = 'f1f2f3-as-mouse-buttons'; FlagName = 'cfg_feature_f1f2f3_as_mouse_buttons'; LegacyIds = @('60-f1f2f3-as-mouse-bottons', 'f1f2f3_as_mouse_bottons'); Description = 'F1/F2/F3 mouse remaps' }
+    )
 }
 
 function New-DotkeysConfig {
     param(
         [string]$ConfigPath,
-        [string[]]$RepoPluginIds
+        [object[]]$FeatureDefinitions
     )
-
-    $defaultEnabled = @()
-
-    $commentedPlugins = @($RepoPluginIds | Where-Object { $defaultEnabled -notcontains $_ })
 
     $lines = @(
         'version = 1',
         '',
         '# This file is user-local and not shared from the repo.',
-        '# Plugin enablement is managed here; manual renames in plugins\\ are overwritten by install.ps1.',
-        '# Put personal one-off scripts in %USERPROFILE%\\autohotkey\\custom_plugins.',
+        '# install.ps1 patches feature flags in hotkeys.ahk from this list.',
+        '# Legacy [autohotkey.plugins] entries are still accepted for existing installs.',
         '',
         '[autohotkey]',
         'enabled = true',
         '',
-        '[autohotkey.plugins]',
+        '[autohotkey.features]',
         'enabled = ['
     )
 
-    foreach ($pluginId in $defaultEnabled) {
-        $lines += "  `"$pluginId`","
-    }
-
-    foreach ($pluginId in $commentedPlugins) {
-        $lines += "  # `"$pluginId`","
+    foreach ($feature in $FeatureDefinitions) {
+        $lines += "  # `"$($feature.Id)`",  # $($feature.Description)"
     }
 
     $lines += ']'
@@ -127,42 +90,33 @@ function New-DotkeysConfig {
     Write-Host "  Created default dotkeys config: $ConfigPath"
 }
 
-function Ensure-CustomAhkPlugins {
-    param([string]$CustomPluginsDir)
-
-    if (-not (Test-Path $CustomPluginsDir -PathType Container)) {
-        New-Item -ItemType Directory -Path $CustomPluginsDir -Force | Out-Null
-        Write-Host "  Created custom plugin directory: $CustomPluginsDir"
-    }
-
-    $personalPlugin = Join-Path $CustomPluginsDir '99-personal-hotkeys.ahk'
-    if (-not (Test-Path $personalPlugin -PathType Leaf)) {
-        $content = @(
-            '; Personal AutoHotkey plugin file.'
-        )
-        Set-Content -Path $personalPlugin -Value $content -Encoding UTF8
-        Write-Host "  Created starter personal plugin: $personalPlugin"
-    }
-}
-
 function Get-DotkeysAhkConfig {
     param(
         [string]$ConfigPath,
-        [string[]]$RepoPluginIds
+        [object[]]$FeatureDefinitions
     )
 
     $result = [PSCustomObject]@{
         AutoHotkeyEnabled = $true
-        EnabledPluginIds  = @()
+        EnabledFeatureIds = @()
     }
 
     if (-not (Test-Path $ConfigPath -PathType Leaf)) {
         return $result
     }
 
+    $featureMap = @{}
+    foreach ($feature in $FeatureDefinitions) {
+        $featureMap[$feature.Id] = $feature.Id
+        foreach ($legacyId in $feature.LegacyIds) {
+            $featureMap[$legacyId] = $feature.Id
+        }
+    }
+
     $currentSection = ''
     $inEnabledArray = $false
-    $enabledPluginIds = @()
+    $enabledFeatureIds = @()
+    $unknownEntries = @()
 
     Get-Content -Path $ConfigPath -ErrorAction Stop | ForEach-Object {
         $line = $_
@@ -178,13 +132,16 @@ function Get-DotkeysAhkConfig {
         }
 
         if ($inEnabledArray) {
-            if (-not $trimmed.StartsWith('#')) {
-                $quoted = [regex]::Matches($line, '"([^"]+)"')
-                foreach ($q in $quoted) {
-                    $pluginId = $q.Groups[1].Value
-                    if ($enabledPluginIds -notcontains $pluginId) {
-                        $enabledPluginIds += $pluginId
+            $quoted = [regex]::Matches($line, '"([^"]+)"')
+            foreach ($q in $quoted) {
+                $token = $q.Groups[1].Value
+                if ($featureMap.ContainsKey($token)) {
+                    $featureId = $featureMap[$token]
+                    if ($enabledFeatureIds -notcontains $featureId) {
+                        $enabledFeatureIds += $featureId
                     }
+                } elseif ($unknownEntries -notcontains $token) {
+                    $unknownEntries += $token
                 }
             }
 
@@ -199,13 +156,18 @@ function Get-DotkeysAhkConfig {
             return
         }
 
-        if ($currentSection -ceq 'autohotkey.plugins' -and $trimmed -match '^enabled\s*=\s*\[(?<rest>.*)$') {
+        if ((@('autohotkey.features', 'autohotkey.plugins') -contains $currentSection) -and $trimmed -match '^enabled\s*=\s*\[(?<rest>.*)$') {
             $rest = $Matches.rest
             $quoted = [regex]::Matches($rest, '"([^"]+)"')
             foreach ($q in $quoted) {
-                $pluginId = $q.Groups[1].Value
-                if ($enabledPluginIds -notcontains $pluginId) {
-                    $enabledPluginIds += $pluginId
+                $token = $q.Groups[1].Value
+                if ($featureMap.ContainsKey($token)) {
+                    $featureId = $featureMap[$token]
+                    if ($enabledFeatureIds -notcontains $featureId) {
+                        $enabledFeatureIds += $featureId
+                    }
+                } elseif ($unknownEntries -notcontains $token) {
+                    $unknownEntries += $token
                 }
             }
 
@@ -216,148 +178,56 @@ function Get-DotkeysAhkConfig {
         }
     }
 
-    $unknown = @($enabledPluginIds | Where-Object { $RepoPluginIds -notcontains $_ })
-    foreach ($pluginId in $unknown) {
-        Write-Warning "  dotkeys_config.toml enables unknown plugin '$pluginId' (not found in repo); ignoring."
+    foreach ($entry in $unknownEntries) {
+        Write-Warning "  dotkeys_config.toml enables unknown AHK feature '$entry'; ignoring."
     }
 
-    $result.EnabledPluginIds = @($enabledPluginIds | Where-Object { $RepoPluginIds -contains $_ })
+    $result.EnabledFeatureIds = $enabledFeatureIds
     return $result
 }
 
-function Sync-AhkPlugins {
+function Set-AhkFeatureFlags {
     param(
-        [string]$RepoPluginsDir,
-        [string]$DestPluginsDir,
-        [string[]]$EnabledPluginIds,
-        [string]$ConfigPath
+        [string]$AhkScriptPath,
+        [bool]$AutoHotkeyEnabled,
+        [string[]]$EnabledFeatureIds,
+        [object[]]$FeatureDefinitions
     )
 
-    if (-not (Test-Path $RepoPluginsDir -PathType Container)) {
-        return
+    $content = Get-Content -Path $AhkScriptPath -Raw -ErrorAction Stop
+
+    foreach ($feature in $FeatureDefinitions) {
+        $value = if ($AutoHotkeyEnabled -and ($EnabledFeatureIds -contains $feature.Id)) { 'true' } else { 'false' }
+        $pattern = '(?m)^' + [regex]::Escape($feature.FlagName) + '\s*:=\s*(true|false)\s*$'
+        $replacement = $feature.FlagName + ' := ' + $value
+        $newContent = [regex]::Replace($content, $pattern, $replacement)
+        if ($newContent -eq $content) {
+            Write-Warning "  Could not find feature flag '$($feature.FlagName)' in $AhkScriptPath"
+        }
+        $content = $newContent
     }
 
-    if (-not (Test-Path $DestPluginsDir -PathType Container)) {
-        New-Item -ItemType Directory -Path $DestPluginsDir -Force | Out-Null
-    }
-
-    $enabledSet = @{}
-    foreach ($pluginId in $EnabledPluginIds) {
-        $enabledSet[$pluginId] = $true
-    }
-
-    $repoByBase = @{}
-    Get-ChildItem -Path $RepoPluginsDir -File -ErrorAction SilentlyContinue | ForEach-Object {
-        if ($_.Name -ceq '_autoload_plugins.generated.ahk') {
-            return
-        }
-
-        $base = Get-PluginBaseName $_.Name
-        if (-not $base) {
-            return
-        }
-
-        if ($_.Name -cnotmatch '\.ahk(\.disabled)?$') {
-            return
-        }
-
-        if (-not $repoByBase.ContainsKey($base)) {
-            $repoByBase[$base] = $_
-            return
-        }
-
-        if ($repoByBase[$base].Name -cnotmatch '\.disabled$' -and $_.Name -cmatch '\.disabled$') {
-            $repoByBase[$base] = $_
-        }
-    }
-
-    $expectedPaths = @()
-
-    foreach ($base in @($repoByBase.Keys | Sort-Object)) {
-        $src = $repoByBase[$base]
-        $destEnabled = Join-Path $DestPluginsDir ($base + '.ahk')
-        $destDisabled = Join-Path $DestPluginsDir ($base + '.ahk.disabled')
-        $shouldEnable = $enabledSet.ContainsKey($base)
-
-        $hadEnabled = Test-Path $destEnabled
-        $hadDisabled = Test-Path $destDisabled
-
-        if ($hadEnabled -and -not $shouldEnable) {
-            Write-Warning "  Plugin '$base' is currently enabled by filename but config sets it disabled; installer will disable it. Update $ConfigPath to keep it enabled."
-        }
-
-        if ($hadDisabled -and $shouldEnable) {
-            Write-Host "  Plugin '$base' is currently disabled by filename but config enables it; installer will enable it."
-        }
-
-        $destPath = if ($shouldEnable) { $destEnabled } else { $destDisabled }
-        $otherPath = if ($shouldEnable) { $destDisabled } else { $destEnabled }
-        $expectedPaths += $destPath
-
-        Copy-Config $src.FullName $destPath
-
-        if ((Test-Path $otherPath) -and ($otherPath -cne $destPath)) {
-            Remove-Item -Path $otherPath -Force
-            Write-Host "  Removed alternate plugin variant: $otherPath"
-        }
-    }
-
-    $expectedSet = @{}
-    foreach ($p in $expectedPaths) {
-        $expectedSet[$p.ToLowerInvariant()] = $true
-    }
-
-    Get-ChildItem -Path $DestPluginsDir -File -ErrorAction SilentlyContinue | ForEach-Object {
-        if ($_.Name -ceq 'README.md') {
-            return
-        }
-
-        if ($_.Name -ceq '_autoload_plugins.generated.ahk') {
-            Remove-Item -Path $_.FullName -Force
-            Write-Host "  Removed generated plugin include file: $($_.FullName)"
-            return
-        }
-
-        if ($_.Name -cnotmatch '\.ahk(\..+)?$') {
-            return
-        }
-
-        if (-not $expectedSet.ContainsKey($_.FullName.ToLowerInvariant())) {
-            Remove-Item -Path $_.FullName -Force
-            Write-Host "  Removed non-repo plugin file from managed dir: $($_.FullName)"
-        }
-    }
+    Set-Content -Path $AhkScriptPath -Value $content -Encoding UTF8
 }
-
-# --- Main ---
 
 $repoDir = $PSScriptRoot
 Write-Host "Dotfiles repo: $repoDir"
 Write-Host ""
 
-# --- Neovim ---
 Write-Host "Neovim..."
 Copy-Config "$repoDir\nvim" "$env:LOCALAPPDATA\nvim"
 
-# --- WezTerm ---
 Write-Host "WezTerm..."
 Copy-Config "$repoDir\wezterm\wezterm.lua" "$env:USERPROFILE\.config\wezterm\wezterm.lua"
 
-# --- Starship ---
 Write-Host "Starship..."
 Copy-Config "$repoDir\starship\starship.toml" "$env:USERPROFILE\.config\starship\starship.toml"
 
-# --- PowerShell Profile ---
-# $PROFILE only reflects the PS version running the installer. To cover all
-# installed versions, we build candidate paths from every Documents root we
-# can find (local and OneDrive-redirected), for both PS 5.1 (WindowsPowerShell)
-# and PS 7+ (PowerShell) subdirs. We always install to $PROFILE, and install
-# to the others only if their parent directory already exists (PS is there).
 Write-Host "PowerShell profile..."
 $psProfileSource = "$repoDir\powershell\Microsoft.PowerShell_profile.ps1"
 $docRoots = @(
-    [Environment]::GetFolderPath('MyDocuments'),  # real Documents (may be OneDrive)
-    "$HOME\Documents"                              # local fallback
+    [Environment]::GetFolderPath('MyDocuments'),
+    "$HOME\Documents"
 ) | Sort-Object -Unique
 
 $psProfileCandidates = @($PROFILE)
@@ -373,50 +243,42 @@ $psProfileCandidates | Sort-Object -Unique | ForEach-Object {
     }
 }
 
-# --- EditorConfig ---
 Write-Host "EditorConfig..."
 Copy-Config "$repoDir\editorconfig\editorconfig" "$env:USERPROFILE\.editorconfig"
 
-# --- AutoHotKey (launch at startup via .lnk shortcut) ---
-# AHK is not "installed" (avoids SentinelOne flagging the installer). Instead,
-# we extract the AHK zip to $HOME and create a startup shortcut that calls
-# AutoHotkey64.exe directly with the installed hotkeys.ahk as the argument.
 Write-Host "AutoHotKey..."
 $startupDir  = "$env:APPDATA\Microsoft\Windows\Start Menu\Programs\Startup"
 $ahkHomeDir  = "$HOME\autohotkey"
 $ahkScript   = "$ahkHomeDir\hotkeys.ahk"
-$ahkPluginsDir = "$ahkHomeDir\plugins"
-$ahkCustomPluginsDir = "$ahkHomeDir\custom_plugins"
 $dotkeysConfigPath = Join-Path $HOME 'dotkeys_config.toml'
-$repoAhkPluginsDir = "$repoDir\autohotkey\plugins"
+$ahkFeatureDefinitions = Get-AhkFeatureDefinitions
 
-$repoPluginIds = Get-RepoAhkPluginIds $repoAhkPluginsDir
 if (-not (Test-Path $dotkeysConfigPath -PathType Leaf)) {
-    New-DotkeysConfig -ConfigPath $dotkeysConfigPath -RepoPluginIds $repoPluginIds
+    New-DotkeysConfig -ConfigPath $dotkeysConfigPath -FeatureDefinitions $ahkFeatureDefinitions
 }
 
-$dotkeysAhkConfig = Get-DotkeysAhkConfig -ConfigPath $dotkeysConfigPath -RepoPluginIds $repoPluginIds
+$dotkeysAhkConfig = Get-DotkeysAhkConfig -ConfigPath $dotkeysConfigPath -FeatureDefinitions $ahkFeatureDefinitions
 Write-Host "  Using config: $dotkeysConfigPath"
 
 Copy-Config "$repoDir\autohotkey\hotkeys.ahk" $ahkScript
-Copy-Config "$repoAhkPluginsDir\README.md" "$ahkPluginsDir\README.md"
-Ensure-CustomAhkPlugins -CustomPluginsDir $ahkCustomPluginsDir
-
-Write-Host "  Note: plugins\ is installer-managed and mirrors repo plugins."
-Write-Host "  Note: manual plugin renames in plugins\ are overwritten; use dotkeys_config.toml or custom_plugins\."
+Set-AhkFeatureFlags -AhkScriptPath $ahkScript -AutoHotkeyEnabled $dotkeysAhkConfig.AutoHotkeyEnabled -EnabledFeatureIds $dotkeysAhkConfig.EnabledFeatureIds -FeatureDefinitions $ahkFeatureDefinitions
 
 if ($dotkeysAhkConfig.AutoHotkeyEnabled) {
-    Sync-AhkPlugins -RepoPluginsDir $repoAhkPluginsDir -DestPluginsDir $ahkPluginsDir -EnabledPluginIds $dotkeysAhkConfig.EnabledPluginIds -ConfigPath $dotkeysConfigPath
-    if ($dotkeysAhkConfig.EnabledPluginIds.Count -gt 0) {
-        Write-Host "  Enabled AHK plugins: $($dotkeysAhkConfig.EnabledPluginIds -join ', ')"
+    if ($dotkeysAhkConfig.EnabledFeatureIds.Count -gt 0) {
+        Write-Host "  Enabled AHK features: $($dotkeysAhkConfig.EnabledFeatureIds -join ', ')"
     } else {
-        Write-Host "  Enabled AHK plugins: (none)"
+        Write-Host "  Enabled AHK features: (none)"
     }
 } else {
-    Write-Host "  AutoHotKey plugin sync disabled by dotkeys_config.toml"
+    Write-Host "  AutoHotKey is globally disabled in dotkeys_config.toml; optional AHK features were written as off."
 }
 
-# Find existing extracted AutoHotkey directory in $HOME
+$legacyGeneratedFile = Join-Path $ahkHomeDir '_autoload_plugins.generated.ahk'
+if (Test-Path $legacyGeneratedFile -PathType Leaf) {
+    Remove-Item -Path $legacyGeneratedFile -Force
+    Write-Host "  Removed legacy generated plugin include file: $legacyGeneratedFile"
+}
+
 $ahkDirs = @(Get-ChildItem -Path $HOME -Filter "AutoHotkey_*" -Directory -ErrorAction SilentlyContinue)
 $ahkDir  = $null
 
@@ -427,10 +289,9 @@ if ($ahkDirs.Count -gt 1) {
     $ahkDir = $ahkDirs[0].FullName
     Write-Host "  Found existing AutoHotkey: $ahkDir"
 } else {
-    # Download latest stable release from GitHub
     Write-Host "  No AutoHotkey found — downloading latest stable release..."
     try {
-        # $release  = Invoke-RestMethod "https://api.github.com/repos/AutoHotkey/AutoHotkey/releases/latest" -UseBasicParsing
+        $release  = Invoke-RestMethod "https://api.github.com/repos/AutoHotkey/AutoHotkey/releases/latest" -UseBasicParsing
         $zipAsset = $release.assets | Where-Object { $_.name -like "AutoHotkey_*.zip" } | Select-Object -First 1
         if (-not $zipAsset) { throw "No zip asset found in latest release." }
 
@@ -456,11 +317,9 @@ if ($ahkDir) {
     if (-not (Test-Path $ahkExe)) {
         Write-Warning "  AutoHotkey64.exe not found in $ahkDir — skipping."
     } else {
-        # Remove old .ahk copy from startup folder if present (would trigger "open with" dialog)
         $oldAhk = "$startupDir\hotkeys.ahk"
         if (Test-Path $oldAhk) { Remove-Item $oldAhk -Force }
 
-        # Create .lnk startup shortcut: AutoHotkey64.exe "path\to\hotkeys.ahk"
         $shortcutPath = "$startupDir\hotkeys.lnk"
         $shell = New-Object -ComObject WScript.Shell
         $lnk = $shell.CreateShortcut($shortcutPath)
@@ -470,7 +329,6 @@ if ($ahkDir) {
         $lnk.Save()
         Write-Host "  Created startup shortcut: $shortcutPath -> $ahkExe"
 
-        # Restart AHK now
         Get-Process -Name 'AutoHotkey*' -ErrorAction SilentlyContinue | Stop-Process -Force
         Start-Process -FilePath $ahkExe -ArgumentList "`"$ahkScript`""
         Write-Host "  AutoHotKey started"
@@ -478,7 +336,6 @@ if ($ahkDir) {
     }
 }
 
-# --- PSFzf ---
 Write-Host "PSFzf..."
 if (Get-Module -ListAvailable -Name PSFzf -ErrorAction SilentlyContinue) {
     Write-Host "  Already installed"
@@ -487,6 +344,5 @@ if (Get-Module -ListAvailable -Name PSFzf -ErrorAction SilentlyContinue) {
     Write-Host "  Installed PSFzf"
 }
 
-# --- Done ---
 Write-Host ""
 Write-Host "Done!"

@@ -2,5 +2,3 @@ dotfiles_backups/
 *.log
 !bash/global/grc/share/grc/conf.log
 .claude/
-autohotkey/_autoload_plugins.generated.ahk
-autohotkey/plugins/_autoload_plugins.generated.ahk

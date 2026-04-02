@@ -17,7 +17,7 @@ without modification and overridden without forking.
 | **PowerShell** | Aliases, Unix coreutils wrappers, PSReadLine, Starship, zoxide, PSFzf |
 | **WezTerm** | Terminal config |
 | **Starship** | Cross-shell prompt config |
-| **AutoHotKey** | Core hotkeys plus optional per-user plugins enabled via `dotkeys_config.toml` |
+| **AutoHotKey** | Flat AHK script with optional features enabled via `dotkeys_config.toml` |
 | **EditorConfig** | Consistent formatting across editors |
 
 # Design Goals
@@ -50,11 +50,16 @@ every preference is a `cfg_*` variable you can override in your user layer.
 ```
 > If scripts are blocked, search: [windows enable running powershell scripts](https://www.google.com/search?q=windows+enable+running+powershell+scripts)
 
+If you're starting from the default Windows PowerShell 5.1, run this first:
+```powershell
+.\install-powershell-latest.ps1
+```
+Then rerun `.\install.ps1` from PowerShell 7 (`pwsh`).
+
 Windows AutoHotKey notes:
-- Repo plugins live in `autohotkey/plugins/*.ahk.disabled`.
-- `install.ps1` creates `%USERPROFILE%\dotkeys_config.toml` to choose which repo plugins are enabled.
-- `%USERPROFILE%\autohotkey\plugins` is installer-managed.
-- Put personal scripts in `%USERPROFILE%\autohotkey\custom_plugins`.
+- `install.ps1` creates `%USERPROFILE%\dotkeys_config.toml` to choose which AutoHotKey features are enabled.
+- The installer patches those feature flags into `%USERPROFILE%\autohotkey\hotkeys.ahk` after copying it.
+- Current feature IDs: `corp-logins`, `mouse-wiggle`, `cisco-secure-client-vpn`, `password-manager`, `tmux-hotkeys`, `f1f2f3-as-mouse-buttons`.
 
 See [CLAUDE.md](CLAUDE.md) for full details: dev mode, `--links` mode,
 backup/restore, layer overrides, and Windows copy destinations.
