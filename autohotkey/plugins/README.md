@@ -3,19 +3,26 @@
 This directory is an extension point for `autohotkey/hotkeys.ahk`.
 
 How it works:
-- On startup/reload, `hotkeys.ahk` scans this directory for `*.ahk`.
+- On startup/reload, `hotkeys.ahk` scans `plugins/` and `custom_plugins/` for `*.ahk`.
 - It auto-generates an include file and reloads if the plugin set changed.
 - Plugins are loaded in lexical order (`10-...`, `20-...`, `99-...`).
 
 Enable/disable:
-- Enabled: filename ends with `.ahk`.
-- Disabled: filename does **not** end with `.ahk` (for example: `.ahk.disabled`, `.ahk.off`).
+- In the repo, plugins are stored as `.ahk.disabled`.
+- On Windows install, `install.ps1` reads `%USERPROFILE%\dotkeys_config.toml` and
+  enables configured plugins by installing them as `.ahk` in `%USERPROFILE%\autohotkey\plugins`.
+- Any plugin not in the enabled list is installed as `.ahk.disabled`.
+- `%USERPROFILE%\autohotkey\plugins` is installer-managed and mirrors repo plugins.
+- Put personal plugins in `%USERPROFILE%\autohotkey\custom_plugins`.
 
-Examples:
-- `20-vpn-helper.ahk` -> enabled
-- `20-vpn-helper.ahk.disabled` -> disabled
+Repo plugin IDs:
+- `10-corp-logins` - corp credential entry helpers
+- `20-mouse-wiggle` - idle mouse nudge
+- `30-cisco-secure-client-vpn` - Cisco Secure Client VPN automation
+- `40-password-manager` - `Ctrl+Alt+B` password manager helper
+- `50-tmux-hotkeys` - tmux hotkeys
+- `f1f2f3_as_mouse_bottons` - F1/F2/F3 mouse remaps
 
 Notes:
 - Keep hotkeys scoped with `#HotIf` when possible to avoid conflicts.
 - Prefer numeric prefixes so load order is explicit.
-- `99-personal-hotkeys.ahk.disabled` is a starter personal plugin file.

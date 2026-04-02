@@ -17,7 +17,7 @@ without modification and overridden without forking.
 | **PowerShell** | Aliases, Unix coreutils wrappers, PSReadLine, Starship, zoxide, PSFzf |
 | **WezTerm** | Terminal config |
 | **Starship** | Cross-shell prompt config |
-| **AutoHotKey** | VPN autologin (Cisco Secure Client), mouse nudge, tmux zoom hotkeys |
+| **AutoHotKey** | Core hotkeys plus optional per-user plugins enabled via `dotkeys_config.toml` |
 | **EditorConfig** | Consistent formatting across editors |
 
 # Design Goals
@@ -49,6 +49,12 @@ every preference is a `cfg_*` variable you can override in your user layer.
 .\install.ps1
 ```
 > If scripts are blocked, search: [windows enable running powershell scripts](https://www.google.com/search?q=windows+enable+running+powershell+scripts)
+
+Windows AutoHotKey notes:
+- Repo plugins live in `autohotkey/plugins/*.ahk.disabled`.
+- `install.ps1` creates `%USERPROFILE%\dotkeys_config.toml` to choose which repo plugins are enabled.
+- `%USERPROFILE%\autohotkey\plugins` is installer-managed.
+- Put personal scripts in `%USERPROFILE%\autohotkey\custom_plugins`.
 
 See [CLAUDE.md](CLAUDE.md) for full details: dev mode, `--links` mode,
 backup/restore, layer overrides, and Windows copy destinations.

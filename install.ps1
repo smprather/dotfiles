@@ -54,10 +54,183 @@ function Get-PluginBaseName {
     return $null
 }
 
+function Get-RepoAhkPluginIds {
+    param([string]$RepoPluginsDir)
+
+    if (-not (Test-Path $RepoPluginsDir -PathType Container)) {
+        return @()
+    }
+
+    $ids = @()
+    Get-ChildItem -Path $RepoPluginsDir -File -ErrorAction SilentlyContinue | ForEach-Object {
+        if ($_.Name -ceq '_autoload_plugins.generated.ahk') {
+            return
+        }
+
+        $base = Get-PluginBaseName $_.Name
+        if (-not $base) {
+            return
+        }
+
+        if ($_.Name -cnotmatch '\.ahk(\.disabled)?$') {
+            return
+        }
+
+        if ($ids -cnotcontains $base) {
+            $ids += $base
+        }
+    }
+
+    return @($ids | Sort-Object)
+}
+
+function New-DotkeysConfig {
+    param(
+        [string]$ConfigPath,
+        [string[]]$RepoPluginIds
+    )
+
+    $defaultEnabled = @()
+
+    $commentedPlugins = @($RepoPluginIds | Where-Object { $defaultEnabled -notcontains $_ })
+
+    $lines = @(
+        'version = 1',
+        '',
+        '# This file is user-local and not shared from the repo.',
+        '# Plugin enablement is managed here; manual renames in plugins\\ are overwritten by install.ps1.',
+        '# Put personal one-off scripts in %USERPROFILE%\\autohotkey\\custom_plugins.',
+        '',
+        '[autohotkey]',
+        'enabled = true',
+        '',
+        '[autohotkey.plugins]',
+        'enabled = ['
+    )
+
+    foreach ($pluginId in $defaultEnabled) {
+        $lines += "  `"$pluginId`","
+    }
+
+    foreach ($pluginId in $commentedPlugins) {
+        $lines += "  # `"$pluginId`","
+    }
+
+    $lines += ']'
+
+    $parent = Split-Path $ConfigPath -Parent
+    if ($parent -and -not (Test-Path $parent)) {
+        New-Item -ItemType Directory -Path $parent -Force | Out-Null
+    }
+
+    Set-Content -Path $ConfigPath -Value $lines -Encoding UTF8
+    Write-Host "  Created default dotkeys config: $ConfigPath"
+}
+
+function Ensure-CustomAhkPlugins {
+    param([string]$CustomPluginsDir)
+
+    if (-not (Test-Path $CustomPluginsDir -PathType Container)) {
+        New-Item -ItemType Directory -Path $CustomPluginsDir -Force | Out-Null
+        Write-Host "  Created custom plugin directory: $CustomPluginsDir"
+    }
+
+    $personalPlugin = Join-Path $CustomPluginsDir '99-personal-hotkeys.ahk'
+    if (-not (Test-Path $personalPlugin -PathType Leaf)) {
+        $content = @(
+            '; Personal AutoHotkey plugin file.'
+        )
+        Set-Content -Path $personalPlugin -Value $content -Encoding UTF8
+        Write-Host "  Created starter personal plugin: $personalPlugin"
+    }
+}
+
+function Get-DotkeysAhkConfig {
+    param(
+        [string]$ConfigPath,
+        [string[]]$RepoPluginIds
+    )
+
+    $result = [PSCustomObject]@{
+        AutoHotkeyEnabled = $true
+        EnabledPluginIds  = @()
+    }
+
+    if (-not (Test-Path $ConfigPath -PathType Leaf)) {
+        return $result
+    }
+
+    $currentSection = ''
+    $inEnabledArray = $false
+    $enabledPluginIds = @()
+
+    Get-Content -Path $ConfigPath -ErrorAction Stop | ForEach-Object {
+        $line = $_
+        $trimmed = $line.Trim()
+
+        if (-not $inEnabledArray -and $trimmed -match '^\[(?<section>[^\]]+)\]$') {
+            $currentSection = $Matches.section
+            return
+        }
+
+        if ($trimmed -eq '' -or $trimmed.StartsWith('#')) {
+            return
+        }
+
+        if ($inEnabledArray) {
+            if (-not $trimmed.StartsWith('#')) {
+                $quoted = [regex]::Matches($line, '"([^"]+)"')
+                foreach ($q in $quoted) {
+                    $pluginId = $q.Groups[1].Value
+                    if ($enabledPluginIds -notcontains $pluginId) {
+                        $enabledPluginIds += $pluginId
+                    }
+                }
+            }
+
+            if ($line -match '\]') {
+                $inEnabledArray = $false
+            }
+            return
+        }
+
+        if ($currentSection -ceq 'autohotkey' -and $trimmed -match '^enabled\s*=\s*(?<value>true|false)\b') {
+            $result.AutoHotkeyEnabled = ($Matches.value -ceq 'true')
+            return
+        }
+
+        if ($currentSection -ceq 'autohotkey.plugins' -and $trimmed -match '^enabled\s*=\s*\[(?<rest>.*)$') {
+            $rest = $Matches.rest
+            $quoted = [regex]::Matches($rest, '"([^"]+)"')
+            foreach ($q in $quoted) {
+                $pluginId = $q.Groups[1].Value
+                if ($enabledPluginIds -notcontains $pluginId) {
+                    $enabledPluginIds += $pluginId
+                }
+            }
+
+            if ($rest -notmatch '\]') {
+                $inEnabledArray = $true
+            }
+            return
+        }
+    }
+
+    $unknown = @($enabledPluginIds | Where-Object { $RepoPluginIds -notcontains $_ })
+    foreach ($pluginId in $unknown) {
+        Write-Warning "  dotkeys_config.toml enables unknown plugin '$pluginId' (not found in repo); ignoring."
+    }
+
+    $result.EnabledPluginIds = @($enabledPluginIds | Where-Object { $RepoPluginIds -contains $_ })
+    return $result
+}
+
 function Sync-AhkPlugins {
     param(
         [string]$RepoPluginsDir,
-        [string]$DestPluginsDir
+        [string]$DestPluginsDir,
+        [string[]]$EnabledPluginIds,
+        [string]$ConfigPath
     )
 
     if (-not (Test-Path $RepoPluginsDir -PathType Container)) {
@@ -68,54 +241,91 @@ function Sync-AhkPlugins {
         New-Item -ItemType Directory -Path $DestPluginsDir -Force | Out-Null
     }
 
-    $destByBase = @{}
-    Get-ChildItem -Path $DestPluginsDir -File -ErrorAction SilentlyContinue | ForEach-Object {
+    $enabledSet = @{}
+    foreach ($pluginId in $EnabledPluginIds) {
+        $enabledSet[$pluginId] = $true
+    }
+
+    $repoByBase = @{}
+    Get-ChildItem -Path $RepoPluginsDir -File -ErrorAction SilentlyContinue | ForEach-Object {
+        if ($_.Name -ceq '_autoload_plugins.generated.ahk') {
+            return
+        }
+
         $base = Get-PluginBaseName $_.Name
         if (-not $base) {
             return
         }
-        if (-not $destByBase.ContainsKey($base)) {
-            $destByBase[$base] = @()
+
+        if ($_.Name -cnotmatch '\.ahk(\.disabled)?$') {
+            return
         }
-        $destByBase[$base] += $_
+
+        if (-not $repoByBase.ContainsKey($base)) {
+            $repoByBase[$base] = $_
+            return
+        }
+
+        if ($repoByBase[$base].Name -cnotmatch '\.disabled$' -and $_.Name -cmatch '\.disabled$') {
+            $repoByBase[$base] = $_
+        }
     }
 
-    Get-ChildItem -Path $RepoPluginsDir -File -ErrorAction SilentlyContinue | ForEach-Object {
-        $src = $_
-        $base = Get-PluginBaseName $src.Name
-        if (-not $base) {
+    $expectedPaths = @()
+
+    foreach ($base in @($repoByBase.Keys | Sort-Object)) {
+        $src = $repoByBase[$base]
+        $destEnabled = Join-Path $DestPluginsDir ($base + '.ahk')
+        $destDisabled = Join-Path $DestPluginsDir ($base + '.ahk.disabled')
+        $shouldEnable = $enabledSet.ContainsKey($base)
+
+        $hadEnabled = Test-Path $destEnabled
+        $hadDisabled = Test-Path $destDisabled
+
+        if ($hadEnabled -and -not $shouldEnable) {
+            Write-Warning "  Plugin '$base' is currently enabled by filename but config sets it disabled; installer will disable it. Update $ConfigPath to keep it enabled."
+        }
+
+        if ($hadDisabled -and $shouldEnable) {
+            Write-Host "  Plugin '$base' is currently disabled by filename but config enables it; installer will enable it."
+        }
+
+        $destPath = if ($shouldEnable) { $destEnabled } else { $destDisabled }
+        $otherPath = if ($shouldEnable) { $destDisabled } else { $destEnabled }
+        $expectedPaths += $destPath
+
+        Copy-Config $src.FullName $destPath
+
+        if ((Test-Path $otherPath) -and ($otherPath -cne $destPath)) {
+            Remove-Item -Path $otherPath -Force
+            Write-Host "  Removed alternate plugin variant: $otherPath"
+        }
+    }
+
+    $expectedSet = @{}
+    foreach ($p in $expectedPaths) {
+        $expectedSet[$p.ToLowerInvariant()] = $true
+    }
+
+    Get-ChildItem -Path $DestPluginsDir -File -ErrorAction SilentlyContinue | ForEach-Object {
+        if ($_.Name -ceq 'README.md') {
             return
         }
 
-        $destMatches = @()
-        if ($destByBase.ContainsKey($base)) {
-            $destMatches = @($destByBase[$base])
-        }
-
-        if ($destMatches.Count -eq 0) {
-            Copy-Config $src.FullName (Join-Path $DestPluginsDir $src.Name)
-            $destByBase[$base] = @($src)
+        if ($_.Name -ceq '_autoload_plugins.generated.ahk') {
+            Remove-Item -Path $_.FullName -Force
+            Write-Host "  Removed generated plugin include file: $($_.FullName)"
             return
         }
 
-        $exactMatch = $destMatches | Where-Object { $_.Name -ceq $src.Name } | Select-Object -First 1
-        if ($exactMatch) {
+        if ($_.Name -cnotmatch '\.ahk(\..+)?$') {
             return
         }
 
-        $hasEnabledDest = @($destMatches | Where-Object { $_.Name -cmatch '\.ahk$' }).Count -gt 0
-        $destNames = ($destMatches | ForEach-Object { $_.Name }) -join ', '
-
-        if ($base -eq '99-personal-hotkeys' -and $hasEnabledDest) {
-            return
+        if (-not $expectedSet.ContainsKey($_.FullName.ToLowerInvariant())) {
+            Remove-Item -Path $_.FullName -Force
+            Write-Host "  Removed non-repo plugin file from managed dir: $($_.FullName)"
         }
-
-        if ($hasEnabledDest -and $src.Name -cnotmatch '\.ahk$') {
-            Write-Host "  Skipping plugin '$($src.Name)' because enabled local variant exists: $destNames"
-            return
-        }
-
-        Write-Host "  Skipping plugin '$($src.Name)' because local variant exists: $destNames"
     }
 }
 
@@ -176,10 +386,35 @@ $startupDir  = "$env:APPDATA\Microsoft\Windows\Start Menu\Programs\Startup"
 $ahkHomeDir  = "$HOME\autohotkey"
 $ahkScript   = "$ahkHomeDir\hotkeys.ahk"
 $ahkPluginsDir = "$ahkHomeDir\plugins"
+$ahkCustomPluginsDir = "$ahkHomeDir\custom_plugins"
+$dotkeysConfigPath = Join-Path $HOME 'dotkeys_config.toml'
+$repoAhkPluginsDir = "$repoDir\autohotkey\plugins"
+
+$repoPluginIds = Get-RepoAhkPluginIds $repoAhkPluginsDir
+if (-not (Test-Path $dotkeysConfigPath -PathType Leaf)) {
+    New-DotkeysConfig -ConfigPath $dotkeysConfigPath -RepoPluginIds $repoPluginIds
+}
+
+$dotkeysAhkConfig = Get-DotkeysAhkConfig -ConfigPath $dotkeysConfigPath -RepoPluginIds $repoPluginIds
+Write-Host "  Using config: $dotkeysConfigPath"
 
 Copy-Config "$repoDir\autohotkey\hotkeys.ahk" $ahkScript
-Copy-Config "$repoDir\autohotkey\plugins\README.md" "$ahkPluginsDir\README.md"
-Sync-AhkPlugins "$repoDir\autohotkey\plugins" $ahkPluginsDir
+Copy-Config "$repoAhkPluginsDir\README.md" "$ahkPluginsDir\README.md"
+Ensure-CustomAhkPlugins -CustomPluginsDir $ahkCustomPluginsDir
+
+Write-Host "  Note: plugins\ is installer-managed and mirrors repo plugins."
+Write-Host "  Note: manual plugin renames in plugins\ are overwritten; use dotkeys_config.toml or custom_plugins\."
+
+if ($dotkeysAhkConfig.AutoHotkeyEnabled) {
+    Sync-AhkPlugins -RepoPluginsDir $repoAhkPluginsDir -DestPluginsDir $ahkPluginsDir -EnabledPluginIds $dotkeysAhkConfig.EnabledPluginIds -ConfigPath $dotkeysConfigPath
+    if ($dotkeysAhkConfig.EnabledPluginIds.Count -gt 0) {
+        Write-Host "  Enabled AHK plugins: $($dotkeysAhkConfig.EnabledPluginIds -join ', ')"
+    } else {
+        Write-Host "  Enabled AHK plugins: (none)"
+    }
+} else {
+    Write-Host "  AutoHotKey plugin sync disabled by dotkeys_config.toml"
+}
 
 # Find existing extracted AutoHotkey directory in $HOME
 $ahkDirs = @(Get-ChildItem -Path $HOME -Filter "AutoHotkey_*" -Directory -ErrorAction SilentlyContinue)
