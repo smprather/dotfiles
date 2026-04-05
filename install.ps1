@@ -51,7 +51,8 @@ function Get-AhkFeatureDefinitions {
         [PSCustomObject]@{ Id = 'cisco-secure-client-vpn'; FlagName = 'cfg_feature_cisco_secure_client_vpn'; LegacyIds = @('30-cisco-secure-client-vpn'); Description = 'Cisco Secure Client VPN automation' },
         [PSCustomObject]@{ Id = 'password-manager'; FlagName = 'cfg_feature_password_manager'; LegacyIds = @('40-password-manager'); Description = 'Ctrl+Alt+B password helper' },
         [PSCustomObject]@{ Id = 'tmux-hotkeys'; FlagName = 'cfg_feature_tmux_hotkeys'; LegacyIds = @('50-tmux-hotkeys'); Description = 'tmux helper hotkeys' },
-        [PSCustomObject]@{ Id = 'f1f2f3-as-mouse-buttons'; FlagName = 'cfg_feature_f1f2f3_as_mouse_buttons'; LegacyIds = @('60-f1f2f3-as-mouse-bottons', 'f1f2f3_as_mouse_bottons'); Description = 'F1/F2/F3 mouse remaps' }
+        [PSCustomObject]@{ Id = 'f1f2f3-as-mouse-buttons'; FlagName = 'cfg_feature_f1f2f3_as_mouse_buttons'; LegacyIds = @('60-f1f2f3-as-mouse-bottons', 'f1f2f3_as_mouse_bottons'); Description = 'F1/F2/F3 mouse remaps' },
+        [PSCustomObject]@{ Id = 'thinlinc-reconnect'; FlagName = 'cfg_feature_thinlinc_reconnect'; LegacyIds = @(); Description = 'ThinLinc client auto-reconnect and auto-connect' }
     )
 }
 

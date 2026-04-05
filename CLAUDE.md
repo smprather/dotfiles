@@ -227,6 +227,7 @@ Optional features:
 - `password-manager` — `Ctrl+Alt+B` types `PWMANAGER_PASSWORD` + Enter
 - `tmux-hotkeys` — `RAlt`/`RWin` zoom toggle and `Ctrl+;` last-pane toggle for tmux
 - `f1f2f3-as-mouse-buttons` — F1/F2/F3 mouse remaps for mspaint/etxc/wezterm-gui
+- `thinlinc-reconnect` — auto-dismiss ThinLinc "Connection error" dialogs, relaunch `tlclient.exe`, and auto-fill Server/Username/Password from `THINLINC_SERVER` / `THINLINC_USERNAME` / `THINLINC_PASSWORD` (pings the server before launching/connecting; user-initiated closes of tlclient are respected). `Ctrl+Alt+T` shows a live diagnostic (tick count, last-seen state, env, window matches, ping).
 
 Existing `%USERPROFILE%\dotkeys_config.toml` files that still use legacy plugin IDs remain accepted by the installer and are mapped onto the flat-script feature flags.
 

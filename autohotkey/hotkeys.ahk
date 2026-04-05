@@ -12,6 +12,7 @@ cfg_feature_cisco_secure_client_vpn := false
 cfg_feature_password_manager := false
 cfg_feature_tmux_hotkeys := false
 cfg_feature_f1f2f3_as_mouse_buttons := false
+cfg_feature_thinlinc_reconnect := true
 
 StrJoin(arr, sep) {
     out := ""
@@ -34,6 +35,9 @@ g_idle := false
 g_autologin := true
 g_autologin_saved := true
 g_mouse_wiggle_allowed := (EnvGet("AHK_ENABLE_MOUSE_WIGGLE") != "false")
+g_thinlinc_ticks := 0
+g_thinlinc_last_seen := "(handle_thinlinc not yet called)"
+g_thinlinc_relaunch_pending := false
 
 ; Don't flood windows with gui events too fast.
 SetMouseDelay(10)
@@ -48,7 +52,7 @@ check_idle()
 
 do_loop()
 {
-    global cfg_feature_cisco_secure_client_vpn, cfg_feature_mouse_wiggle, g_mouse_wiggle_allowed
+    global cfg_feature_cisco_secure_client_vpn, cfg_feature_mouse_wiggle, cfg_feature_thinlinc_reconnect, g_mouse_wiggle_allowed
 
     check_idle()
 
@@ -57,6 +61,9 @@ do_loop()
 
     if (cfg_feature_cisco_secure_client_vpn)
         log_into_corp_vpn()
+
+    if (cfg_feature_thinlinc_reconnect)
+        handle_thinlinc()
 }
 
 ;g_vpn_log := A_ScriptDir . "\vpn_debug.log"
@@ -161,47 +168,185 @@ mouse_nudge()
     mouse_delta_x *= -1
 }
 
+; Auto-dismiss ThinLinc "Connection error" dialogs and, when the main
+; "ThinLinc client" window is up (or tlclient.exe is not running at all),
+; auto-connect using THINLINC_SERVER / THINLINC_USERNAME / THINLINC_PASSWORD.
+handle_thinlinc()
+{
+    global g_thinlinc_ticks, g_thinlinc_last_seen, g_thinlinc_relaunch_pending
+    static last_fill_ms := 0
+
+    g_thinlinc_ticks += 1
+
+    try {
+        ; --- Case 1: "Connection error" dialog → dismiss so tlclient restarts ---
+        SetTitleMatchMode(3)
+        if (WinExist("Connection error ahk_exe tlclient.exe")) {
+            g_thinlinc_last_seen := "case1: dismissing 'Connection error'"
+            WinActivate()
+            Sleep(100)
+            Send("{Enter}")  ; "Close" is the default button
+            g_thinlinc_relaunch_pending := true
+            SetTitleMatchMode(2)
+            return
+        }
+
+        server := EnvGet("THINLINC_SERVER")
+        if (server = "") {
+            g_thinlinc_last_seen := "THINLINC_SERVER env var is empty — nothing to do"
+            SetTitleMatchMode(2)
+            return
+        }
+
+        ; --- Case 2: Main ThinLinc client window → fill creds + Connect ---
+        if (WinExist("ThinLinc client ahk_exe tlclient.exe")) {
+            SetTitleMatchMode(2)
+
+            ; Rate-limit only the fill/connect path — guards against credential
+            ; hammering if Connect keeps failing. Does not delay the initial
+            ; reconnect cycle (dismiss → relaunch → first fill).
+            if (A_TickCount - last_fill_ms < 10000) {
+                g_thinlinc_last_seen := "case2: rate-limited (" . ((A_TickCount - last_fill_ms) // 1000) . "s since last fill)"
+                return
+            }
+
+            if (!thinlinc_server_reachable(server)) {
+                g_thinlinc_last_seen := "case2: main window present, server '" . server . "' unreachable"
+                return
+            }
+
+            username := EnvGet("THINLINC_USERNAME")
+            password := EnvGet("THINLINC_PASSWORD")
+            if (username = "" || password = "") {
+                g_thinlinc_last_seen := "case2: THINLINC_USERNAME or THINLINC_PASSWORD empty"
+                return
+            }
+
+            g_thinlinc_last_seen := "case2: filling credentials + Connect"
+            WinActivate("ThinLinc client ahk_exe tlclient.exe")
+            WinWaitActive("ThinLinc client ahk_exe tlclient.exe", , 2)
+            Sleep(200)
+
+            ; Tab/Shift-Tab don't wrap in the ThinLinc client, so 10 Shift-Tab
+            ; presses is a reliable way to anchor focus on the first field (Server).
+            Loop 10
+                Send("+{Tab}")
+            Sleep(50)
+
+            ; Server → Username → Password (Tab between them).
+            Send("^a{Delete}")
+            SendText(server)
+            Send("{Tab}")
+            Send("^a{Delete}")
+            SendText(username)
+            Send("{Tab}")
+            Send("^a{Delete}")
+            SendText(password)
+
+            ; From Password, five Tabs reaches the Connect button; Enter activates it.
+            Loop 5
+                Send("{Tab}")
+            Send("{Enter}")
+            last_fill_ms := A_TickCount
+            return
+        }
+        SetTitleMatchMode(2)
+
+        ; --- Case 3: tlclient not running → only relaunch if we just dismissed an error ---
+        if (ProcessExist("tlclient.exe")) {
+            g_thinlinc_last_seen := "case3: tlclient.exe running, no main window match (connecting?)"
+            return
+        }
+        if (!g_thinlinc_relaunch_pending) {
+            g_thinlinc_last_seen := "case3: tlclient closed, no relaunch pending (respecting user close)"
+            return
+        }
+        if (!thinlinc_server_reachable(server)) {
+            g_thinlinc_last_seen := "case3: relaunch pending, server '" . server . "' unreachable"
+            return
+        }
+        g_thinlinc_last_seen := "case3: relaunching tlclient.exe after error dismiss"
+        try Run('"C:\Program Files\ThinLinc client\tlclient.exe"')
+        g_thinlinc_relaunch_pending := false
+    } catch as e {
+        g_thinlinc_last_seen := "ERROR: " . e.Message . " (line " . e.Line . ")"
+        SetTitleMatchMode(2)
+    }
+}
+
+; Quick reachability probe. Spawns ping with a 500 ms timeout, hidden.
+; Blocks the 1 s timer briefly; swap for a raw TCP check if that becomes
+; a concern.
+thinlinc_server_reachable(host)
+{
+    if (host = "")
+        return false
+    try {
+        exitCode := RunWait('cmd.exe /c ping -n 1 -w 500 "' . host . '" >nul 2>&1', , "Hide")
+        return exitCode = 0
+    } catch {
+        return false
+    }
+}
+
 ; ^ = Ctrl
 ; + = Shift
 ; ! = Alt
 
-; Diagnostic hotkey: Ctrl+Alt+D
-; Shows all visible Cisco windows with their exact titles, visible text, and controls.
-; Run this while a Cisco dialog is on screen to capture what AHK sees.
-; This is just for debug.
-; ^!d::
-; {
-;     SetTitleMatchMode(2)
-;     out := "=== Cisco Windows ===`n"
-;     DetectHiddenWindows(true)
-;     for hwnd in WinGetList("Cisco") {
-;         title := WinGetTitle(hwnd)
-;         text  := WinGetText(hwnd)
-;         out .= "`nTitle: [" title "]`n"
-;         try {
-;             pid := WinGetPID(hwnd)
-;             exePath := ProcessGetPath(pid)
-;             out .= "PID: " pid "  EXE: " exePath "`n"
-;         } catch {
-;             out .= "PID/EXE: (error)`n"
-;         }
-;         out .= "Text:`n" text "`n"
-;         try {
-;             controls := WinGetControls(hwnd)
-;             out .= "Controls: " . (controls.Length > 0 ? StrJoin(controls, ", ") : "(none)") . "`n"
-;         } catch {
-;             out .= "Controls: (error)`n"
-;         }
-;         out .= "---`n"
-;     }
-;     DetectHiddenWindows(false)
-;     if (out = "=== Cisco Windows ===`n")
-;         out .= "(no Cisco windows found)`n"
-;     diagGui := Gui(, "AHK Cisco Diagnostic")
-;     diagGui.Add("Edit", "ReadOnly w600 h400 VScroll", out)
-;     diagGui.Add("Button", "Default w80", "OK").OnEvent("Click", (*) => diagGui.Destroy())
-;     diagGui.Show()
-; }
+/*
+; Diagnostic hotkey: Ctrl+Alt+D — scans visible top-level windows and shows any
+; whose title or EXE matches a regex. Kept commented for future targeting work;
+; uncomment (and tweak the `needles` pattern) when identifying a new app's dialogs.
+^!d::
+{
+    SetTitleMatchMode(2)
+    needles := "i)(thinlinc|tlclient|connection)"
+    out := "=== Matching windows (thinlinc|tlclient|connection) ===`n"
+    hits := 0
+    for hwnd in WinGetList() {
+        title := ""
+        try title := WinGetTitle(hwnd)
+        catch
+            continue
+        pid := 0
+        exePath := ""
+        try {
+            pid := WinGetPID(hwnd)
+            exePath := ProcessGetPath(pid)
+        } catch {
+        }
+        exeName := ""
+        if (exePath != "")
+            SplitPath(exePath, &exeName)
+        if (!RegExMatch(title . " " . exeName, needles))
+            continue
+        hits += 1
+        out .= "`nTitle: [" title "]`n"
+        out .= "PID: " pid "  EXE: " exePath "`n"
+        try {
+            controls := WinGetControls(hwnd)
+            out .= "Controls: " . (controls.Length > 0 ? StrJoin(controls, ", ") : "(none)") . "`n"
+        } catch {
+            out .= "Controls: (error)`n"
+        }
+        try {
+            text := WinGetText(hwnd)
+            if (text != "")
+                out .= "Text:`n" text "`n"
+        } catch {
+        }
+        out .= "---`n"
+    }
+    if (hits = 0)
+        out .= "`n(no matching windows found)`n"
+    diagGui := Gui(, "AHK Window Diagnostic")
+    editCtrl := diagGui.Add("Edit", "ReadOnly w700 h500 VScroll", out)
+    diagGui.Add("Button", "Default w80", "OK").OnEvent("Click", (*) => diagGui.Destroy())
+    diagGui.Show()
+    editCtrl.Focus()
+    SendMessage(0xB1, 0, -1, editCtrl)  ; EM_SETSEL: select all
+}
+*/
 
 ; If you make any edits to this file, do a ctrl-alt-r to reload the script.
 ^!r::
@@ -238,6 +383,47 @@ mouse_nudge()
     state := g_autologin ? "ON" : "OFF"
     ToolTip("VPN auto-login: " state)
     SetTimer(() => ToolTip(), -1000)
+}
+#HotIf
+
+#HotIf cfg_feature_thinlinc_reconnect
+; Ctrl+Alt+T — dump handle_thinlinc() state, env vars, window matches, and a live ping.
+^!t::
+{
+    global cfg_feature_thinlinc_reconnect, g_thinlinc_ticks, g_thinlinc_last_seen, g_thinlinc_relaunch_pending
+
+    out := "=== ThinLinc reconnect diagnostic ===`n"
+    out .= "cfg_feature_thinlinc_reconnect: " . (cfg_feature_thinlinc_reconnect ? "true" : "false") . "`n"
+    out .= "handle_thinlinc ticks: " . g_thinlinc_ticks . "`n"
+    out .= "relaunch pending: " . (g_thinlinc_relaunch_pending ? "true" : "false") . "`n"
+    out .= "last seen: " . g_thinlinc_last_seen . "`n`n"
+
+    pw := EnvGet("THINLINC_PASSWORD")
+    out .= "THINLINC_SERVER:   [" . EnvGet("THINLINC_SERVER") . "]`n"
+    out .= "THINLINC_USERNAME: [" . EnvGet("THINLINC_USERNAME") . "]`n"
+    out .= "THINLINC_PASSWORD: " . (pw = "" ? "(unset)" : "(set, length " . StrLen(pw) . ")") . "`n"
+    out .= "tlclient.exe PID:  " . ProcessExist("tlclient.exe") . "`n`n"
+
+    SetTitleMatchMode(3)
+    out .= "'Connection error' window: " . (WinExist("Connection error ahk_exe tlclient.exe") ? "EXISTS" : "not found") . "`n"
+    out .= "'ThinLinc client' window:  " . (WinExist("ThinLinc client ahk_exe tlclient.exe") ? "EXISTS" : "not found") . "`n"
+    SetTitleMatchMode(2)
+
+    server := EnvGet("THINLINC_SERVER")
+    if (server != "") {
+        out .= "`nPinging [" . server . "]...`n"
+        start := A_TickCount
+        reachable := thinlinc_server_reachable(server)
+        elapsed := A_TickCount - start
+        out .= "Reachable: " . (reachable ? "YES" : "NO") . " (" . elapsed . " ms)`n"
+    }
+
+    diagGui := Gui(, "ThinLinc Diagnostic")
+    editCtrl := diagGui.Add("Edit", "ReadOnly w600 h400 VScroll", out)
+    diagGui.Add("Button", "Default w80", "OK").OnEvent("Click", (*) => diagGui.Destroy())
+    diagGui.Show()
+    editCtrl.Focus()
+    SendMessage(0xB1, 0, -1, editCtrl)  ; EM_SETSEL: select all
 }
 #HotIf
 

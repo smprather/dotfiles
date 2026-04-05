@@ -59,7 +59,7 @@ Then rerun `.\install.ps1` from PowerShell 7 (`pwsh`).
 Windows AutoHotKey notes:
 - `install.ps1` creates `%USERPROFILE%\dotkeys_config.toml` to choose which AutoHotKey features are enabled.
 - The installer patches those feature flags into `%USERPROFILE%\autohotkey\hotkeys.ahk` after copying it.
-- Current feature IDs: `corp-logins`, `mouse-wiggle`, `cisco-secure-client-vpn`, `password-manager`, `tmux-hotkeys`, `f1f2f3-as-mouse-buttons`.
+- Current feature IDs: `corp-logins`, `mouse-wiggle`, `cisco-secure-client-vpn`, `password-manager`, `tmux-hotkeys`, `f1f2f3-as-mouse-buttons`, `thinlinc-reconnect`.
 
 See [CLAUDE.md](CLAUDE.md) for full details: dev mode, `--links` mode,
 backup/restore, layer overrides, and Windows copy destinations.

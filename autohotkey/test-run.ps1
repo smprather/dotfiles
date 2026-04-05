@@ -2,6 +2,9 @@ param(
     [string]$CorpUid = 'dummy.uid',
     [string]$CorpPassword = 'dummy.corp.password',
     [string]$PwManagerPassword = 'dummy.pwmanager.password',
+    [string]$ThinLincServer = 'dummy.thinlinc.server',
+    [string]$ThinLincUsername = 'dummy.thinlinc.username',
+    [string]$ThinLincPassword = 'dummy.thinlinc.password',
     [switch]$KeepOpen
 )
 
@@ -26,7 +29,8 @@ $featureFlags = @(
     'cfg_feature_cisco_secure_client_vpn',
     'cfg_feature_password_manager',
     'cfg_feature_tmux_hotkeys',
-    'cfg_feature_f1f2f3_as_mouse_buttons'
+    'cfg_feature_f1f2f3_as_mouse_buttons',
+    'cfg_feature_thinlinc_reconnect'
 )
 
 foreach ($flag in $featureFlags) {
@@ -76,6 +80,9 @@ $testEnv = @{
     CORP_UID = $CorpUid
     CORP_PASSWORD = $CorpPassword
     PWMANAGER_PASSWORD = $PwManagerPassword
+    THINLINC_SERVER = $ThinLincServer
+    THINLINC_USERNAME = $ThinLincUsername
+    THINLINC_PASSWORD = $ThinLincPassword
     AHK_ENABLE_MOUSE_WIGGLE = 'true'
 }
 
@@ -87,6 +94,9 @@ Write-Host 'Launching hotkeys.ahk with test environment variables:'
 Write-Host "  CORP_UID=$($testEnv.CORP_UID)"
 Write-Host "  CORP_PASSWORD=$($testEnv.CORP_PASSWORD)"
 Write-Host "  PWMANAGER_PASSWORD=$($testEnv.PWMANAGER_PASSWORD)"
+Write-Host "  THINLINC_SERVER=$($testEnv.THINLINC_SERVER)"
+Write-Host "  THINLINC_USERNAME=$($testEnv.THINLINC_USERNAME)"
+Write-Host "  THINLINC_PASSWORD=$($testEnv.THINLINC_PASSWORD)"
 Write-Host "  AHK_ENABLE_MOUSE_WIGGLE=$($testEnv.AHK_ENABLE_MOUSE_WIGGLE)"
 Write-Host "  Test sandbox=$sandboxRoot"
 Write-Host '  Feature mode=all optional repo features enabled in flat script'
