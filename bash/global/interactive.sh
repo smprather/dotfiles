@@ -42,10 +42,10 @@ export PROMPT_BOLD="\\[$BOLD\\]"
 export PROMPT_NORMAL="\\[$NORMAL\\]"
 
 # Detect a valid X desktop
-if xwininfo -root ]] >&/dev/null; then
+if xwininfo -root >&/dev/null; then
     if [[ ! $(xset q | grep -A 1 "Font Path" | tail -n 1) =~ "$HOME/.local/share/fonts" ]]; then
         # Make .local/share/fonts visible to the X server
-        xset +fp ~/.local/share/fonts
+        xset +fp $(realpath $HOME/.local/share/fonts)
         xset fp rehash
     fi
 fi
