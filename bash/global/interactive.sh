@@ -42,9 +42,12 @@ export PROMPT_BOLD="\\[$BOLD\\]"
 export PROMPT_NORMAL="\\[$NORMAL\\]"
 
 # Detect a valid X desktop
-if xwininfo -root >&/dev/null && [[ -d ~/.local/share/fonts ]]; then
-    # Make .local/share/fonts visible to the X server
-    xset +fp ~/.local/share/fonts
+if xwininfo -root ]] >&/dev/null; then
+    if [[ ! $(xset q | grep -A 1 "Font Path" | tail -n 1) =~ "$HOME/.local/share/fonts" ]]; then
+        # Make .local/share/fonts visible to the X server
+        xset +fp ~/.local/share/fonts
+        xset fp rehash
+    fi
 fi
 
 # Detect GLIBC version. I can't support everything on RH7, but I want a minimal level of usability
