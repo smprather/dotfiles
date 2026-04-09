@@ -82,13 +82,32 @@ log_into_corp_vpn()
     if (g_password = "")
         return
 
-    static last_action_ms := 0
+    ; Start with a cooldown so Cisco's own auto-connect (e.g. after a
+    ; reboot) has time to finish before we try clicking Connect.
+    static last_action_ms := A_TickCount
 
     try {
         SetTitleMatchMode(3)
         if (WinExist("Cisco Secure Client", "The secure gateway has terminated the VPN")) {
             WinActivate()
             ControlClick("Button1")
+            SetTitleMatchMode(2)
+            return
+        }
+
+        ; Auto-dismiss "connect already in progress" dialog and reset the
+        ; cooldown so we don't immediately re-attempt.
+        if (WinExist("Cisco Secure Client", "already in progress")) {
+            WinActivate()
+            ControlClick("Button1")
+            last_action_ms := A_TickCount
+            SetTitleMatchMode(2)
+            return
+        }
+
+        ; Cooldown after any Connect click — prevents clicking Connect again
+        ; while a connection attempt is still being processed.
+        if (A_TickCount - last_action_ms < 5000) {
             SetTitleMatchMode(2)
             return
         }
@@ -100,11 +119,6 @@ log_into_corp_vpn()
             ControlSetText(g_password, "Edit2")
             ControlClick("Button1")
             last_action_ms := A_TickCount
-            SetTitleMatchMode(2)
-            return
-        }
-
-        if (A_TickCount - last_action_ms < 5000) {
             SetTitleMatchMode(2)
             return
         }
