@@ -2,24 +2,17 @@
 ###################################        Notes       #############################################
 ####################################################################################################
 # * All vars that start with _ will be destroyed before exitting bashrc
-# * In order to support an arbitrary number of hooks, I use a numbered system (naming all the hooks
-#   got too hard, and was too limiting to make a hyper-flexible bashrc.
 #
 ####################################################################################################
 ###################################       Debug        #############################################
 ####################################################################################################
-# Try this first. Can catch most stuff.
-#set +x
+set +x
+### Try this first. Can catch most stuff.
 #PS4='+${BASH_SOURCE}:${LINENO}:${FUNCNAME[0]}: '
 #set -x
-# Capture all set -x to a log file for really hard to catch stuff.
+### Capture all set -x to a log file for really hard to catch stuff.
 #exec 2> ~/bashrc.log
 #exec 1> ~/bashrc.log
-#
-####################################################################################################
-###################################  Non Interactive   #############################################
-####################################################################################################
-# This section of the script is for non-interactive shell, so "keep it clean"
 
 # Start with a clean slate: clear all aliases and functions.
 # Preserve inherited PATH when present; otherwise use a minimal fallback.
@@ -43,65 +36,37 @@ export HOME=$(getent passwd $USER | cut -d: -f6)
 #done
 #export BASH_CONFIG_ROOT_DIR="$(cd -P "$(dirname "$_source_path")" >/dev/null 2>&1 && pwd)"
 export BASH_CONFIG_ROOT_DIR="$HOME/.config/bash"
+source $BASH_CONFIG_ROOT_DIR/functions.sh
 
+# I could do the layering in a function, but I like to use 'gf' in nvim for easy exploration.
 # Source in order of precedence: global->corp->site->project->user
-layered_preference_source() {
-    local bash_file=""
-    local layer=""
-    for layer in global corp site project user; do
-        bash_file="$BASH_CONFIG_ROOT_DIR/$layer/$1"
-        [[ -s "$bash_file" ]] && source "$bash_file"
-    done
-}
+#layered_preference_source() {
+#    local bash_file=""
+#    local layer=""
+#    for layer in global corp site project user; do
+#        bash_file="$BASH_CONFIG_ROOT_DIR/$layer/$1"
+#        [[ -s "$bash_file" ]] && source "$bash_file"
+#    done
+#}
 
-layered_preference_source "non_interactive.sh"
+# Configuration must come first
+# Since getting PATH setup is critical to the rest of the startup process, do
+# PATH customization in these config files.
+source_if_exists $BASH_CONFIG_ROOT_DIR/global/config.sh
+source_if_exists $BASH_CONFIG_ROOT_DIR/corp/config.sh
+source_if_exists $BASH_CONFIG_ROOT_DIR/site/config.sh
+source_if_exists $BASH_CONFIG_ROOT_DIR/project/config.sh
+source_if_exists $BASH_CONFIG_ROOT_DIR/user/config.sh
 
-# Exit here if not interactive
-if [[ $- != *i* ]]; then
-    # Unset all bashrc local variables
-    unset ${!_@}
-    return
-fi
+# PATH to common linux tools should be established by now
+# More PATH can be added by Environment Modules in corp/site/project/user layers.
+source_if_exists $BASH_CONFIG_ROOT_DIR/global/bashrc
+source_if_exists $BASH_CONFIG_ROOT_DIR/corp/bashrc
+source_if_exists $BASH_CONFIG_ROOT_DIR/site/bashrc
+source_if_exists $BASH_CONFIG_ROOT_DIR/project/bashrc
+source_if_exists $BASH_CONFIG_ROOT_DIR/user/bashrc
 
-####################################################################################################
-###################################    Interactive   ###############################################
-####################################################################################################
-layered_preference_source "config.sh"
-layered_preference_source "interactive.sh"
-
-unset_bashrc_local_vars() {
-    # Unset all local variables that start with '_' and 'cfg_'.
-    for var in $(compgen -v _) $(compgen -v cfg_); do
-        # Check if the variable is NOT exported
-        if [[ $(declare -p "$var" 2>/dev/null) != "declare -x"* ]]; then
-            unset "$var"
-        fi
-    done
-}
-
-if is_truthy $cfg_attach_to_tmux; then
-    # Make sure terminal is in a known-good state
-    reset
-
-    if tmux has-session 2>/dev/null; then
-        if is_truthy $cfg_attach_to_tmux_with_detach_others; then
-            # Attach this bash, -d -> detach all others
-            unset_bashrc_local_vars
-            tmux attach -d
-        else
-            unset_bashrc_local_vars
-            tmux attach
-        fi
-    else
-        # Create a new tmux session
-        unset_bashrc_local_vars
-        tmux
-    fi
-fi
-
+auto_attach_to_tmux
 unset_bashrc_local_vars
 
 # vim: ft=bash ts=4
-
-# Generated for envman. Do not edit.
-[ -s "$HOME/.config/envman/load.sh" ] && source "$HOME/.config/envman/load.sh"

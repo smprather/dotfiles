@@ -1,26 +1,32 @@
-####################################################################################################
-###################################       Debug        #############################################
-####################################################################################################
-set +x
-# Try this first. Can catch most stuff.
-#PS4='+${BASH_SOURCE}:${LINENO}:${FUNCNAME[0]}: '
-#set -x
+# Non-interactive and interactive shell setup.
+# Non-interactive exits early after PATH setup (see guard below).
 
-# https://stackoverflow.com/questions/59895/how-do-i-get-the-directory-where-a-bash-script-is-located-from-within-the-script
-_source_path="${BASH_SOURCE[0]}"
-while [[ -L "$_source_path" ]]; do
-    _symlink_dir="$(cd -P "$(dirname "$_source_path")" >/dev/null 2>&1 && pwd)"
-    _source_path="$(readlink "$_source_path")"
-    if [[ $_source_path != /* ]]; then
-        _source_path="$_symlink_dir/$_source_path"
-    fi
+# Add common user-level bins used by local tooling.
+# NVM_BIN : Node.js toolchain
+for potential_bin_dir in \
+    /usr/local/bin \
+    $NVM_BIN \
+    ~/.cargo/bin \
+    ~/.venv/bin \
+    ~/.opencode/bin \
+    ~/node_modules/.bin \
+    ~/.local/bin; do
+    path_prepend_if_dir $potential_bin_dir
 done
-_this_script_dir="$(cd -P "$(dirname "$_source_path")" >/dev/null 2>&1 && pwd)"
 
-source "$BASH_CONFIG_ROOT_DIR/global/functions.sh"
+# Exit here if not interactive
+if [[ $- != *i* ]]; then
+    # Unset all bashrc local variables
+    unset ${!_@}
+    return
+fi
+####################################################################################################
+###################################    Interactive   ###############################################
+####################################################################################################
 
-layered_preference_source "global_hooks/1.sh"
+_is_ssh_connection=$(ps -f $PPID | grep -c sshd)
 
+# Make these colors available in case Starship prompt generator is not available.
 export WHITE="\e[38;2;255;255;255m"
 export GREEN="\e[38;2;0;255;0m"
 export RED="\e[38;2;255;0;0m"
@@ -54,8 +60,6 @@ fi
 # since we still occasionally find ourselves on incredibly old RH7 machines.
 _glibc=$(/usr/bin/ldd --version | /bin/grep -Po "\d\.\d+" | /bin/head -n 1)
 
-layered_preference_source "global_hooks/2.sh"
-
 # Tmux will not detect UTF-8 support unless you set LANG/LC_ALL like this
 # When broken, all non-ASCII glyphs will show up as _ chars.
 #export LC_ALL=en_US.UTF-8
@@ -69,7 +73,8 @@ fi
 # bash checks the window size after each command and, if necessary, updates the values of LINES and COLUMNS.
 shopt -s checkwinsize
 
-# Don't escape vars when tab-complete. Expand instead.
+# Don't escape vars when tab-complete. Expand instead. I would actually prefer the tcsh method of respecting
+# the var value, but just leaving it there instead of expanding. Bash can't do this AFAIK.
 shopt -s direxpand
 
 # Don't save to history if command line starts with a space char
@@ -109,7 +114,6 @@ export COLORTERM=truecolor
 #    export TERM="tmux-256color"
 #fi
 
-### START PATH SETUP ###
 # Adds color to a lot of basic linux cmds
 if is_truthy $cfg_enable_grc; then
     path_prepend PATH "$BASH_CONFIG_ROOT_DIR/global/grc/bin"
@@ -117,17 +121,6 @@ if is_truthy $cfg_enable_grc; then
     source $BASH_CONFIG_ROOT_DIR/global/grc/etc/profile.d/grc.sh
 fi
 
-for potential_bin_dir in \
-    /usr/local \
-    ~/.cargo \
-    ~/.venv \
-    ~/.opencode \
-    ~/node_modules/.bin \
-    ~/.local; do
-    [[ -r $potential_bin_dir/bin ]] && export PATH="$potential_bin_dir/bin:$PATH"
-done
-# Node.js uses the weird .bin directory name
-[[ -r ~/node_modules/.bin ]] && export PATH="~/node_modules/.bin:$PATH"
 # Rust
 [[ -r "$HOME/.cargo/env" ]] && source $HOME/.cargo/env
 # Node Version Manager (nvm)
@@ -155,8 +148,6 @@ if [[ -z ${VIRTUAL_ENV+x} ]]; then
     # path_remove PATH $HOME/.local/bin
     # [[ -d "$HOME/.local/bin" ]] && path_prepend PATH $HOME/.local/bin
 fi
-
-layered_preference_source "global_hooks/3.sh"
 
 # Clean up any dupes that may have crept in
 path_trim PATH
@@ -219,7 +210,6 @@ set_prompt() {
 
     PS1="${PROMPT_YELLOW}\$(get_prompt_uid)${prompt_color}\$ ${PROMPT_WHITE}"
 }
-layered_preference_source "global_hooks/4.sh"
 unset PROMPT_COMMAND
 if is_truthy $cfg_enable_starship && command -v starship >/dev/null; then
     eval "$(starship init bash)"
@@ -268,8 +258,6 @@ bind "set colored-completion-prefix on"
 bind '\C-j:menu-complete'
 bind '\C-k:menu-complete-backward'
 
-layered_preference_source "global_hooks/5.sh"
-
 ### Completions
 # Clean the slate
 complete -r
@@ -283,8 +271,6 @@ done
 for _cmd in uv ruff; do
     command -v $_cmd >/dev/null && eval "$($_cmd generate-shell-completion bash)"
 done
-
-layered_preference_source "global_hooks/6.sh"
 
 # Using eval:
 #   * The de-symlinking realpath call is baked into the function definition instead of calling it every time
@@ -387,9 +373,9 @@ alias ll='ls'
 alias lr='ls'
 alias rl='ls'
 alias lh='human_readable=1 ls'
-alias la='ls_func_list_all=1 ls_func'
-alias lg='ls_func_show_group=1 ls_func'
-alias lah='ls_func_human_readable=1 ls_func_list_all=1 ls_func'
+alias la='list_all=1 ls'
+alias lg='show_group=1 ls'
+alias lah='human_readable=1 list_all=1 ls'
 alias lha='lah'
 alias lsg='lg'
 cds() {
@@ -418,17 +404,15 @@ alias vi="$cfg_preferred_vi"
 alias vim="$cfg_preferred_vi"
 alias vic="$cfg_preferred_vi --clean -u ~/.vimrc"
 alias vii="$cfg_preferred_vi \$(find * -maxdepth 0 -type f | xargs /bin/ls -drt1 | tail -n 1)"
-alias vimdiff="NVIM_WRAPPER_OPTS='-d -R' $vim_exec"
+alias vimdiff="NVIM_WRAPPER_OPTS='-d -R' $cfg_preferred_vi"
 alias vid="$cfg_preferred_vi -d"
 alias ovi='\vim'
 alias fls="ls \$(fzf)"
-alias fvi="$vim_exec \$(fzf)"
+alias fvi="$cfg_preferred_vi \$(fzf)"
 alias fcd="eval \$(__fzf_cd__) && ls"
 alias fcat="cat \$(fzf)"
 alias t='exec bash'
 alias hg='history | /bin/grep -i'
-alias lr='ls'
-alias la='lr -a'
 if command -v fdfind >/dev/null; then
     alias fd="fdfind"
     alias f='fd --exclude .snapshot --unrestricted --full-path'
@@ -463,9 +447,9 @@ if command -v rg >&/dev/null; then
     alias gv='g -v'
 else
     g() {
-        grep --smart-case --search-zip --hidden --no-ignore --glob='!*.snapshot*' "$@"
+        grep -r -i --color=auto --exclude-dir='.snapshot' "$@"
     }
-    alias sg='rg --smart-case --search-zip --hidden --no-ignore --glob="!*.snapshot*" --max-filesize=100K'
+    alias sg='g -l'
     alias gv='g -v'
 fi
 alias tx='tar -xvf'
@@ -585,20 +569,5 @@ gah() {
 
 # https://github.com/ajeetdsouza/zoxide
 #eval "$(zoxide init bash)"
-
-layered_preference_source "hooks/7.sh"
-
-# Auto-attach is misfiring too often. Turn it off until I have a better way to make it
-# work only when wanted.
-# Auto-attach to tmux if session exists, but only if using ssh to connect. $TERM_PROGRAM
-# is set by tmux. Don't auto-attach when creating new GUI terminals.
-_is_ssh_connection=$(ps -f $PPID | grep -c sshd)
-if false &&
-    is_truthy $_is_ssh_connection &&
-    [[ "$TERM_PROGRAM" != "tmux" ]] \
-    ; then
-
-    cfg_attach_tmux=1
-fi
 
 # vim: ft=bash ts=4

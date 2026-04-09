@@ -1,3 +1,59 @@
+auto_attach_to_tmux() {
+    if is_truthy $cfg_attach_to_tmux; then
+        # Make sure terminal is in a known-good state
+        reset
+
+        if tmux has-session 2>/dev/null; then
+            if is_truthy $cfg_attach_to_tmux_with_detach_others; then
+                # Attach this bash, -d -> detach all others
+                unset_bashrc_local_vars
+                tmux attach -d
+            else
+                unset_bashrc_local_vars
+                tmux attach
+            fi
+        else
+            # Create a new tmux session
+            unset_bashrc_local_vars
+            tmux
+        fi
+    fi
+}
+
+# Use a leading _ char for bashrc local vars that should go away at the end of env setup.
+# Keeping cfg_* vars since downstream function/alias usage may want to reference them.
+# Should we export the cfg? Open question
+unset_bashrc_local_vars() {
+    # Unset all local variables that start with '_'.
+    # Removing for now: $(compgen -v cfg_)
+    for var in $(compgen -v _) ; do
+        # Check if the variable is NOT exported
+        if [[ $(declare -p "$var" 2>/dev/null) != "declare -x"* ]]; then
+            unset "$var"
+        fi
+    done
+}
+
+# Prepend a directory to PATH only if it exists and is not already present.
+path_prepend_if_dir() {
+    local dir="$1"
+    [[ -d "$dir" ]] || return 0
+    case ":$PATH:" in
+        *":$dir:"*) ;;
+        *) PATH="$dir:$PATH" ;;
+    esac
+}
+
+# Append a directory to PATH only if it exists and is not already present.
+path_append_if_dir() {
+    local dir="$1"
+    [[ -d "$dir" ]] || return 0
+    case ":$PATH:" in
+        *":$dir:"*) ;;
+        *) PATH="$PATH:$dir" ;;
+    esac
+}
+
 is_in() {
     echo -n "$2" | /bin/grep -w -q "$1"
 }
