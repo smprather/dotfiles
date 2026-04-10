@@ -37,17 +37,18 @@ There are no automated tests or linters for this repo.
 
 `bash/bashrc` is the single entry point (symlinked to `~/.bashrc` and `~/.profile`). It sources files in layer order across five layers: `global → corp → site → project → user`. Each layer directory lives under `~/.config/bash/` after install.
 
-Loading sequence:
-1. Always: clears all aliases/functions, sources `non_interactive.sh` per layer, exits if non-interactive
-2. Interactive only: sources `config.sh` per layer, then `interactive.sh` per layer
+Loading sequence (`bash/bashrc`):
+1. Sources `bash/functions.sh` (shared utilities available to all layers)
+2. Sources `config.sh` per layer (sets `cfg_*` preferences)
+3. Sources `bashrc` per layer; each exits early if not interactive
 
-`layered_preference_source <filename>` is the core function that implements this — it iterates all five layers and sources the named file if it exists and is non-empty.
+`source_if_exists <path>` is used throughout for safe optional sourcing.
 
 The `bash/global/` directory is the canonical upstream; the other layer dirs (`corp/`, `site/`, `project/`, `user/`) are user-created and not committed to this repo.
 
 ### Hook Injection Points
 
-Each layer can inject code into `interactive.sh` via numbered files in `<layer>/global_hooks/`:
+Each layer can inject code into `global/bashrc` via numbered files in `<layer>/global_hooks/`:
 
 | File | Injection point |
 |------|----------------|
@@ -62,8 +63,9 @@ Each layer can inject code into `interactive.sh` via numbered files in `<layer>/
 ### Install Modes
 
 - **Production** (default): copies files; re-run `./install` to pick up repo changes
-- **`--links`**: granular symlinks to specific repo files; `~/.config/bash/global` → `repo/bash/global`
-- **`--dev`**: directory-level symlinks; `~/.config/bash` → `repo/bash`
+- **`--links`**: file/dir-level symlinks to repo; `~/.config/bash/global` → `repo/bash/global`; changes take effect immediately
+- **`--dev`**: directory-level symlinks for nvim/vim/tmux/editorconfig; for bash, symlinks individual repo-managed files (`global/`, `functions.sh`, `bashrc`) while preserving user layer dirs as real directories
+- **`--no-backup`**: skip backup creation (useful for clean reinstalls or automation)
 
 Backups are numbered (`dotfiles_backups/backup.N/`). The installer skips targets already pointing into the repo and never overwrites an existing backup.
 
@@ -82,8 +84,8 @@ Neovim uses Lazy.nvim with versions locked in `nvim/lazy-lock.json`.
 
 ### Variable Naming in Bash
 
-- `cfg_*` variables are user-facing preferences defined in `config.sh` per layer. They are unset at the end of bashrc (along with all `_*` locals) so they don't pollute the shell environment.
-- Variables prefixed with `_` are treated as bashrc-local and cleaned up by `unset_bashrc_local_vars` before bashrc exits.
+- `cfg_*` variables are user-facing preferences defined in `config.sh` per layer.
+- Variables prefixed with `_` are treated as bashrc-local and cleaned up by `unset_bashrc_local_vars` (in `functions.sh`) before bashrc exits. `cfg_*` are intentionally retained so aliases/functions can reference them at runtime.
 
 ### Pre-commit Hook
 
@@ -100,7 +102,7 @@ Neovim uses Lazy.nvim with versions locked in `nvim/lazy-lock.json`.
 Create layer files that will be automatically picked up — no changes to `bash/global/` needed:
 ```bash
 bash/user/config.sh       # cfg_* variable overrides
-bash/user/interactive.sh  # alias/function overrides
+bash/user/bashrc          # alias/function overrides
 bash/corp/global_hooks/3.sh  # inject code after PATH setup
 ```
 

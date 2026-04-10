@@ -1,7 +1,7 @@
 # completions
 
 Bundled shell completions for offline environments. Bash completions are
-sourced automatically by `interactive.sh`.
+sourced automatically by `global/bashrc`.
 
 | File | Tool | Shell |
 |------|------|-------|

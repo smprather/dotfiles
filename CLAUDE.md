@@ -43,11 +43,10 @@ cp hooks/* .git/hooks/ && chmod +x .git/hooks/*
 ```
 bash/
   bashrc                    - Main entry point → ~/.bashrc and ~/.profile
+  functions.sh              - Shared functions loaded before any layer (path_*, is_truthy, etc.)
   global/                   - Canonical config (upstream here, don't modify locally)
-    config.sh               - cfg_* preference variables
-    interactive.sh          - Colors, history, PATH, aliases, prompt
-    functions.sh            - path_append/prepend/remove, layered_preference_source, etc.
-    non_interactive.sh      - Non-interactive shell setup
+    config.sh               - cfg_* preference variables and defaults
+    bashrc                  - PATH setup, colors, history, aliases, prompt, completions
     completions/            - bat, rg, zoxide, hyperfine, watchexec completions
     github.scop.bash-completion/  - Bundled bash-completion library (offline)
     grc/                    - Generic Colorizer binaries and configs
@@ -101,9 +100,11 @@ update_tmux_plugins         - Re-clones all tmux plugins listed in tmux.conf fro
 
 **Production mode** (default, no flags): Copies files from repo — no symlinks to the repo remain. Re-run `./install` after repo changes to update.
 
-**Links mode** (`--links`): Granular symlinks to specific repo files. `~/.config/bash/global` → `repo/bash/global`, individual file symlinks for nvim, vim plugins, etc. Changes in the repo take effect immediately without reinstalling.
+**Links mode** (`--links`): File/directory-level symlinks to specific repo paths. `~/.config/bash/global` → `repo/bash/global`, `~/.config/nvim/init.lua` → `repo/nvim/init.lua`, etc. Changes in the repo take effect immediately without reinstalling.
 
-**Dev mode** (`--dev`): Directory-level symlinks — `~/.config/bash` → `repo/bash`. Easiest when editing files frequently.
+**Dev mode** (`--dev`): Directory-level symlinks for nvim/vim/tmux/editorconfig (e.g. `~/.config/nvim` → `repo/nvim`). For bash, symlinks the individual repo-managed files (`global/`, `functions.sh`, `bashrc`) while leaving user layer dirs (`corp/`, `site/`, etc.) in place as real directories. Skips backups.
+
+**No-backup mode** (`--no-backup`): Skips creating a backup before installing. Useful for clean reinstalls or automated use.
 
 **Backup behavior**: Numbered backups in `dotfiles_backups/backup.N/`. Skips files already pointing to the repo. Never overwrites existing backups.
 
@@ -137,12 +138,13 @@ update_tmux_plugins         - Re-clones all tmux plugins listed in tmux.conf fro
 Files are sourced in order: `global → corp → site → project → user`. Each layer overrides the previous. Layer dirs (`bash/corp/`, `bash/site/`, `bash/project/`, `bash/user/`) are user-created, not bundled.
 
 **Loading sequence** (see `bash/bashrc`):
-1. Non-interactive: clears PATH/aliases/functions, sources `non_interactive.sh` per layer, exits if not interactive
-2. Interactive: sources `config.sh` per layer, then `interactive.sh` per layer, then hook files
+1. Sources `bash/functions.sh` (shared utilities, available to all layers)
+2. Sources `config.sh` per layer (sets `cfg_*` preferences)
+3. Sources `bashrc` per layer (PATH, aliases, prompt, completions); each layer's `bashrc` exits early if not interactive
 
 ### Hook System
 
-Each layer can have `global_hooks/1.sh` through `7.sh` injected at these points in `interactive.sh`:
+Each layer can have `global_hooks/1.sh` through `7.sh` injected at these points in `global/bashrc`:
 
 | Hook | Execution point |
 |------|----------------|
@@ -156,39 +158,97 @@ Each layer can have `global_hooks/1.sh` through `7.sh` injected at these points 
 
 ### Configuration Variables (`bash/global/config.sh`)
 
-| Variable | Values | Purpose |
-|----------|--------|---------|
-| `cfg_preferred_ls` | `eza`, `lsd`, `ls` | ls replacement |
-| `cfg_preferred_vi` | `nvim`, `vim` | Editor |
-| `cfg_preferred_cat` | `bat` | cat replacement |
+| Variable | Default | Purpose |
+|----------|---------|---------|
+| `cfg_preferred_bash` | `""` | Full path to preferred bash binary; re-execs into it at startup if set, differs from current bash, and is executable |
+| `cfg_preferred_ls` | `eza` | ls replacement (`eza`, `lsd`, `ls`) |
+| `cfg_preferred_vi` | `nvim` | Editor (`nvim`, `vim`) |
+| `cfg_preferred_cat` | `bat` | cat replacement (used by aliases) |
 | `cfg_enable_grc` | `1` | Generic Colorizer |
-| `cfg_enable_fzf` | `1` | fzf integration |
-| `cfg_prompt_color_normal` | color name | Normal session prompt |
-| `cfg_prompt_color_farm` | color name | Farm/LSF session prompt |
-| `cfg_attach_to_tmux` | `1` | Auto-attach tmux on login |
-| `cfg_attach_to_tmux_with_detach_others` | `1` | Detach other clients |
+| `cfg_enable_fzf` | `0` | fzf shell integration |
+| `cfg_enable_starship` | `1` | Starship prompt (falls back to built-in prompt) |
+| `cfg_enable_fastnvim` | `0` | Fast nvim mode |
+| `cfg_enable_tmux_path_store` | `1` | tmux_path_store alias injection |
+| `cfg_prompt_color_normal` | `$PROMPT_YELLOW` | Normal session prompt color |
+| `cfg_prompt_color_farm` | `$PROMPT_RED` | Farm/LSF session prompt color |
+| `cfg_prompt_include_host` | `0` | Include hostname in prompt |
+| `cfg_attach_to_tmux` | `0` | Auto-attach tmux on login |
+| `cfg_attach_to_tmux_with_detach_others` | `0` | Detach other clients when attaching |
 
-### Key Functions (`bash/global/functions.sh`)
+### Key Functions (`bash/functions.sh`)
 
-- `path_append`, `path_prepend`, `path_remove`, `path_trim` - PATH manipulation
-- `layered_preference_source` - Sources a filename across all layers
-- `source_if_exists` - Safe sourcing
-- `is_truthy` - Boolean value checking
-- `array_slice` - Python-like array slicing
-- `join_by` - Join array with delimiter
+- `path_append`, `path_prepend`, `path_remove`, `path_trim` — PATH colon-list manipulation
+- `path_prepend_if_dir`, `path_append_if_dir` — prepend/append only if directory exists
+- `source_if_exists` — source a file only if readable
+- `is_truthy` — boolean check (`1`/`true`/`yes`/`on`/`enabled` → true)
+- `fpcmp N OP N` — floating-point comparison (`fpcmp 2.17 -gt 2.0`)
+- `vercomp`, `verlte`, `verlt`, `ver_between` — version string comparison
+- `array_slice` — Python-style array slicing (`array_slice 1:-1 "${arr[@]}"`)
+- `join_by` — join array with delimiter
+- `auto_attach_to_tmux` — called at end of bashrc; attaches/creates tmux if `cfg_attach_to_tmux` is set
+- `unset_bashrc_local_vars` — unsets all `_*` variables before bashrc exits
 
-### Notable Aliases (`bash/global/interactive.sh`)
+### Notable Aliases (`bash/global/bashrc`)
 
-- `b`, `bb`, `bbb` - `cd ..`, `cd ../..`, etc.
-- `cdd` - cd to most recently modified directory
-- `g` - ripgrep with smart defaults
-- `vi`, `vim` - preferred editor
-- `cat` - bat
-- `ga` - `git add` with status display
-- `lns` - safe symlink creation
-- `latest` - create/follow a "latest" symlink
+**Navigation:**
+- `b` / `bb` / `bbb` … `bbbbbbbbbb` — `cd ..` up 1–10 levels
+- `cdd` / `cddd` / `cdddd` … — cd to N-th most recently modified directory
+- `cd-` — `cd -` (previous directory)
+- `p` — print and save cwd to `/tmp/p_dir`; `cdp` — cd back to it
+- Custom `cd()`: accepts a file path (goes to its parent), offers to create missing dirs, runs `ls` after
 
-Custom `cd()`: accepts a file path (goes to parent), offers to create missing dirs, runs `ls` after.
+**Listing:**
+- `ll` / `lr` / `sl` / `rl` — all alias to `ls`
+- `lh` — `human_readable=1 ls`
+- `la` — `list_all=1 ls`
+- `lg` — `show_group=1 ls`
+- `lah` / `lha` — both size and all
+
+**Editing:**
+- `vi` / `vim` — `cfg_preferred_vi`
+- `vic` — nvim with clean vimrc only
+- `vii` — open most recently modified file
+- `vid` — diff mode
+- `fvi` — open fzf-selected file
+- `v` — `nvim -n -R -` (read stdin, read-only)
+- `new` — touch + chmod +x + open
+
+**Search:**
+- `g` — `rg --smart-case --search-zip --hidden --no-ignore` (falls back to `grep -r -i`)
+- `sg` — same but limited to 100K files
+- `gv` — inverted grep
+- `gf` — fixed-string grep
+- `gpy` / `gtcl` — grep Python / Tcl files
+- `f` — `fd --unrestricted --full-path` (falls back to `find .`)
+- `h` — `history | g`
+- `hg` — `history | grep -i`
+- `gah` — grep all bash history files across all PIDs
+
+**Git:**
+- `ga` — `git add [all]` then `git status`
+- `gs` — `git status`
+- `gc` — `git commit`
+- `gp` — `git push`
+- `gd` — `git d`
+- `gsp` — stash, pull, pop
+
+**Utilities:**
+- `cat` — `bat --paging=never` (if bat available); `catp` — bat with paging
+- `t` — `exec bash` (reload shell)
+- `lns` — safe symlink (removes existing link first)
+- `latest` — create/follow a `latest` symlink to a dir, then cd into it
+- `w` — `type -a` (where is this defined?)
+- `x` — `chmod +x`
+- `rs` — rsync with progress, no `.snapshot/`
+- `du` / `dum` — disk usage sorted by size (GB/MB)
+- `rm` — `rm -f`
+- `mkdir` — `mkdir -p`
+- `we` — `watchexec --clear --poll 500`
+- `extract_rpm` — `rpm2cpio | cpio -idmv`
+- `zhead` — zcat + head
+- `rp` — realpath (cwd if no arg)
+- `gzip` / `gunzip` — pigz / unpigz
+- `vnc` — start VNC server (no args) or pass through to vncserver
 
 ## Component Reference
 
@@ -256,7 +316,7 @@ Falls back gracefully: eza → lsd → ls, bat → cat, fd → find. Handles Deb
 ```bash
 # Create the file — it will automatically override global/
 bash/user/config.sh      # cfg_* variable overrides
-bash/user/interactive.sh # alias/function overrides
+bash/user/bashrc         # alias/function overrides
 bash/corp/global_hooks/5.sh  # hook injection at point 5
 ```
 

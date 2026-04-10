@@ -61,7 +61,7 @@ Windows AutoHotKey notes:
 - The installer patches those feature flags into `%USERPROFILE%\autohotkey\hotkeys.ahk` after copying it.
 - Current feature IDs: `corp-logins`, `mouse-wiggle`, `cisco-secure-client-vpn`, `password-manager`, `tmux-hotkeys`, `f1f2f3-as-mouse-buttons`, `thinlinc-reconnect`.
 
-See [CLAUDE.md](CLAUDE.md) for full details: dev mode, `--links` mode,
+See [CLAUDE.md](CLAUDE.md) for full details: `--dev`, `--links`, `--no-backup`,
 backup/restore, layer overrides, and Windows copy destinations.
 
 # Related

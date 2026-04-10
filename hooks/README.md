@@ -1,29 +1,22 @@
 # Git Hooks
 
-This directory contains git hooks for the dotfiles repository.
-
-## Installation
-
-To install the hooks, run:
+Git hooks for this repo. They are installed automatically by `./install`.
+To install manually:
 
 ```bash
-cp hooks/* .git/hooks/
-chmod +x .git/hooks/*
+cp hooks/* .git/hooks/ && chmod +x .git/hooks/*
 ```
 
-Or use the provided install script (if one exists).
+## pre-commit
 
-## Available Hooks
+Scans for `.git` directories in subdirectories, removes them, and re-stages
+the affected files before the commit proceeds.
 
-### pre-commit
+**Why:** Bundled plugins (tmux, vim) include their own `.git` directories.
+Committing them as-is produces "embedded git repository" warnings and can
+accidentally create git submodules. This hook strips them so they're committed
+as plain directories.
 
-**Purpose:** Removes `.git` directories from embedded repositories before committing.
-
-**Why:** When bundling external dependencies (like tmux plugins) for offline environments, we include the full plugin directories but don't want to track their git history. This hook automatically strips out the `.git` directories, converting them from git submodules to regular directories.
-
-**What it does:**
-1. Finds all `.git` directories in subdirectories (not the root)
-2. Removes them
-3. Re-stages the affected files
-
-This prevents "embedded git repository" warnings when committing bundled dependencies.
+**Always install this hook** when working with bundled plugins — otherwise
+adding a new plugin directory with its `.git` intact will cause commit warnings
+or failures.

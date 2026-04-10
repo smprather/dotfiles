@@ -1,4 +1,5 @@
 # Valid values for preferred_ls : eza, lsd, ls (need to add pls)
+cfg_preferred_bash=""    # Full path to preferred bash binary; re-execs at startup if set
 cfg_preferred_ls="eza"
 cfg_preferred_vi="nvim"
 cfg_preferred_cat="bat"
