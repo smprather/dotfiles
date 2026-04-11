@@ -85,6 +85,10 @@ log_into_corp_vpn()
     ; Start with a cooldown so Cisco's own auto-connect (e.g. after a
     ; reboot) has time to finish before we try clicking Connect.
     static last_action_ms := A_TickCount
+    ; Exponential backoff when server is unreachable — starts at 30 s,
+    ; doubles each consecutive failure, caps at ~16 min.
+    static fail_backoff_ms := 0
+    static last_fail_ms := 0
 
     try {
         SetTitleMatchMode(3)
@@ -105,9 +109,26 @@ log_into_corp_vpn()
             return
         }
 
+        ; Auto-dismiss "Could not connect to server" dialog and start
+        ; exponential backoff so we don't flood the screen with errors.
+        if (WinExist("Cisco Secure Client", "Could not connect to server")) {
+            WinActivate()
+            ControlClick("Button1")
+            last_fail_ms := A_TickCount
+            fail_backoff_ms := fail_backoff_ms ? Min(fail_backoff_ms * 2, 1000000) : 30000
+            SetTitleMatchMode(2)
+            return
+        }
+
         ; Cooldown after any Connect click — prevents clicking Connect again
         ; while a connection attempt is still being processed.
         if (A_TickCount - last_action_ms < 5000) {
+            SetTitleMatchMode(2)
+            return
+        }
+
+        ; Back off after server-unreachable failures.
+        if (fail_backoff_ms && A_TickCount - last_fail_ms < fail_backoff_ms) {
             SetTitleMatchMode(2)
             return
         }
@@ -119,6 +140,7 @@ log_into_corp_vpn()
             ControlSetText(g_password, "Edit2")
             ControlClick("Button1")
             last_action_ms := A_TickCount
+            fail_backoff_ms := 0
             SetTitleMatchMode(2)
             return
         }
@@ -129,6 +151,7 @@ log_into_corp_vpn()
             windowText := WinGetText("Cisco Secure Client", "AnyConnect VPN:")
             DetectHiddenWindows(false)
             if (InStr(windowText, "Connected to")) {
+                fail_backoff_ms := 0
                 SetTitleMatchMode(2)
                 return
             }
