@@ -79,6 +79,11 @@ log_into_corp_vpn()
     if (!g_corp_mode || g_idle || !g_autologin)
         return
 
+    ; Don't try to reconnect while the workstation is locked — there's
+    ; likely no network, and we'd just pile up error dialogs.
+    if (ProcessExist("LogonUI.exe"))
+        return
+
     if (g_password = "")
         return
 
