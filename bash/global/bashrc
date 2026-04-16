@@ -149,8 +149,6 @@ if [[ -z ${VIRTUAL_ENV+x} ]]; then
     # [[ -d "$HOME/.local/bin" ]] && path_prepend PATH $HOME/.local/bin
 fi
 
-# Clean up any dupes that may have crept in
-path_trim PATH
 ### END PATH SETUP ###
 
 export PAGER='less --incsearch --use-color --no-init --ignore-case --mouse'

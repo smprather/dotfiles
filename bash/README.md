@@ -40,7 +40,8 @@ bashrc
   └── site/bashrc
   └── project/bashrc
   └── user/bashrc
-  └── auto_attach_to_tmux              # runs if cfg_attach_to_tmux=1
+  └── unset_bashrc_local_vars          # clears all _* locals
+  └── path_trim PATH                   # deduplicates PATH entries
 ```
 
 ## Adding Layer Overrides

@@ -185,7 +185,7 @@ Each layer can have `global_hooks/1.sh` through `7.sh` injected at these points 
 - `vercomp`, `verlte`, `verlt`, `ver_between` — version string comparison
 - `array_slice` — Python-style array slicing (`array_slice 1:-1 "${arr[@]}"`)
 - `join_by` — join array with delimiter
-- `auto_attach_to_tmux` — called at end of bashrc; attaches/creates tmux if `cfg_attach_to_tmux` is set
+- `auto_attach_to_tmux` — attaches/creates tmux session if `cfg_attach_to_tmux` is set (available for manual call from user layer)
 - `unset_bashrc_local_vars` — unsets all `_*` variables before bashrc exits
 
 ### Notable Aliases (`bash/global/bashrc`)

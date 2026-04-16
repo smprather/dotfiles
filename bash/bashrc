@@ -77,7 +77,9 @@ source_if_exists $BASH_CONFIG_ROOT_DIR/site/bashrc
 source_if_exists $BASH_CONFIG_ROOT_DIR/project/bashrc
 source_if_exists $BASH_CONFIG_ROOT_DIR/user/bashrc
 
-auto_attach_to_tmux
 unset_bashrc_local_vars
+
+# Clean up any PATH dupe dirs that may have crept in
+path_trim PATH
 
 # vim: ft=bash ts=4
