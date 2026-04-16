@@ -2,3 +2,4 @@ dotfiles_backups/
 *.log
 !bash/global/grc/share/grc/conf.log
 .claude/
+bash/corp
