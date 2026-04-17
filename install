@@ -419,9 +419,12 @@ else
     echo "  No hooks directory found, skipping"
 fi
 
-# TODO: Test this.
-# corp layer hook
-if [[ -x "$HOME/.config/bash/corp/install.sh" ]]; then
-    echo "Running corp installer..."
-    $HOME/.config/bash/corp/install.sh
-fi
+# Allow for extra layers of installation scripting. Use source so that variables from
+# this execution environment are available.
+for layer in corp site project user; do
+    install_script="$HOME/.config/bash/$layer/install.sh"
+    if [[ -r ~/.config/bash/corp/install.sh" ]]; then
+        echo "Sourcing '$install_script' ..."
+        source $install_script
+    fi
+done
