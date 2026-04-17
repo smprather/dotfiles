@@ -423,7 +423,7 @@ fi
 # this execution environment are available.
 for layer in corp site project user; do
     install_script="$HOME/.config/bash/$layer/install.sh"
-    if [[ -r ~/.config/bash/corp/install.sh" ]]; then
+    if [[ -r "$install_script" ]]; then
         echo "Sourcing '$install_script' ..."
         source $install_script
     fi
