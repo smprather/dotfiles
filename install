@@ -418,3 +418,10 @@ if [[ -d "$repo_dir/hooks" ]]; then
 else
     echo "  No hooks directory found, skipping"
 fi
+
+# TODO: Test this.
+# corp layer hook
+if [[ -x "$HOME/.config/bash/corp/install.sh" ]]; then
+    echo "Running corp installer..."
+    $HOME/.config/bash/corp/install.sh
+fi
