@@ -322,21 +322,29 @@ cd() {
 
     local target="$1"
     local response=""
+    local create_base=""
 
     if [[ -d "$1" ]]; then
         target=$1
-    elif [[ "$1" == "" ]]; then
+    elif [[ -z "$1" ]]; then
         target=$HOME
     elif [[ "$1" == "-" ]]; then
         target="-"
     elif [[ -L "$1" || -e "$1" ]]; then
-        target=${1%/*}
-    elif [[ ! -d $target && -w $(dirname $target) ]]; then
-        read -p "$target does not exist. Do you want to create it? [y]/n " response
-        if [[ -z "$response" || $response == "y" ]]; then
-            mkdir $target
-        else
-            return
+        target=$(dirname -- "$1")
+    elif [[ -n "$target" ]]; then
+        create_base=$target
+        while [[ $create_base != "/" && $create_base != "." && ! -e "$create_base" ]]; do
+            create_base=$(dirname -- "$create_base")
+        done
+
+        if [[ -d "$create_base" && -w "$create_base" ]]; then
+            read -r -p "$target does not exist. Create it with parent directories? [y]/n " response
+            if [[ -z "$response" || $response =~ ^[Yy]$ ]]; then
+                mkdir -p -- "$target" || return
+            else
+                return
+            fi
         fi
     fi
 

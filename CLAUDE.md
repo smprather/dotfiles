@@ -195,7 +195,7 @@ Each layer can have `global_hooks/1.sh` through `7.sh` injected at these points 
 - `cdd` / `cddd` / `cdddd` … — cd to N-th most recently modified directory
 - `cd-` — `cd -` (previous directory)
 - `p` — print and save cwd to `/tmp/p_dir`; `cdp` — cd back to it
-- Custom `cd()`: accepts a file path (goes to its parent), offers to create missing dirs, runs `ls` after
+- Custom `cd()`: accepts a file path (goes to its parent), offers to create missing dirs with `mkdir -p`, runs `ls` after
 
 **Listing:**
 - `ll` / `lr` / `sl` / `rl` — all alias to `ls`
