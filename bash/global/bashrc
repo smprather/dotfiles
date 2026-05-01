@@ -1,5 +1,12 @@
 # Non-interactive and interactive shell setup.
 # Non-interactive exits early after PATH setup (see guard below).
+#
+# Load home-dir-based NVM (Node Version Manager) if found
+if [[ -r $HOME/.nvm ]]; then
+    export NVM_DIR="$HOME/.nvm"
+    [[ -s "$NVM_DIR/nvm.sh" ]] && source "$NVM_DIR/nvm.sh"
+    [[ -s "$NVM_DIR/bash_completion" ]] && source "$NVM_DIR/bash_completion"
+fi
 
 # Add common user-level bins used by local tooling.
 # NVM_BIN : Node.js toolchain
@@ -211,6 +218,11 @@ set_prompt() {
 unset PROMPT_COMMAND
 if is_truthy $cfg_enable_starship && command -v starship >/dev/null; then
     eval "$(starship init bash)"
+    # Sometimes, ctrl-c killing a process leaves the the -echo stty option enabled, which
+    # makes it so that you can't see the text you're typeing (like when entering a pw).
+    # Use every prompt print, to disable that state and make typing visible.
+    /bin/stty sane
+    export PROMPT_COMMAND="/bin/stty '$(stty -g)';$PROMPT_COMMAND"
 else
     set_prompt "$cfg_prompt_include_host"
 fi
@@ -260,6 +272,12 @@ bind '\C-k:menu-complete-backward'
 # Clean the slate
 complete -r
 source $BASH_CONFIG_ROOT_DIR/global/github.scop.bash-completion/share/bash-completion/bash_completion
+# Keep command-specific bash-completion, but avoid the vendored default dynamic
+# loader for unknown commands; that hook is what trips on `x <TAB>` here.
+if declare -F _comp_complete_minimal >/dev/null; then
+    complete -r -D 2>/dev/null
+    complete -D -F _comp_complete_minimal
+fi
 for _layer in global corp site project user; do
     for _comp_file in $BASH_CONFIG_ROOT_DIR/$_layer/completions/*.bash; do
         # Must check for exist since no-glob-match in bash resolves to the whole glob string with the * in it
@@ -464,7 +482,10 @@ alias ncdu='ncdu --graph-style hash --color dark'
 alias mdkir='mkdir'
 alias itcl="\$HOME/.local/lib/tcl/tclsh-wrapper/TclReadLine/TclReadLine.tcl"
 alias ipy='ipython3'
-alias x='chmod +x'
+# I was getting a weird completion failure for `x <tab>`. This is the work-around.
+unalias x 2>/dev/null
+complete -r x 2>/dev/null
+x() { chmod +x -- "$@"; }
 alias clean_bash='echo "/usr/bin/env --ignore-environment PATH=/bin HOME=$HOME USER=$(/bin/whoami) /bin/bash --rcfile ~/.clean.bashrc"'
 alias tree='ls -T'
 if [[ -n $_bat_exec ]]; then
