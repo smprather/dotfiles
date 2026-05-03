@@ -25,6 +25,9 @@ Dotfiles for **Electrical Engineering work environments**: multi-platform (RedHa
 ./install --no-backup
 ./install --no-fonts
 
+# Run an explicit corp/site/user installer after global install steps
+./install --post-install-hook ~/corp-dotfiles/install.sh
+
 # Restore from backup
 ./install --restore-backup dotfiles_backups/backup.1
 
@@ -111,6 +114,8 @@ update_tmux_plugins         - Re-clones all tmux plugins listed in tmux.conf fro
 **No-backup mode** (`--no-backup`): Skips creating a backup before installing. Useful for clean reinstalls or automated use.
 
 **No-fonts mode** (`--no-fonts`): Skips extracting vendored Nerd Font archives into `~/.local/share/fonts` and skips font cache refresh.
+
+**Post-install hook** (`--post-install-hook <script>`): Runs an explicit add-on script with `bash` after global install steps and git hooks, before automatic layer `install.sh` scripts are sourced. The hook path is resolved before the installer changes to `$HOME`. Hook failure fails the installer. Environment passed to the hook: `DOTFILES_REPO`, `DOTFILES_HOME`, `DOTFILES_MODE` (`copy`, `links`, or `dev`), `DOTFILES_NO_BACKUP`, `DOTFILES_NO_FONTS`.
 
 **Font behavior**: Linux installer extracts vendored fonts from `vendor/fonts/*.zip` into `~/.local/share/fonts`. Large archives can be stored as split chunks named `*.zip.part-000`, `*.zip.part-001`, etc.; the installer rejoins them under `/tmp/dotfiles-fonts.*` before extraction. It generates `fonts.scale`/`fonts.dir` when `mkfontscale`/`mkfontdir` are present and refreshes fontconfig with `fc-cache`. Font discovery is fontconfig-first for normal Linux desktop apps, WSLg, and RHEL/Alma 8. Do not add `xset +fp` startup logic; X core font paths can fail when `$HOME` is not traversable by the X server. Windows Terminal reads fonts from Windows, not WSL fontconfig.
 

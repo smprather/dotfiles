@@ -52,6 +52,13 @@ side. Large font archives may be stored as `*.zip.part-*`; the installer
 rejoins them in `/tmp` before extracting. Use `./install --no-fonts` to skip
 font installation.
 
+Optional corporate/site add-ons can be chained after the global install:
+```bash
+./install --post-install-hook ~/corp-dotfiles/install.sh
+```
+The hook runs with `bash` and receives `DOTFILES_REPO`, `DOTFILES_HOME`,
+`DOTFILES_MODE`, `DOTFILES_NO_BACKUP`, and `DOTFILES_NO_FONTS`.
+
 **Windows** (PowerShell, no elevation required):
 ```powershell
 .\install.ps1

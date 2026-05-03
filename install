@@ -10,6 +10,7 @@ dev_mode=0
 links_mode=0
 no_backup=0
 no_fonts=0
+post_install_hook=""
 restore_backup=""
 
 while [[ $# -gt 0 ]]; do
@@ -29,6 +30,16 @@ while [[ $# -gt 0 ]]; do
     --no-fonts)
         no_fonts=1
         shift
+        ;;
+    --post-install-hook)
+        if [[ -z "$2" ]]; then
+            echo "Error: --post-install-hook requires a script path"
+            echo "Usage: $0 --post-install-hook <script>"
+            echo "Example: $0 --post-install-hook ~/corp-dotfiles/install.sh"
+            exit 1
+        fi
+        post_install_hook="$2"
+        shift 2
         ;;
     --verbose)
         # Kept for backwards compatibility; output is always verbose
@@ -64,6 +75,10 @@ Options:
 
   --no-fonts                 Skip installing vendored fonts to ~/.local/share/fonts.
 
+  --post-install-hook <script>
+                             Run a corp/site/user script after global install steps.
+                             The script is run with bash and receives DOTFILES_* env vars.
+
   --restore-backup <dir>     Restore dotfiles from a previous backup directory.
                              Example: $0 --restore-backup dotfiles_backups/backup.1
 
@@ -73,7 +88,7 @@ EOF
         ;;
     *)
         echo "Unknown option: $1"
-        echo "Usage: $0 [--dev] [--links] [--no-backup] [--no-fonts] [--verbose] [--restore-backup <dir>]"
+        echo "Usage: $0 [--dev] [--links] [--no-backup] [--no-fonts] [--post-install-hook <script>] [--verbose] [--restore-backup <dir>]"
         echo "Run '$0 --help' for details."
         exit 1
         ;;
@@ -198,6 +213,16 @@ backup_item() {
 
 is_wsl() {
     grep -qiE 'microsoft|wsl' /proc/version 2>/dev/null
+}
+
+install_mode() {
+    if [[ "$dev_mode" == "1" ]]; then
+        echo "dev"
+    elif [[ "$links_mode" == "1" ]]; then
+        echo "links"
+    else
+        echo "copy"
+    fi
 }
 
 install_fonts() {
@@ -332,6 +357,16 @@ fi
 
 repo_dir=$(git rev-parse --show-toplevel)
 echo "Dotfiles repo base directory: $repo_dir"
+
+if [[ -n "$post_install_hook" ]]; then
+    if [[ ! -r "$post_install_hook" ]]; then
+        echo "Error: Post-install hook is not readable: $post_install_hook"
+        exit 1
+    fi
+    post_install_hook_dir=$(cd "$(dirname "$post_install_hook")" && pwd)
+    post_install_hook="$post_install_hook_dir/$(basename "$post_install_hook")"
+    unset post_install_hook_dir
+fi
 
 echo "Changing directory to ~"
 cd ~
@@ -537,6 +572,16 @@ if [[ -d "$repo_dir/hooks" ]]; then
     done
 else
     echo "  No hooks directory found, skipping"
+fi
+
+if [[ -n "$post_install_hook" ]]; then
+    echo "Running post-install hook: $post_install_hook"
+    DOTFILES_REPO="$repo_dir" \
+        DOTFILES_HOME="$HOME" \
+        DOTFILES_MODE="$(install_mode)" \
+        DOTFILES_NO_BACKUP="$no_backup" \
+        DOTFILES_NO_FONTS="$no_fonts" \
+        bash "$post_install_hook"
 fi
 
 # Allow for extra layers of installation scripting. Use source so that variables from
