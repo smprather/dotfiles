@@ -26,7 +26,7 @@ XDG_CACHE_HOME=/tmp/codex-nvim-cache XDG_STATE_HOME=/tmp/codex-nvim-state nvim -
 
 - Do not use `xset +fp ~/.local/share/fonts` from shell startup. Even with valid `fonts.dir`, X may reject user-home paths such as `/home/mylesp` when the home directory is `700`. Use fontconfig (`fc-cache`) for modern Linux apps and WSLg.
 - Vendored fonts belong in `~/.local/share/fonts`. Generate `fonts.scale`/`fonts.dir` when `mkfontscale`/`mkfontdir` exist, but rely on `fc-cache` for actual desktop app discovery.
-- Font archives over normal GitHub size limits should be split as `vendor/fonts/Name.zip.part-000`, `Name.zip.part-001`, etc. The installer rejoins split archives under `/tmp` before unzipping. Keep chunks below 100 MB.
+- Font archives over normal GitHub size limits should be split as `vendor/fonts/Name.zip.part-000`, `Name.zip.part-001`, etc. The installer rejoins split archives under `/tmp` before unzipping. Use 45 MiB chunks to stay below GitHub's 50 MB warning threshold.
 - WSL Windows Terminal does not read WSL fontconfig. Fonts must also be installed on the Windows side for Windows Terminal UI selection.
 - Do not backup font files during pre-install backups; vendored Nerd Font archives are large. Backup uses `rsync` with font-extension excludes.
 - `Snacks.nvim` provides the no-argument Neovim dashboard. Its dashboard buffer has filetype `snacks_dashboard`.
