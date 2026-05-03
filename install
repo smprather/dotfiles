@@ -9,6 +9,7 @@ fi
 dev_mode=0
 links_mode=0
 no_backup=0
+no_fonts=0
 restore_backup=""
 
 while [[ $# -gt 0 ]]; do
@@ -23,6 +24,10 @@ while [[ $# -gt 0 ]]; do
         ;;
     --no-backup)
         no_backup=1
+        shift
+        ;;
+    --no-fonts)
+        no_fonts=1
         shift
         ;;
     --verbose)
@@ -57,6 +62,8 @@ Options:
 
   --no-backup                Skip creating a backup of existing dotfiles before installing.
 
+  --no-fonts                 Skip installing vendored fonts to ~/.local/share/fonts.
+
   --restore-backup <dir>     Restore dotfiles from a previous backup directory.
                              Example: $0 --restore-backup dotfiles_backups/backup.1
 
@@ -66,7 +73,7 @@ EOF
         ;;
     *)
         echo "Unknown option: $1"
-        echo "Usage: $0 [--dev] [--links] [--no-backup] [--verbose] [--restore-backup <dir>]"
+        echo "Usage: $0 [--dev] [--links] [--no-backup] [--no-fonts] [--verbose] [--restore-backup <dir>]"
         echo "Run '$0 --help' for details."
         exit 1
         ;;
@@ -172,6 +179,112 @@ inst() {
     fi
 }
 
+backup_item() {
+    local src="$1"
+    local dest="$2"
+
+    rsync -a \
+        --exclude='*.bdf' \
+        --exclude='*.eot' \
+        --exclude='*.fon' \
+        --exclude='*.otf' \
+        --exclude='*.pcf' \
+        --exclude='*.ttc' \
+        --exclude='*.ttf' \
+        --exclude='*.woff' \
+        --exclude='*.woff2' \
+        "$src" "$dest"
+}
+
+is_wsl() {
+    grep -qiE 'microsoft|wsl' /proc/version 2>/dev/null
+}
+
+install_fonts() {
+    local vendor_fonts_dir="$repo_dir/vendor/fonts"
+    local user_fonts_dir="$HOME/.local/share/fonts"
+    local tmp_font_dir=""
+
+    if [[ ! -d "$vendor_fonts_dir" ]]; then
+        echo "Installing fonts..."
+        echo "  No vendored fonts directory found, skipping"
+        return 0
+    fi
+
+    if ! command -v unzip >/dev/null; then
+        echo "Installing fonts..."
+        echo "  Warning: unzip is not available; skipping vendored font installation"
+        return 0
+    fi
+
+    echo "Installing fonts..."
+    mkdir -p "$user_fonts_dir"
+
+    extract_font_zip() {
+        local zip_path="$1"
+        local font_file
+
+        echo "  Extracting: $zip_path -> $user_fonts_dir/"
+        while IFS= read -r font_file; do
+            unzip -o -j "$zip_path" "$font_file" -d "$user_fonts_dir" >/dev/null
+        done < <(unzip -Z1 "$zip_path" | grep -Ei '\.(ttf|otf|pcf|bdf)(\.gz)?$')
+    }
+
+    local font_zip
+    for font_zip in "$vendor_fonts_dir"/*.zip; do
+        if [[ ! -e "$font_zip" ]]; then
+            continue
+        fi
+
+        extract_font_zip "$font_zip"
+    done
+
+    local first_part
+    local split_base
+    local rejoined_zip
+    for first_part in "$vendor_fonts_dir"/*.zip.part-000; do
+        if [[ ! -e "$first_part" ]]; then
+            continue
+        fi
+
+        if [[ -z "$tmp_font_dir" ]]; then
+            tmp_font_dir=$(mktemp -d /tmp/dotfiles-fonts.XXXXXX)
+        fi
+
+        split_base="${first_part%.part-000}"
+        rejoined_zip="$tmp_font_dir/$(basename "$split_base")"
+        echo "  Rejoining: $split_base.part-* -> $rejoined_zip"
+        cat "$split_base".part-* > "$rejoined_zip"
+        extract_font_zip "$rejoined_zip"
+    done
+
+    if [[ -n "$tmp_font_dir" ]]; then
+        rm -rf "$tmp_font_dir"
+    fi
+
+    if command -v mkfontscale >/dev/null; then
+        mkfontscale "$user_fonts_dir" >/dev/null 2>&1 || \
+            echo "  Warning: mkfontscale failed for $user_fonts_dir"
+    fi
+
+    if command -v mkfontdir >/dev/null; then
+        mkfontdir "$user_fonts_dir" >/dev/null 2>&1 || \
+            echo "  Warning: mkfontdir failed for $user_fonts_dir"
+    fi
+
+    if command -v fc-cache >/dev/null; then
+        fc-cache -f "$user_fonts_dir" >/dev/null 2>&1 || \
+            echo "  Warning: fc-cache failed for $user_fonts_dir"
+    else
+        echo "  Warning: fc-cache is not available; fontconfig cache was not refreshed"
+    fi
+
+    if is_wsl; then
+        echo "  WSL note: Linux GUI apps use these fonts through fontconfig."
+        echo "  WSL note: Windows Terminal needs fonts installed on the Windows side."
+    fi
+}
+
 # --- Restore backup ---
 
 if [[ -n "$restore_backup" ]]; then
@@ -260,7 +373,7 @@ if [[ "$dev_mode" != "1" && "$no_backup" != "1" ]]; then
 
         echo "  Backing up: $x"
         mkdir -p "$backup_dir/$(dirname "$x")"
-        cp -rPp "$x" "$backup_dir/$x"
+        backup_item "$x" "$backup_dir/$x"
     done
 
     echo ""
@@ -402,6 +515,13 @@ else
     mkdir -p .config/editorconfig
     inst $repo_dir/editorconfig/editorconfig .config/editorconfig/editorconfig
     lns --verbose .config/editorconfig/editorconfig .editorconfig
+fi
+
+if [[ "$no_fonts" != "1" ]]; then
+    install_fonts
+else
+    echo "Installing fonts..."
+    echo "  Skipped (--no-fonts)"
 fi
 
 # Install git hooks

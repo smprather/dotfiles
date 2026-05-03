@@ -44,6 +44,14 @@ every preference is a `cfg_*` variable you can override in your user layer.
 ./install
 ```
 
+Vendored Nerd Fonts are installed to `~/.local/share/fonts` and refreshed with
+fontconfig (`fc-cache`) when available. This works for normal Linux desktop
+apps on RedHat/Alma/RHEL 8 and for WSLg Linux GUI apps. Windows Terminal reads
+fonts from Windows, so WSL terminal fonts must also be installed on the Windows
+side. Large font archives may be stored as `*.zip.part-*`; the installer
+rejoins them in `/tmp` before extracting. Use `./install --no-fonts` to skip
+font installation.
+
 **Windows** (PowerShell, no elevation required):
 ```powershell
 .\install.ps1

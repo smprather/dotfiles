@@ -54,15 +54,6 @@ export PROMPT_CYAN="\\[$CYAN\\]"
 export PROMPT_BOLD="\\[$BOLD\\]"
 export PROMPT_NORMAL="\\[$NORMAL\\]"
 
-# Detect a valid X desktop
-if xwininfo -root >&/dev/null; then
-    if [[ ! $(xset q | grep -A 1 "Font Path" | tail -n 1) =~ "$HOME/.local/share/fonts" ]]; then
-        # Make .local/share/fonts visible to the X server
-        xset +fp $(realpath $HOME/.local/share/fonts)
-        xset fp rehash
-    fi
-fi
-
 # Detect GLIBC version. I can't support everything on RH7, but I want a minimal level of usability
 # since we still occasionally find ourselves on incredibly old RH7 machines.
 _glibc=$(/usr/bin/ldd --version | /bin/grep -Po "\d\.\d+" | /bin/head -n 1)

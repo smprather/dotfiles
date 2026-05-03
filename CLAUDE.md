@@ -21,6 +21,10 @@ Dotfiles for **Electrical Engineering work environments**: multi-platform (RedHa
 # Install in dev mode (directory-level symlinks, easier for editing)
 ./install --dev
 
+# Skip backups or vendored font installation
+./install --no-backup
+./install --no-fonts
+
 # Restore from backup
 ./install --restore-backup dotfiles_backups/backup.1
 
@@ -106,7 +110,12 @@ update_tmux_plugins         - Re-clones all tmux plugins listed in tmux.conf fro
 
 **No-backup mode** (`--no-backup`): Skips creating a backup before installing. Useful for clean reinstalls or automated use.
 
+**No-fonts mode** (`--no-fonts`): Skips extracting vendored Nerd Font archives into `~/.local/share/fonts` and skips font cache refresh.
+
+**Font behavior**: Linux installer extracts vendored fonts from `vendor/fonts/*.zip` into `~/.local/share/fonts`. Large archives can be stored as split chunks named `*.zip.part-000`, `*.zip.part-001`, etc.; the installer rejoins them under `/tmp/dotfiles-fonts.*` before extraction. It generates `fonts.scale`/`fonts.dir` when `mkfontscale`/`mkfontdir` are present and refreshes fontconfig with `fc-cache`. Font discovery is fontconfig-first for normal Linux desktop apps, WSLg, and RHEL/Alma 8. Do not add `xset +fp` startup logic; X core font paths can fail when `$HOME` is not traversable by the X server. Windows Terminal reads fonts from Windows, not WSL fontconfig.
+
 **Backup behavior**: Numbered backups in `dotfiles_backups/backup.N/`. Skips files already pointing to the repo. Never overwrites existing backups.
+Backups intentionally exclude font files (`*.ttf`, `*.otf`, `*.pcf`, `*.bdf`, `*.woff`, `*.woff2`, etc.) because vendored Nerd Fonts are large and reproducible.
 
 **Tmux plugin behavior**: All bundled plugins are always copied/linked from the repo. Run `./update_tmux_plugins` to re-clone them from GitHub (pre-commit hook strips `.git` dirs on next commit).
 
@@ -293,7 +302,9 @@ Existing `%USERPROFILE%\dotkeys_config.toml` files that still use legacy plugin 
 
 
 
-Kickstart.nvim base. Plugin manager: Lazy.nvim (versions locked in `lazy-lock.json`). Key plugins: blink.cmp, telescope.nvim, gitsigns.nvim, conform.nvim, nvim-lint, nvim-treesitter, lualine.nvim, tokyonight.nvim.
+Kickstart.nvim base. Plugin manager: Lazy.nvim (versions locked in `lazy-lock.json`). Key plugins: blink.cmp, snacks.nvim, gitsigns.nvim, conform.nvim, nvim-lint, nvim-treesitter, lualine.nvim, tokyonight.nvim.
+
+Snacks dashboard provides the no-argument `nvim` startup screen (`filetype=snacks_dashboard`). `mini.trailspace` highlights trailing whitespace with window-local matches, so dashboard cleanup must disable `vim.b.minitrailspace_disable`, turn off local `list`, and delete existing `MiniTrailspace` matches on dashboard open/update.
 
 ### Vim (`vim/vimrc`)
 

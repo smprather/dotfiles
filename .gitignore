@@ -3,3 +3,4 @@ dotfiles_backups/
 !bash/global/grc/share/grc/conf.log
 .claude/
 bash/corp
+vendor/fonts.scale
