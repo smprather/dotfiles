@@ -59,6 +59,8 @@ are decompressed into `~/.local/bin`; matching `lib64/*.gz` files go to
 `~/.local/lib64`. Platform directories use names like
 `el8.x86_64.glibc2p28`. The installer uses vendored `patchelf` to set
 `$ORIGIN/../lib64:$ORIGIN/../lib` RPATHs on installed dynamic binaries.
+Run `./strip_pre_built` after adding binaries or libraries to remove debug
+symbols and recompress the vendored payloads.
 
 Optional corporate/site add-ons can be chained after the global install:
 ```bash

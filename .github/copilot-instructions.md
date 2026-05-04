@@ -85,6 +85,7 @@ Pre-built Linux binaries live under `pre_built/<platform>/`, using names like
 `~/.local/bin` and `lib64/*.gz` to `~/.local/lib64`, then uses vendored
 `patchelf` to set `$ORIGIN/../lib64:$ORIGIN/../lib` RPATHs on dynamic binaries
 and runs `ldd` to warn about missing `.so` dependencies.
+Use `./strip_pre_built` after adding pre-built binaries or libraries.
 
 ### Bundled Plugins
 

@@ -1,0 +1,107 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+usage() {
+    cat <<EOF
+Usage: $0 [OPTIONS]
+
+Decompress pre_built/**/*.gz ELF payloads, run strip, and recompress them.
+
+Options:
+  --dry-run         Show what would be stripped without rewriting files.
+  --strip <path>    Use a specific strip executable. Default: strip from PATH.
+  --help, -h        Show this help message.
+EOF
+}
+
+dry_run=0
+strip_bin="${STRIP:-strip}"
+
+while [[ $# -gt 0 ]]; do
+    case "$1" in
+    --dry-run)
+        dry_run=1
+        shift
+        ;;
+    --strip)
+        if [[ -z "${2:-}" ]]; then
+            echo "Error: --strip requires a path" >&2
+            exit 1
+        fi
+        strip_bin="$2"
+        shift 2
+        ;;
+    --help | -h)
+        usage
+        exit 0
+        ;;
+    *)
+        echo "Unknown option: $1" >&2
+        usage >&2
+        exit 1
+        ;;
+    esac
+done
+
+if ! command -v gzip >/dev/null; then
+    echo "Error: gzip is required" >&2
+    exit 1
+fi
+
+if ! command -v file >/dev/null; then
+    echo "Error: file is required" >&2
+    exit 1
+fi
+
+if ! command -v "$strip_bin" >/dev/null; then
+    echo "Error: strip executable not found: $strip_bin" >&2
+    exit 1
+fi
+
+script_dir=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
+prebuilt_dir="$script_dir/pre_built"
+
+if [[ ! -d "$prebuilt_dir" ]]; then
+    echo "No pre_built directory found"
+    exit 0
+fi
+
+tmp_dir=$(mktemp -d /tmp/dotfiles-strip-pre-built.XXXXXX)
+trap 'rm -rf "$tmp_dir"' EXIT
+
+processed=0
+stripped=0
+skipped=0
+
+while IFS= read -r -d '' gz_file; do
+    processed=$((processed + 1))
+    payload="$tmp_dir/$(basename "${gz_file%.gz}")"
+    before_size=$(stat -c %s "$gz_file")
+    before_mode=$(stat -c %a "$gz_file")
+
+    gzip -cd "$gz_file" > "$payload"
+
+    if ! file -b "$payload" | grep -q 'ELF'; then
+        echo "skip non-ELF: $gz_file"
+        skipped=$((skipped + 1))
+        rm -f "$payload"
+        continue
+    fi
+
+    if [[ "$dry_run" == "1" ]]; then
+        echo "would strip: $gz_file"
+        rm -f "$payload"
+        continue
+    fi
+
+    "$strip_bin" --strip-all "$payload"
+    gzip -n -9 < "$payload" > "$gz_file.tmp"
+    chmod "$before_mode" "$gz_file.tmp"
+    mv "$gz_file.tmp" "$gz_file"
+    after_size=$(stat -c %s "$gz_file")
+    echo "stripped: $gz_file ($before_size -> $after_size bytes)"
+    stripped=$((stripped + 1))
+    rm -f "$payload"
+done < <(find "$prebuilt_dir" -type f -name '*.gz' -print0 | sort -z)
+
+echo "Processed: $processed, stripped: $stripped, skipped: $skipped"
