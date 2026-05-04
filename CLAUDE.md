@@ -49,7 +49,7 @@ cp hooks/* .git/hooks/ && chmod +x .git/hooks/*
 
 ```
 bash/
-  bashrc                    - Main entry point → ~/.bashrc and ~/.profile
+  bashrc                    - Main entry point → ~/.bashrc, ~/.bash_profile, ~/.bash_login, and ~/.profile
   functions.sh              - Shared functions loaded before any layer (path_*, is_truthy, etc.)
   global/                   - Canonical config (upstream here, don't modify locally)
     config.sh               - cfg_* preference variables and defaults
@@ -88,7 +88,7 @@ editorconfig/
   editorconfig              - → ~/.editorconfig
 
 starship/
-  starship.toml             - Starship prompt config
+  starship.toml             - Starship prompt config → ~/.config/starship/starship.toml
 
 powershell/
   Microsoft.PowerShell_profile.ps1  - PowerShell profile (aliases, coreutils wrappers, PSReadLine, Starship, zoxide, PSFzf, Invoke-PatchDOSStub)
@@ -112,10 +112,11 @@ tests/install_linux_tmp_home - Runs Linux installer against a temp HOME for fres
 ## Installation Details
 
 **Production mode** (default, no flags): Copies files from repo — no symlinks to the repo remain. Re-run `./install` after repo changes to update.
+The Linux installer resolves the repo from the `install` script path, so it can be run from any current working directory.
 
 **Links mode** (`--links`): File/directory-level symlinks to specific repo paths. `~/.config/bash/global` → `repo/bash/global`, `~/.config/nvim/init.lua` → `repo/nvim/init.lua`, etc. Changes in the repo take effect immediately without reinstalling.
 
-**Dev mode** (`--dev`): Directory-level symlinks for nvim/vim/tmux/editorconfig (e.g. `~/.config/nvim` → `repo/nvim`). For bash, symlinks the individual repo-managed files (`global/`, `functions.sh`, `bashrc`) while leaving user layer dirs (`corp/`, `site/`, etc.) in place as real directories. Skips backups.
+**Dev mode** (`--dev`): Directory-level symlinks for nvim/vim/tmux/starship/editorconfig (e.g. `~/.config/nvim` → `repo/nvim`). For bash, symlinks the individual repo-managed files (`global/`, `functions.sh`, `bashrc`) while leaving user layer dirs (`corp/`, `site/`, etc.) in place as real directories. Skips backups.
 
 **No-backup mode** (`--no-backup`): Skips creating a backup before installing. Useful for clean reinstalls or automated use.
 
@@ -123,7 +124,9 @@ tests/install_linux_tmp_home - Runs Linux installer against a temp HOME for fres
 
 **Post-install hook** (`--post-install-hook <script>`): Runs an explicit add-on script with `bash` after global install steps and optional `--dev` git hooks, before automatic layer `install.sh` scripts are sourced. The hook path is resolved before the installer changes to `$HOME`. Hook failure fails the installer. Environment passed to the hook: `DOTFILES_REPO`, `DOTFILES_HOME`, `DOTFILES_MODE` (`copy`, `links`, or `dev`), `DOTFILES_NO_BACKUP`, `DOTFILES_NO_FONTS`.
 
-**Font behavior**: Linux installer extracts vendored fonts from `vendor/fonts/*.zip` into `~/.local/share/fonts`. Large archives can be stored as split chunks named `*.zip.part-000`, `*.zip.part-001`, etc.; use 45 MiB chunks to stay below GitHub's 50 MB warning threshold. The installer rejoins them under `/tmp/dotfiles-fonts.*` before extraction. It generates `fonts.scale`/`fonts.dir` when `mkfontscale`/`mkfontdir` are present and refreshes fontconfig with `fc-cache`. Font discovery is fontconfig-first for normal Linux desktop apps, WSLg, and RHEL/Alma 8. Do not add `xset +fp` startup logic; X core font paths can fail when `$HOME` is not traversable by the X server. Windows Terminal reads fonts from Windows, not WSL fontconfig.
+**Font behavior**: Linux installer extracts vendored fonts from top-level `fonts/*.zip` into `~/.local/share/fonts`. Large archives can be stored as split chunks named `*.zip.part-000`, `*.zip.part-001`, etc.; use 45 MiB chunks to stay below GitHub's 50 MB warning threshold. The installer rejoins them under `/tmp/dotfiles-fonts.*` before extraction. It generates `fonts.scale`/`fonts.dir` when `mkfontscale`/`mkfontdir` are present and refreshes fontconfig with `fc-cache`. Font discovery is fontconfig-first for normal Linux desktop apps, WSLg, and RHEL/Alma 8. Do not add `xset +fp` startup logic; X core font paths can fail when `$HOME` is not traversable by the X server. Windows Terminal reads fonts from Windows, not WSL fontconfig.
+
+**Pre-built binary behavior**: Linux installer selects `pre_built/<platform>/` based on OS family, architecture, and libc. Preferred platform names are exact and ABI-oriented, for example `el8.x86_64.glibc2p28`. Files under `bin/*.gz` are decompressed to `~/.local/bin` and marked executable. Files under `lib64/*.gz` are decompressed to `~/.local/lib64`. The installer uses vendored `patchelf` from that same `bin/` set to patch dynamic executables with `RPATH=$ORIGIN/../lib64:$ORIGIN/../lib`, so binaries can find vendored shared libraries without global `LD_LIBRARY_PATH`. It then runs `ldd` on installed binaries and warns about missing `.so` dependencies. If no exact platform exists, the installer may use a compatible same-arch glibc build whose glibc version is not newer than the host.
 
 **Tree-sitter parser behavior**: Offline support targets Neovim v0.12+ only. The installer copies vendored `nvim-treesitter` and `treesitter-parser-registry` into `~/.local/share/nvim/dotfiles/vendor/`, then looks for prebuilt artifacts under `treesitter/prebuilt/$(uname -s lower)-$(uname -m)-<glibc|musl>/` and copies `parser/`, `parser-info/`, `queries/`, `registry/`, and `build-info/` into `~/.local/share/nvim/tree-sitter-parsers/`. Neovim appends that parser directory to `runtimepath` and starts native Tree-sitter on filetype buffers. Build all supported parsers with `./treesitter/build_parsers`; prebuilt `.so`, parser-info, queries, registry cache, and `build-info/*.env` are tracked.
 
@@ -133,13 +136,13 @@ Backups intentionally exclude font files (`*.ttf`, `*.otf`, `*.pcf`, `*.bdf`, `*
 **Tmux plugin behavior**: All bundled plugins are always copied/linked from the repo. Run `./update_tmux_plugins` to re-clone them from GitHub (pre-commit hook strips `.git` dirs on next commit).
 
 **Linux symlink map:**
-- `~/.bashrc` → `~/.config/bash/bashrc` → `repo/bash/bashrc`
-- `~/.profile` → same as above
+- `~/.bashrc`, `~/.bash_profile`, `~/.bash_login`, `~/.profile` → `~/.config/bash/bashrc` → `repo/bash/bashrc`
 - `~/.vimrc` → `~/.config/vim/vimrc`
 - `~/.vim` → `~/.config/vim/vim`
 - `~/.tmux.conf` → `~/.config/tmux/tmux.conf`
 - `~/.tmux` → `~/.config/tmux/tmux`
 - `~/.editorconfig` → `~/.config/editorconfig/editorconfig`
+- `~/.config/starship/starship.toml` ← `repo/starship/starship.toml`
 
 **Windows copy destinations** (files are copied, not symlinked — re-run `.\install.ps1` after repo changes):
 - `%LOCALAPPDATA%\nvim` ← `repo/nvim`

@@ -173,8 +173,8 @@ if command -v fzf >&/dev/null && is_truthy $cfg_enable_fzf; then
 fi
 
 set_prompt() {
-    local include_host="$1"
-    local prompt_color="$cfg_prompt_color_normal"
+    local include_host=$cfg_prompt_include_host
+    local prompt_color=$cfg_prompt_color_normal
     local prompt_joined=""
     local prompt_parts=()
 
@@ -201,9 +201,12 @@ set_prompt() {
     #PROMPT_COMMAND="printf '$BOLD$CYAN'"'; history -a; echo $(realpath .); '"printf '$NORMAL'"
 
     PS1="${PROMPT_YELLOW}\$(get_prompt_uid)${prompt_color}\$ ${PROMPT_WHITE}"
+    export PROMPT_COMMAND="/bin/stty '$(stty -g)'"
 }
 unset PROMPT_COMMAND
 if is_truthy $cfg_enable_starship && command -v starship >/dev/null; then
+    # Default location is $HOME/.config/starship.toml
+    export STARSHIP_CONFIG="$HOME/.config/starship/starship.toml"
     eval "$(starship init bash)"
     # Sometimes, ctrl-c killing a process leaves the the -echo stty option enabled, which
     # makes it so that you can't see the text you're typeing (like when entering a pw).
@@ -211,7 +214,7 @@ if is_truthy $cfg_enable_starship && command -v starship >/dev/null; then
     /bin/stty sane
     export PROMPT_COMMAND="/bin/stty '$(stty -g)';$PROMPT_COMMAND"
 else
-    set_prompt "$cfg_prompt_include_host"
+    set_prompt
 fi
 
 # Disable ctrl-s terminal pausing

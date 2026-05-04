@@ -16,7 +16,7 @@ without modification and overridden without forking.
 | **Tmux** | Bundled plugins (resurrect, continuum, better-mouse-mode), `Ctrl-\` prefix |
 | **PowerShell** | Aliases, Unix coreutils wrappers, PSReadLine, Starship, zoxide, PSFzf |
 | **WezTerm** | Terminal config |
-| **Starship** | Cross-shell prompt config |
+| **Starship** | Cross-shell prompt config installed to `~/.config/starship/starship.toml` |
 | **AutoHotKey** | Flat AHK script with optional features enabled via `dotkeys_config.toml` |
 | **EditorConfig** | Consistent formatting across editors |
 
@@ -43,14 +43,22 @@ every preference is a `cfg_*` variable you can override in your user layer.
 ```bash
 ./install
 ```
+The Linux installer can be invoked from outside the repo root.
 
-Vendored Nerd Fonts are installed to `~/.local/share/fonts` and refreshed with
+Vendored Nerd Fonts from top-level `fonts/` are installed to
+`~/.local/share/fonts` and refreshed with
 fontconfig (`fc-cache`) when available. This works for normal Linux desktop
 apps on RedHat/Alma/RHEL 8 and for WSLg Linux GUI apps. Windows Terminal reads
 fonts from Windows, so WSL terminal fonts must also be installed on the Windows
 side. Large font archives may be stored as `*.zip.part-*`; the installer
 rejoins them in `/tmp` before extracting. Use `./install --no-fonts` to skip
 font installation.
+
+Platform-matched pre-built Linux binaries from `pre_built/<platform>/bin/*.gz`
+are decompressed into `~/.local/bin`; matching `lib64/*.gz` files go to
+`~/.local/lib64`. Platform directories use names like
+`el8.x86_64.glibc2p28`. The installer uses vendored `patchelf` to set
+`$ORIGIN/../lib64:$ORIGIN/../lib` RPATHs on installed dynamic binaries.
 
 Optional corporate/site add-ons can be chained after the global install:
 ```bash

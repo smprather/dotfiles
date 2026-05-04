@@ -26,7 +26,8 @@ XDG_CACHE_HOME=/tmp/codex-nvim-cache XDG_STATE_HOME=/tmp/codex-nvim-state nvim -
 
 - Do not use `xset +fp ~/.local/share/fonts` from shell startup. Even with valid `fonts.dir`, X may reject user-home paths such as `/home/mylesp` when the home directory is `700`. Use fontconfig (`fc-cache`) for modern Linux apps and WSLg.
 - Vendored fonts belong in `~/.local/share/fonts`. Generate `fonts.scale`/`fonts.dir` when `mkfontscale`/`mkfontdir` exist, but rely on `fc-cache` for actual desktop app discovery.
-- Font archives over normal GitHub size limits should be split as `vendor/fonts/Name.zip.part-000`, `Name.zip.part-001`, etc. The installer rejoins split archives under `/tmp` before unzipping. Use 45 MiB chunks to stay below GitHub's 50 MB warning threshold.
+- Font archives live under top-level `fonts/`. Archives over normal GitHub size limits should be split as `fonts/Name.zip.part-000`, `Name.zip.part-001`, etc. The installer rejoins split archives under `/tmp` before unzipping. Use 45 MiB chunks to stay below GitHub's 50 MB warning threshold.
+- Pre-built Linux binaries live under `pre_built/<platform>/`, for example `pre_built/el8.x86_64.glibc2p28/`. Installer decompresses `bin/*.gz` to `~/.local/bin` and `lib64/*.gz` to `~/.local/lib64`, then uses vendored `patchelf` to set `RPATH=$ORIGIN/../lib64:$ORIGIN/../lib` on dynamic executables. Prefer this over global `LD_LIBRARY_PATH`. Installer runs `ldd` afterward and warns about missing `.so` dependencies.
 - WSL Windows Terminal does not read WSL fontconfig. Fonts must also be installed on the Windows side for Windows Terminal UI selection.
 - Do not backup font files during pre-install backups; vendored Nerd Font archives are large. Backup uses `rsync` with font-extension excludes.
 - `Snacks.nvim` provides the no-argument Neovim dashboard. Its dashboard buffer has filetype `snacks_dashboard`.
@@ -35,3 +36,6 @@ XDG_CACHE_HOME=/tmp/codex-nvim-cache XDG_STATE_HOME=/tmp/codex-nvim-state nvim -
 - `tests/install_linux_tmp_home` simulates a fresh Linux user by running the real installer with a temp `HOME`, temp XDG cache/state dirs, `--no-backup`, and `--no-fonts`, then smoke-tests offline Tree-sitter with headless Neovim.
 - Project Codex config lives in `.codex/config.toml`; this project sets `approval_policy = "never"` and default caveman full style through `developer_instructions`.
 - Corp/site/user add-ons can be invoked explicitly with `./install --post-install-hook <script>`. The hook runs after global install steps and optional `--dev` git hooks, before automatic layer `install.sh` scripts, with `DOTFILES_*` environment variables.
+- Linux installer manages Starship at `~/.config/starship/starship.toml`; dev mode symlinks the `starship/` directory.
+- Linux installer resolves the repo from `${BASH_SOURCE[0]}` and must work when invoked from outside the repo root; `tests/install_linux_tmp_home` runs it from `/tmp` to catch regressions.
+- Bash startup converges `~/.bashrc`, `~/.bash_profile`, `~/.bash_login`, and `~/.profile` onto `~/.config/bash/bashrc`. Keep the non-exported `DOTFILES_BASHRC_SOURCED` guard so accidental double-sourcing in one shell returns immediately without blocking exec into a preferred bash.

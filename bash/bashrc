@@ -14,6 +14,11 @@ set +x
 #exec 2> ~/bashrc.log
 #exec 1> ~/bashrc.log
 
+if [[ "${DOTFILES_BASHRC_SOURCED:-0}" == "1" ]]; then
+    return 0 2>/dev/null || exit 0
+fi
+DOTFILES_BASHRC_SOURCED=1
+
 # Start with a clean slate: clear all aliases and functions.
 # Preserve inherited PATH when present; otherwise use a minimal fallback.
 if [[ -z "${PATH:-}" ]]; then

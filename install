@@ -173,7 +173,7 @@ mkdirn() {
 
 # Install a file or directory from the repo.
 # --links mode: symlink to repo. Default: copy (no repo reference remains).
-# Local convenience symlinks (.bashrc -> .config/bash/bashrc) use lns directly.
+# Local convenience symlinks (.bashrc/.bash_profile/.bash_login/.profile -> .config/bash/bashrc) use lns directly.
 inst() {
     local src="$1"
     local dest="$2"
@@ -231,6 +231,131 @@ treesitter_platform_id() {
     echo "${os}-${arch}-${libc}"
 }
 
+glibc_version_id() {
+    local version
+
+    version=$(getconf GNU_LIBC_VERSION 2>/dev/null | awk '{print $2}')
+    if [[ -z "$version" ]]; then
+        version=$(ldd --version 2>&1 | grep -Eo '[0-9]+\.[0-9]+' | head -n 1)
+    fi
+
+    echo "$version"
+}
+
+glibc_version_num() {
+    local version="$1"
+    local major
+    local minor
+
+    major="${version%%.*}"
+    minor="${version#*.}"
+    minor="${minor%%[^0-9]*}"
+
+    if [[ "$major" =~ ^[0-9]+$ && "$minor" =~ ^[0-9]+$ ]]; then
+        echo $((major * 1000 + minor))
+    else
+        echo 0
+    fi
+}
+
+prebuilt_exact_platform_ids() {
+    local arch
+    local glibc_version
+    local glibc_id
+    local el_id=""
+    local id=""
+    local id_like=""
+    local version_id=""
+    local platform_id=""
+
+    arch=$(uname -m)
+    if ldd --version 2>&1 | grep -qi musl; then
+        echo "linux.$arch.musl"
+        echo "linux-$arch-musl"
+        return 0
+    fi
+
+    glibc_version=$(glibc_version_id)
+    glibc_id="glibc${glibc_version//./p}"
+
+    if [[ -r /etc/os-release ]]; then
+        # shellcheck disable=SC1091
+        . /etc/os-release
+        id="${ID:-}"
+        id_like="${ID_LIKE:-}"
+        version_id="${VERSION_ID:-}"
+        platform_id="${PLATFORM_ID:-}"
+    fi
+
+    if [[ "$platform_id" == platform:el* ]]; then
+        el_id="${platform_id#platform:}"
+    elif [[ " $id $id_like " == *" rhel "* || " $id $id_like " == *" centos "* || \
+        " $id $id_like " == *" almalinux "* || " $id $id_like " == *" rocky "* || \
+        " $id $id_like " == *" ol "* ]]; then
+        el_id="el${version_id%%.*}"
+    fi
+
+    if [[ -n "$el_id" && -n "$glibc_version" ]]; then
+        echo "$el_id.$arch.$glibc_id"
+    fi
+    if [[ -n "$glibc_version" ]]; then
+        echo "linux.$arch.$glibc_id"
+    fi
+    echo "linux.$arch.glibc"
+    echo "linux-$arch-glibc"
+}
+
+select_prebuilt_platform_dir() {
+    local root_dir="$1"
+    local candidate
+    local dir
+    local base
+    local arch
+    local host_glibc
+    local host_glibc_num
+    local build_glibc
+    local build_glibc_num
+    local best_dir=""
+    local best_glibc_num=0
+
+    for candidate in $(prebuilt_exact_platform_ids); do
+        if [[ -d "$root_dir/$candidate" ]]; then
+            echo "$root_dir/$candidate"
+            return 0
+        fi
+    done
+
+    arch=$(uname -m)
+    host_glibc=$(glibc_version_id)
+    host_glibc_num=$(glibc_version_num "$host_glibc")
+    if [[ "$host_glibc_num" -eq 0 ]]; then
+        return 1
+    fi
+
+    for dir in "$root_dir"/el*."$arch".glibc*p* "$root_dir"/linux."$arch".glibc*p*; do
+        if [[ ! -d "$dir" ]]; then
+            continue
+        fi
+
+        base=$(basename "$dir")
+        if [[ "$base" =~ \.glibc([0-9]+)p([0-9]+)$ ]]; then
+            build_glibc="${BASH_REMATCH[1]}.${BASH_REMATCH[2]}"
+            build_glibc_num=$(glibc_version_num "$build_glibc")
+            if [[ "$build_glibc_num" -le "$host_glibc_num" && "$build_glibc_num" -gt "$best_glibc_num" ]]; then
+                best_glibc_num="$build_glibc_num"
+                best_dir="$dir"
+            fi
+        fi
+    done
+
+    if [[ -n "$best_dir" ]]; then
+        echo "$best_dir"
+        return 0
+    fi
+
+    return 1
+}
+
 install_mode() {
     if [[ "$dev_mode" == "1" ]]; then
         echo "dev"
@@ -241,8 +366,122 @@ install_mode() {
     fi
 }
 
+install_prebuilt_binaries() {
+    local root_dir="$repo_dir/pre_built"
+    local src_dir
+    local gz_file
+    local dest_file
+    local dest_bin_dir="$HOME/.local/bin"
+    local dest_lib64_dir="$HOME/.local/lib64"
+
+    echo "Installing pre-built binaries..."
+    if [[ ! -d "$root_dir" ]]; then
+        echo "  No pre_built directory found, skipping"
+        return 0
+    fi
+
+    if ! command -v gzip >/dev/null; then
+        echo "  Warning: gzip is not available; skipping pre-built binary installation"
+        return 0
+    fi
+
+    if ! src_dir=$(select_prebuilt_platform_dir "$root_dir"); then
+        echo "  No matching pre-built platform found, skipping"
+        echo "  Checked: $(prebuilt_exact_platform_ids | paste -sd ' ' -)"
+        return 0
+    fi
+
+    if [[ -d "$src_dir/bin" ]]; then
+        mkdir -p "$dest_bin_dir"
+        for gz_file in "$src_dir"/bin/*.gz; do
+            if [[ ! -e "$gz_file" ]]; then
+                continue
+            fi
+
+            dest_file="$dest_bin_dir/$(basename "${gz_file%.gz}")"
+            gzip -cd "$gz_file" > "$dest_file"
+            chmod 755 "$dest_file"
+            echo "  gzip: $gz_file -> $dest_file"
+        done
+    fi
+
+    if [[ -d "$src_dir/lib64" ]]; then
+        mkdir -p "$dest_lib64_dir"
+        for gz_file in "$src_dir"/lib64/*.gz; do
+            if [[ ! -e "$gz_file" ]]; then
+                continue
+            fi
+
+            dest_file="$dest_lib64_dir/$(basename "${gz_file%.gz}")"
+            gzip -cd "$gz_file" > "$dest_file"
+            chmod 644 "$dest_file"
+            echo "  gzip: $gz_file -> $dest_file"
+        done
+    fi
+
+    patch_prebuilt_binary_rpaths "$dest_bin_dir"
+    check_prebuilt_binary_dependencies "$dest_bin_dir"
+    echo "  Installed: $src_dir/ -> $HOME/.local/"
+}
+
+patch_prebuilt_binary_rpaths() {
+    local dest_bin_dir="$1"
+    local patchelf="$dest_bin_dir/patchelf"
+    local binary
+    local rpath='$ORIGIN/../lib64:$ORIGIN/../lib'
+
+    if [[ ! -x "$patchelf" ]]; then
+        echo "  Warning: vendored patchelf not installed; skipping pre-built binary RPATH patching"
+        return 0
+    fi
+
+    for binary in "$dest_bin_dir"/*; do
+        if [[ ! -f "$binary" || ! -x "$binary" ]]; then
+            continue
+        fi
+        if [[ "$binary" == "$patchelf" ]]; then
+            continue
+        fi
+
+        if "$patchelf" --print-interpreter "$binary" >/dev/null 2>&1; then
+            "$patchelf" --set-rpath "$rpath" "$binary" || {
+                echo "  Warning: failed to patch RPATH for $binary"
+                continue
+            }
+            echo "  patchelf: set RPATH on $binary to $rpath"
+        fi
+    done
+}
+
+check_prebuilt_binary_dependencies() {
+    local dest_bin_dir="$1"
+    local binary
+    local missing=0
+
+    if ! command -v ldd >/dev/null; then
+        echo "  Warning: ldd is not available; skipping pre-built dependency check"
+        return 0
+    fi
+
+    for binary in "$dest_bin_dir"/*; do
+        if [[ ! -f "$binary" || ! -x "$binary" ]]; then
+            continue
+        fi
+
+        if ldd "$binary" 2>/dev/null | grep -q 'not found'; then
+            echo "  Warning: missing shared libraries for $binary"
+            ldd "$binary" 2>/dev/null | awk '/not found/ { print "    " $1 }'
+            missing=1
+        fi
+    done
+
+    if [[ "$missing" == "0" ]]; then
+        echo "  Shared library check OK"
+    fi
+}
+
 install_fonts() {
-    local vendor_fonts_dir="$repo_dir/vendor/fonts"
+    local vendor_fonts_dir="$repo_dir/fonts"
     local user_fonts_dir="$HOME/.local/share/fonts"
     local tmp_font_dir=""
 
@@ -400,8 +639,8 @@ if [[ -n "$restore_backup" ]]; then
         rm -fr ~/.config/bash/global
         rm -f ~/.config/bash/functions.sh ~/.config/bash/README.md ~/.config/bash/bashrc
     fi
-    for item in ~/.bashrc ~/.profile ~/.vimrc ~/.tmux.conf ~/.editorconfig ~/.tmux ~/.vim \
-        ~/.config/nvim ~/.config/tmux ~/.config/editorconfig ~/.config/vim; do
+    for item in ~/.bashrc ~/.bash_profile ~/.bash_login ~/.profile ~/.vimrc ~/.tmux.conf ~/.editorconfig ~/.tmux ~/.vim \
+        ~/.config/nvim ~/.config/tmux ~/.config/editorconfig ~/.config/starship ~/.config/vim; do
         if [[ -e "$item" || -L "$item" ]]; then
             echo "  Removing: $item"
             if [[ -L "$item" ]]; then rm -f "$item"; else rm -rf "$item"; fi
@@ -427,7 +666,8 @@ fi
 
 # --- Main ---
 
-repo_dir=$(git rev-parse --show-toplevel)
+script_dir=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
+repo_dir="$script_dir"
 echo "Dotfiles repo base directory: $repo_dir"
 
 if [[ -n "$post_install_hook" ]]; then
@@ -450,6 +690,8 @@ if [[ "$dev_mode" != "1" && "$no_backup" != "1" ]]; then
 
     for x in \
         .bashrc \
+        .bash_profile \
+        .bash_login \
         .profile \
         .vimrc \
         .vim \
@@ -463,6 +705,7 @@ if [[ "$dev_mode" != "1" && "$no_backup" != "1" ]]; then
         .config/bash/README.md \
         .config/bash/bashrc \
         .config/tmux \
+        .config/starship \
         .config/editorconfig; do
 
         if [[ ! -e "$x" && ! -L "$x" ]]; then
@@ -493,6 +736,7 @@ if [[ "$dev_mode" == "1" ]]; then
         nvim \
         vim \
         tmux \
+        starship \
         editorconfig; do
 
         rm -fr .config/$config_dir
@@ -526,8 +770,10 @@ if [[ "$dev_mode" == "1" ]]; then
     lns --verbose $repo_dir/bash/functions.sh .config/bash/functions.sh
     lns --verbose $repo_dir/bash/README.md .config/bash/README.md
     lns --verbose $repo_dir/bash/bashrc .config/bash/bashrc
-    lns --verbose .config/bash/bashrc .profile
     lns --verbose .config/bash/bashrc .bashrc
+    lns --verbose .config/bash/bashrc .bash_profile
+    lns --verbose .config/bash/bashrc .bash_login
+    lns --verbose .config/bash/bashrc .profile
     lns --verbose .config/vim/vimrc .vimrc
     lns --verbose .config/vim/vim .vim
     lns --verbose .config/tmux/tmux.conf .tmux.conf
@@ -535,7 +781,7 @@ if [[ "$dev_mode" == "1" ]]; then
     lns --verbose .config/editorconfig/editorconfig .editorconfig
 else
     ### BASH ###
-    rm -f .bashrc .profile
+    rm -f .bashrc .bash_profile .bash_login .profile
     # If .config/bash is an old directory-level symlink, replace it with
     # a real directory (copying user layer dirs out first).
     if [[ -L .config/bash ]]; then
@@ -561,6 +807,8 @@ else
     inst $repo_dir/bash/README.md .config/bash/README.md
     inst $repo_dir/bash/bashrc .config/bash/bashrc
     lns --verbose .config/bash/bashrc .bashrc
+    lns --verbose .config/bash/bashrc .bash_profile
+    lns --verbose .config/bash/bashrc .bash_login
     lns --verbose .config/bash/bashrc .profile
 
     ### NEOVIM ###
@@ -622,6 +870,10 @@ else
     mkdir -p .config/editorconfig
     inst $repo_dir/editorconfig/editorconfig .config/editorconfig/editorconfig
     lns --verbose .config/editorconfig/editorconfig .editorconfig
+
+    rm -fr .config/starship
+    mkdir -p .config/starship
+    inst $repo_dir/starship/starship.toml .config/starship/starship.toml
 fi
 
 if [[ "$no_fonts" != "1" ]]; then
@@ -630,6 +882,8 @@ else
     echo "Installing fonts..."
     echo "  Skipped (--no-fonts)"
 fi
+
+install_prebuilt_binaries
 
 install_nvim_treesitter_vendor
 install_treesitter_parsers

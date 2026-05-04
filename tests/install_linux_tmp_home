@@ -39,7 +39,8 @@ while [[ $# -gt 0 ]]; do
     esac
 done
 
-repo_dir=$(git rev-parse --show-toplevel)
+script_dir=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
+repo_dir=$(cd "$script_dir/.." && pwd)
 test_home=$(mktemp -d /tmp/dotfiles-install-home.XXXXXX)
 test_cache=$(mktemp -d /tmp/dotfiles-install-cache.XXXXXX)
 test_state=$(mktemp -d /tmp/dotfiles-install-state.XXXXXX)
@@ -77,12 +78,17 @@ if [[ "$with_fonts" != "1" ]]; then
 fi
 
 echo "Temp HOME: $test_home"
-HOME="$test_home" \
-    XDG_CACHE_HOME="$test_cache" \
-    XDG_STATE_HOME="$test_state" \
-    "$repo_dir/install" "${install_args[@]}"
+(
+    cd /tmp
+    HOME="$test_home" \
+        XDG_CACHE_HOME="$test_cache" \
+        XDG_STATE_HOME="$test_state" \
+        "$repo_dir/install" "${install_args[@]}"
+)
 
 assert_symlink "$test_home/.bashrc"
+assert_symlink "$test_home/.bash_profile"
+assert_symlink "$test_home/.bash_login"
 assert_symlink "$test_home/.profile"
 assert_symlink "$test_home/.vimrc"
 assert_symlink "$test_home/.tmux.conf"
@@ -91,6 +97,20 @@ assert_symlink "$test_home/.editorconfig"
 assert_exists "$test_home/.config/bash/bashrc"
 assert_exists "$test_home/.config/nvim/init.lua"
 assert_exists "$test_home/.config/tmux/tmux.conf"
+assert_exists "$test_home/.config/starship/starship.toml"
+if [[ -d "$repo_dir/pre_built/el8.x86_64.glibc2p28" ]]; then
+    assert_exists "$test_home/.local/bin/fd"
+    assert_exists "$test_home/.local/bin/eza"
+    assert_exists "$test_home/.local/bin/tmux"
+    assert_exists "$test_home/.local/bin/choose"
+    assert_exists "$test_home/.local/bin/patchelf"
+    assert_exists "$test_home/.local/lib64/libevent_core-2.1.so.6"
+    rpath=$("$test_home/.local/bin/patchelf" --print-rpath "$test_home/.local/bin/tmux")
+    if [[ "$rpath" != *'$ORIGIN/../lib64'* ]]; then
+        echo "Expected tmux RPATH to include vendored lib64 path, got: $rpath" >&2
+        exit 1
+    fi
+fi
 assert_exists "$test_home/.local/share/nvim/dotfiles/vendor/nvim-treesitter/lua/nvim-treesitter/init.lua"
 assert_exists "$test_home/.local/share/nvim/dotfiles/vendor/treesitter-parser-registry/registry.json"
 assert_exists "$test_home/.local/share/nvim/tree-sitter-parsers/parser/python.so"
