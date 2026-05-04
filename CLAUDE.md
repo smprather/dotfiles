@@ -102,7 +102,8 @@ autohotkey/
 hooks/
   pre-commit                - Removes embedded .git dirs before commits; installed by ./install --dev
 
-install                     - Linux installation script (bash)
+install                     - Linux installer Bash shim
+install.py                  - Python 3.6-compatible Linux installer implementation
 install-powershell-latest.ps1 - Windows PowerShell 5.1 bootstrapper for pwsh via winget
 install.ps1                 - Windows installation script (PowerShell)
 update_tmux_plugins         - Re-clones all tmux plugins listed in tmux.conf from GitHub (strips .git on next commit)
@@ -113,7 +114,7 @@ tests/install_linux_tmp_home - Runs Linux installer against a temp HOME for fres
 ## Installation Details
 
 **Production mode** (default, no flags): Copies files from repo — no symlinks to the repo remain. Re-run `./install` after repo changes to update.
-The Linux installer resolves the repo from the `install` script path, so it can be run from any current working directory.
+The Linux installer resolves the repo from the `install`/`install.py` script path, so it can be run from any current working directory. `./install` is a small Bash shim over the Python 3.6-compatible `install.py` implementation.
 
 **Links mode** (`--links`): File/directory-level symlinks to specific repo paths. `~/.config/bash/global` → `repo/bash/global`, `~/.config/nvim/init.lua` → `repo/nvim/init.lua`, etc. Changes in the repo take effect immediately without reinstalling.
 
@@ -123,7 +124,7 @@ The Linux installer resolves the repo from the `install` script path, so it can 
 
 **No-fonts mode** (`--no-fonts`): Skips extracting vendored Nerd Font archives into `~/.local/share/fonts` and skips font cache refresh.
 
-**Post-install hook** (`--post-install-hook <script>`): Runs an explicit add-on script with `bash` after global install steps and optional `--dev` git hooks, before automatic layer `install.sh` scripts are sourced. The hook path is resolved before the installer changes to `$HOME`. Hook failure fails the installer. Environment passed to the hook: `DOTFILES_REPO`, `DOTFILES_HOME`, `DOTFILES_MODE` (`copy`, `links`, or `dev`), `DOTFILES_NO_BACKUP`, `DOTFILES_NO_FONTS`.
+**Post-install hook** (`--post-install-hook <script>`): Runs explicit add-on scripts with `bash` after global install steps and optional `--dev` git hooks, before automatic layer `install.sh` scripts are sourced. The option can be provided multiple times; hooks run in argument order. Hook paths are resolved before the installer changes to `$HOME`. Hook failure fails the installer. Environment passed to each hook: `DOTFILES_REPO`, `DOTFILES_HOME`, `DOTFILES_MODE` (`copy`, `links`, or `dev`), `DOTFILES_BACKUP_DIR` (absolute current backup dir, or empty when backups are skipped), `DOTFILES_NO_BACKUP`, `DOTFILES_NO_FONTS`.
 
 **Font behavior**: Linux installer extracts vendored fonts from top-level `fonts/*.zip` into `~/.local/share/fonts`. Large archives can be stored as split chunks named `*.zip.part-000`, `*.zip.part-001`, etc.; use 45 MiB chunks to stay below GitHub's 50 MB warning threshold. The installer rejoins them under `/tmp/dotfiles-fonts.*` before extraction. It generates `fonts.scale`/`fonts.dir` when `mkfontscale`/`mkfontdir` are present and refreshes fontconfig with `fc-cache`. Font discovery is fontconfig-first for normal Linux desktop apps, WSLg, and RHEL/Alma 8. Do not add `xset +fp` startup logic; X core font paths can fail when `$HOME` is not traversable by the X server. Windows Terminal reads fonts from Windows, not WSL fontconfig.
 

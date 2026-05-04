@@ -43,7 +43,9 @@ every preference is a `cfg_*` variable you can override in your user layer.
 ```bash
 ./install
 ```
-The Linux installer can be invoked from outside the repo root.
+The Linux installer can be invoked from outside the repo root. `./install` is a
+small Bash shim that runs the Python 3.6-compatible implementation in
+`install.py`.
 
 Vendored Nerd Fonts from top-level `fonts/` are installed to
 `~/.local/share/fonts` and refreshed with
@@ -66,8 +68,10 @@ Optional corporate/site add-ons can be chained after the global install:
 ```bash
 ./install --post-install-hook ~/corp-dotfiles/install.sh
 ```
-The hook runs with `bash` and receives `DOTFILES_REPO`, `DOTFILES_HOME`,
-`DOTFILES_MODE`, `DOTFILES_NO_BACKUP`, and `DOTFILES_NO_FONTS`.
+`--post-install-hook` can be provided multiple times; hooks run in argument
+order. Each hook runs with `bash` and receives `DOTFILES_REPO`,
+`DOTFILES_HOME`, `DOTFILES_MODE`, `DOTFILES_BACKUP_DIR`,
+`DOTFILES_NO_BACKUP`, and `DOTFILES_NO_FONTS`.
 
 Vendored `nvim-treesitter`, the parser registry, and matching prebuilt
 Tree-sitter parsers/queries are installed for offline Neovim v0.12+ use.

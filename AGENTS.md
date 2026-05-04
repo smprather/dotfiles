@@ -16,7 +16,7 @@ Do this before staging the commit so the docs match the code being committed.
 
 This repository is offline-first, no-root dotfiles for EE Linux/Windows environments. Prefer changes that preserve RedHat/Alma/RHEL 7/8/9, Suse, WSL, Windows PowerShell, and locked-down corporate machines.
 
-Use `rg` first. Use `bash -n install` and `bash -n bash/global/bashrc` after shell edits. For Neovim config checks in this sandbox, use temporary writable state/cache dirs:
+Use `rg` first. Use `bash -n install`, `python3 -m py_compile install.py`, and `bash -n bash/global/bashrc` after installer/shell edits. For Neovim config checks in this sandbox, use temporary writable state/cache dirs:
 
 ```bash
 XDG_CACHE_HOME=/tmp/codex-nvim-cache XDG_STATE_HOME=/tmp/codex-nvim-state nvim --headless +qa
@@ -34,9 +34,9 @@ XDG_CACHE_HOME=/tmp/codex-nvim-cache XDG_STATE_HOME=/tmp/codex-nvim-state nvim -
 - `Snacks.nvim` provides the no-argument Neovim dashboard. Its dashboard buffer has filetype `snacks_dashboard`.
 - `mini.trailspace` highlights trailing whitespace via window-local matches. Disabling only by filetype can race with dashboard rendering. For Snacks dashboard, set `vim.b.minitrailspace_disable = true`, `list = false`, and delete existing `MiniTrailspace` matches on dashboard open/update.
 - Tree-sitter offline support targets Neovim v0.12+ only. Vendored `nvim-treesitter` and `treesitter-parser-registry` live under `treesitter/vendor/`; prebuilt parsers, parser-info, queries, and registry cache live under `treesitter/prebuilt/<platform>/`, where platform is `$(uname -s lower)-$(uname -m)-<glibc|musl>`. Build all supported parsers with `./treesitter/build_parsers`; installer copies vendor plugins to `~/.local/share/nvim/dotfiles/vendor/` and matching parser artifacts to `~/.local/share/nvim/tree-sitter-parsers/`.
-- `tests/install_linux_tmp_home` simulates a fresh Linux user by running the real installer with a temp `HOME`, temp XDG cache/state dirs, `--no-backup`, and `--no-fonts`, then smoke-tests offline Tree-sitter with headless Neovim.
+- `tests/install_linux_tmp_home` simulates a fresh Linux user by running the real installer with a temp `HOME`, temp XDG cache/state dirs, test `--post-install-hook` scripts, and `--no-fonts`, then smoke-tests offline Tree-sitter with headless Neovim.
 - Project Codex config lives in `.codex/config.toml`; this project sets `approval_policy = "never"` and default caveman full style through `developer_instructions`.
-- Corp/site/user add-ons can be invoked explicitly with `./install --post-install-hook <script>`. The hook runs after global install steps and optional `--dev` git hooks, before automatic layer `install.sh` scripts, with `DOTFILES_*` environment variables.
+- Corp/site/user add-ons can be invoked explicitly with `./install --post-install-hook <script>`. Multiple hooks are allowed and run in argument order. Hooks run after global install steps and optional `--dev` git hooks, before automatic layer `install.sh` scripts, with `DOTFILES_*` environment variables including `DOTFILES_BACKUP_DIR`.
 - Linux installer manages Starship at `~/.config/starship/starship.toml`; dev mode symlinks the `starship/` directory.
-- Linux installer resolves the repo from `${BASH_SOURCE[0]}` and must work when invoked from outside the repo root; `tests/install_linux_tmp_home` runs it from `/tmp` to catch regressions.
+- Linux installer is implemented in Python 3.6-compatible `install.py`; `install` is only a Bash shim. It resolves the repo from the script path and must work when invoked from outside the repo root; `tests/install_linux_tmp_home` runs it from `/tmp` to catch regressions.
 - Bash startup converges `~/.bashrc`, `~/.bash_profile`, `~/.bash_login`, and `~/.profile` onto `~/.config/bash/bashrc`. Keep the non-exported `DOTFILES_BASHRC_SOURCED` guard so accidental double-sourcing in one shell returns immediately without blocking exec into a preferred bash.
