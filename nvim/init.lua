@@ -1162,7 +1162,7 @@ require("lazy").setup({
             or nil,
         dependencies = {
             {
-                "nvim-treesitter/treesitter-parser-registry",
+                "neovim-treesitter/treesitter-parser-registry",
                 dir = vim.fn.isdirectory(vim.fn.stdpath("data") .. "/dotfiles/vendor/treesitter-parser-registry") == 1
                         and (vim.fn.stdpath("data") .. "/dotfiles/vendor/treesitter-parser-registry")
                     or nil,
