@@ -88,20 +88,6 @@ local function is_file_readable(path)
     end
 end
 
-local function is_directory_writable(dir_path)
-    local temp_file = dir_path .. "/test_writable.tmp"
-    local file, err = io.open(temp_file, "w")
-    if file then
-        file:close()
-        os.remove(temp_file)
-        return true
-    else
-        -- If opening failed, it likely means the directory is not writable.
-        -- (This approach also covers cases where the directory doesn't exist)
-        return false
-    end
-end
-
 local dpc = false
 local file = io.open("/proc/mounts", "r")
 if file then
@@ -1167,178 +1153,55 @@ require("lazy").setup({
     --     },
     -- },
 
-    { -- Highlight, edit, and navigate code
+    { -- Highlight code with Nvim's native Tree-sitter runtime and vendored parsers.
         "nvim-treesitter/nvim-treesitter",
-        build = ":TSUpdate",
-        main = "nvim-treesitter.configs", -- Sets MAIN module to use for opts
         cond = buf_smaller_than(10),
-        -- [[ Configure Treesitter ]] See `:help nvim-treesitter`
+        build = false,
+        dir = vim.fn.isdirectory(vim.fn.stdpath("data") .. "/dotfiles/vendor/nvim-treesitter") == 1
+                and (vim.fn.stdpath("data") .. "/dotfiles/vendor/nvim-treesitter")
+            or nil,
+        dependencies = {
+            {
+                "nvim-treesitter/treesitter-parser-registry",
+                dir = vim.fn.isdirectory(vim.fn.stdpath("data") .. "/dotfiles/vendor/treesitter-parser-registry") == 1
+                        and (vim.fn.stdpath("data") .. "/dotfiles/vendor/treesitter-parser-registry")
+                    or nil,
+            },
+        },
         config = function()
-            local treesitter = require("nvim-treesitter")
-
-            local parser_install_dir = vim.fn.stdpath("data") .. "/lazy/nvim-treesitter"
-            if not is_directory_writable(parser_install_dir) then
-                -- vim.notify("parser dir " .. parser_install_dir .. " is NOT writable")
-                -- Defines a read-write directory for treesitters in nvim's cache dir
-                local new_parser_install_dir = vim.fn.stdpath("cache") .. "/nvim-treesitter"
-                vim.fn.mkdir(parser_install_dir .. "/parser", "p")
-                vim.fn.system("rsync " .. parser_install_dir .. "/parser/* " .. new_parser_install_dir .. "/parser")
-                parser_install_dir = new_parser_install_dir
+            local parser_install_dir = vim.fn.stdpath("data") .. "/tree-sitter-parsers"
+            if vim.fn.isdirectory(parser_install_dir .. "/parser") == 1 then
                 vim.opt.runtimepath:append(parser_install_dir)
-                -- else
-                --   vim.notify("parser dir " .. parser_install_dir .. " is writable")
             end
 
-            treesitter.setup({
-                -- Autoinstall languages that are not installed
-                auto_install = not dpc,
-                highlight = {
-                    enable = true,
-                    -- Some languages depend on vim's regex highlighting system (such as Ruby) for indent rules.
-                    --  If you are experiencing weird indenting issues, add the language to
-                    --  the list of additional_vim_regex_highlighting and disabled languages for indent.
-                    disable = { "verilog" },
-                    additional_vim_regex_highlighting = { "ruby" },
-                },
-                parser_install_dir = parser_install_dir,
-                sync_install = not dpc,
-                indent = {
-                    enable = true,
-                    disable = { "tcl", "ruby", "yaml" },
-                },
-                -- enable autotagging (w/ nvim-ts-autotag plugin)
-                autotag = { enable = true },
-                ensure_installed = {
-                    "angular",
-                    "asm",
-                    "awk",
-                    "bash",
-                    "c",
-                    "c3",
-                    "c_sharp",
-                    "cairo",
-                    "clojure",
-                    "cmake",
-                    "cpp",
-                    "crystal",
-                    "css",
-                    "csv",
-                    "cuda",
-                    "d",
-                    "dart",
-                    "diff",
-                    "dockerfile",
-                    "doxygen",
-                    "editorconfig",
-                    "elixir",
-                    "elisp",
-                    "elm",
-                    "elvish",
-                    "fennel",
-                    "fish",
-                    "fortran",
-                    "forth",
-                    "fsharp",
-                    "func",
-                    "git_commit",
-                    "git_config",
-                    "git_rebase",
-                    "gitignore",
-                    "glimmer",
-                    "glimmer_javascript",
-                    "glimmer_typescript",
-                    "gnuplot",
-                    "go",
-                    "gomod",
-                    "gosum",
-                    "gotmpl",
-                    "gowork",
-                    "gpg",
-                    "graphql",
-                    "gren",
-                    "groovy",
-                    "hack",
-                    "haskell",
-                    "haskell_persistent",
-                    "haxe",
-                    "hjson",
-                    "html",
-                    "htmldjango",
-                    "http",
-                    "java",
-                    "javadoc",
-                    "javascript",
-                    "jinja2",
-                    "jq",
-                    "jpp",
-                    "jsdoc",
-                    "json",
-                    "json_schema",
-                    "julia",
-                    "just",
-                    "kcl",
-                    "koto",
-                    "kotlin",
-                    "latex",
-                    "llvm",
-                    "llvm_mir",
-                    "lua",
-                    "luadoc",
-                    "luau",
-                    "make",
-                    "markdown",
-                    "markdown_inline",
-                    "math",
-                    "matlab",
-                    "monkey",
-                    "nasm",
-                    "nginx",
-                    "nim",
-                    "nim_format_string",
-                    "ninja",
-                    "nix",
-                    "ocaml",
-                    "ocamllex",
-                    "odin",
-                    "ohm",
-                    "p4",
-                    "pascal",
-                    "perl",
-                    "php",
-                    "phpdoc",
-                    "pony",
-                    "powershell",
-                    "printf",
-                    "prolog",
-                    "python",
-                    "query",
-                    "ruby",
-                    "strace",
-                    "toml",
-                    "verilog",
-                    "vim",
-                    "vimdoc",
-                    "yaml",
-                    "zig",
-                },
-                -- Incremental selection based on the named nodes from the grammar.
-                incremental_selection = {
-                    enable = true,
-                    keymaps = {
-                        init_selection = "<C-space>",
-                        node_incremental = "<C-space>",
-                        scope_incremental = false,
-                        node_decremental = "<bs>",
-                    },
-                },
+            local ok, treesitter = pcall(require, "nvim-treesitter")
+            if ok then
+                treesitter.setup({ install_dir = parser_install_dir })
+            end
+
+            local disable_highlight = { verilog = true }
+            local disable_indent = { ruby = true, tcl = true, yaml = true }
+
+            vim.api.nvim_create_autocmd("FileType", {
+                group = vim.api.nvim_create_augroup("dotfiles_native_treesitter", { clear = true }),
+                callback = function(args)
+                    if vim.bo[args.buf].buftype ~= "" then
+                        return
+                    end
+
+                    local filetype = vim.bo[args.buf].filetype
+                    if filetype == "" or disable_highlight[filetype] then
+                        return
+                    end
+
+                    pcall(vim.treesitter.start, args.buf)
+
+                    if ok and not disable_indent[filetype] then
+                        vim.bo[args.buf].indentexpr = "v:lua.require'nvim-treesitter'.indentexpr()"
+                    end
+                end,
             })
         end,
-        -- There are additional nvim-treesitter modules that you can use to interact
-        -- with nvim-treesitter. You should go explore a few and see what interests you:
-        --
-        --    - Incremental selection: Included, see `:help nvim-treesitter-incremental-selection-mod`
-        --    - Show your current context: https://github.com/nvim-treesitter/nvim-treesitter-context
-        --    - Treesitter + textobjects: https://github.com/nvim-treesitter/nvim-treesitter-textobjects
     },
 
     -- The following comments only work if you have downloaded the kickstart repo, not just copy pasted the

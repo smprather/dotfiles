@@ -1,0 +1,116 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+usage() {
+    cat <<EOF
+Usage: $0 [OPTIONS]
+
+Run the Linux installer against a temporary HOME to simulate a fresh user.
+
+Options:
+  --keep-home       Print and keep the temp HOME after the test.
+  --with-fonts      Install vendored fonts too. Default skips fonts for speed.
+  --help, -h        Show this help message.
+EOF
+}
+
+keep_home=0
+with_fonts=0
+
+while [[ $# -gt 0 ]]; do
+    case "$1" in
+    --keep-home)
+        keep_home=1
+        shift
+        ;;
+    --with-fonts)
+        with_fonts=1
+        shift
+        ;;
+    --help | -h)
+        usage
+        exit 0
+        ;;
+    *)
+        echo "Unknown option: $1" >&2
+        usage >&2
+        exit 1
+        ;;
+    esac
+done
+
+repo_dir=$(git rev-parse --show-toplevel)
+test_home=$(mktemp -d /tmp/dotfiles-install-home.XXXXXX)
+test_cache=$(mktemp -d /tmp/dotfiles-install-cache.XXXXXX)
+test_state=$(mktemp -d /tmp/dotfiles-install-state.XXXXXX)
+
+cleanup() {
+    if [[ "$keep_home" == "1" ]]; then
+        echo "Kept temp HOME: $test_home"
+        echo "Kept XDG_CACHE_HOME: $test_cache"
+        echo "Kept XDG_STATE_HOME: $test_state"
+    else
+        rm -rf "$test_home" "$test_cache" "$test_state"
+    fi
+}
+trap cleanup EXIT
+
+assert_exists() {
+    local path="$1"
+    if [[ ! -e "$path" && ! -L "$path" ]]; then
+        echo "Missing expected path: $path" >&2
+        exit 1
+    fi
+}
+
+assert_symlink() {
+    local path="$1"
+    if [[ ! -L "$path" ]]; then
+        echo "Expected symlink: $path" >&2
+        exit 1
+    fi
+}
+
+install_args=(--no-backup)
+if [[ "$with_fonts" != "1" ]]; then
+    install_args+=(--no-fonts)
+fi
+
+echo "Temp HOME: $test_home"
+HOME="$test_home" \
+    XDG_CACHE_HOME="$test_cache" \
+    XDG_STATE_HOME="$test_state" \
+    "$repo_dir/install" "${install_args[@]}"
+
+assert_symlink "$test_home/.bashrc"
+assert_symlink "$test_home/.profile"
+assert_symlink "$test_home/.vimrc"
+assert_symlink "$test_home/.tmux.conf"
+assert_symlink "$test_home/.editorconfig"
+
+assert_exists "$test_home/.config/bash/bashrc"
+assert_exists "$test_home/.config/nvim/init.lua"
+assert_exists "$test_home/.config/tmux/tmux.conf"
+assert_exists "$test_home/.local/share/nvim/dotfiles/vendor/nvim-treesitter/lua/nvim-treesitter/init.lua"
+assert_exists "$test_home/.local/share/nvim/dotfiles/vendor/treesitter-parser-registry/registry.json"
+assert_exists "$test_home/.local/share/nvim/tree-sitter-parsers/parser/python.so"
+assert_exists "$test_home/.local/share/nvim/tree-sitter-parsers/queries/python/highlights.scm"
+assert_exists "$test_home/.local/share/nvim/tree-sitter-parsers/parser-info/python.lua"
+
+if command -v nvim >/dev/null; then
+    printf 'print("ok")\n' > "$test_home/tree-sitter-smoke.py"
+    HOME="$test_home" \
+        XDG_CACHE_HOME="$test_cache" \
+        XDG_STATE_HOME="$test_state" \
+        nvim --clean --headless -n "$test_home/tree-sitter-smoke.py" \
+        +"set runtimepath+=$test_home/.local/share/nvim/dotfiles/vendor/treesitter-parser-registry" \
+        +"set runtimepath+=$test_home/.local/share/nvim/dotfiles/vendor/nvim-treesitter" \
+        +"set runtimepath+=$test_home/.local/share/nvim/tree-sitter-parsers" \
+        +'lua require("nvim-treesitter").setup({ install_dir = vim.fn.stdpath("data") .. "/tree-sitter-parsers" }); vim.treesitter.start(0); vim.treesitter.get_parser(0, "python"):parse(); print("Tree-sitter smoke OK")' \
+        +qa
+    echo ""
+else
+    echo "nvim not found; skipped Tree-sitter runtime smoke"
+fi
+
+echo "Install temp-home smoke OK"

@@ -17,6 +17,7 @@ for potential_bin_dir in \
     ~/.venv/bin \
     ~/.opencode/bin \
     ~/node_modules/.bin \
+    ~/go/bin \
     ~/.local/bin; do
     path_prepend_if_dir $potential_bin_dir
 done
@@ -425,6 +426,8 @@ alias t='exec bash'
 alias hg='history | /bin/grep -i'
 if command -v fdfind >/dev/null; then
     alias fd="fdfind"
+    alias f='fdfind --exclude .snapshot --unrestricted --full-path'
+elif command -v fd >/dev/null && fd --help | /bin/grep -q sharkdp; then
     alias f='fd --exclude .snapshot --unrestricted --full-path'
 else
     alias f='find .'

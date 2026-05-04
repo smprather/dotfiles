@@ -35,7 +35,7 @@ Dotfiles for **Electrical Engineering work environments**: multi-platform (RedHa
 exec bash
 source ~/.bashrc
 
-# Manually install git hooks
+# Manually install repo-development git hooks
 cp hooks/* .git/hooks/ && chmod +x .git/hooks/*
 ```
 
@@ -70,6 +70,11 @@ nvim/
   lua/custom/plugins/init.lua  - User plugin customizations
   after/ftplugin/           - Filetype overrides (tcl, yaml)
 
+treesitter/
+  build_parsers             - Builds all vendored nvim-treesitter parsers
+  vendor/                   - Vendored nvim-treesitter and parser registry
+  prebuilt/<platform>/      - Tracked parser `.so` files, queries, build metadata
+
 vim/
   vimrc                     - Vim config → ~/.vimrc
   vim/pack/vendor/start/    - Auto-loaded plugins (nerdtree, SimpylFold, vim-liberty)
@@ -95,12 +100,13 @@ autohotkey/
   hotkeys.ahk               - Windows AutoHotKey flat script with installer-patched feature flags
 
 hooks/
-  pre-commit                - Removes embedded .git dirs before commits
+  pre-commit                - Removes embedded .git dirs before commits; installed by ./install --dev
 
 install                     - Linux installation script (bash)
 install-powershell-latest.ps1 - Windows PowerShell 5.1 bootstrapper for pwsh via winget
 install.ps1                 - Windows installation script (PowerShell)
 update_tmux_plugins         - Re-clones all tmux plugins listed in tmux.conf from GitHub (strips .git on next commit)
+tests/install_linux_tmp_home - Runs Linux installer against a temp HOME for fresh-user smoke testing
 ```
 
 ## Installation Details
@@ -115,9 +121,11 @@ update_tmux_plugins         - Re-clones all tmux plugins listed in tmux.conf fro
 
 **No-fonts mode** (`--no-fonts`): Skips extracting vendored Nerd Font archives into `~/.local/share/fonts` and skips font cache refresh.
 
-**Post-install hook** (`--post-install-hook <script>`): Runs an explicit add-on script with `bash` after global install steps and git hooks, before automatic layer `install.sh` scripts are sourced. The hook path is resolved before the installer changes to `$HOME`. Hook failure fails the installer. Environment passed to the hook: `DOTFILES_REPO`, `DOTFILES_HOME`, `DOTFILES_MODE` (`copy`, `links`, or `dev`), `DOTFILES_NO_BACKUP`, `DOTFILES_NO_FONTS`.
+**Post-install hook** (`--post-install-hook <script>`): Runs an explicit add-on script with `bash` after global install steps and optional `--dev` git hooks, before automatic layer `install.sh` scripts are sourced. The hook path is resolved before the installer changes to `$HOME`. Hook failure fails the installer. Environment passed to the hook: `DOTFILES_REPO`, `DOTFILES_HOME`, `DOTFILES_MODE` (`copy`, `links`, or `dev`), `DOTFILES_NO_BACKUP`, `DOTFILES_NO_FONTS`.
 
 **Font behavior**: Linux installer extracts vendored fonts from `vendor/fonts/*.zip` into `~/.local/share/fonts`. Large archives can be stored as split chunks named `*.zip.part-000`, `*.zip.part-001`, etc.; use 45 MiB chunks to stay below GitHub's 50 MB warning threshold. The installer rejoins them under `/tmp/dotfiles-fonts.*` before extraction. It generates `fonts.scale`/`fonts.dir` when `mkfontscale`/`mkfontdir` are present and refreshes fontconfig with `fc-cache`. Font discovery is fontconfig-first for normal Linux desktop apps, WSLg, and RHEL/Alma 8. Do not add `xset +fp` startup logic; X core font paths can fail when `$HOME` is not traversable by the X server. Windows Terminal reads fonts from Windows, not WSL fontconfig.
+
+**Tree-sitter parser behavior**: Offline support targets Neovim v0.12+ only. The installer copies vendored `nvim-treesitter` and `treesitter-parser-registry` into `~/.local/share/nvim/dotfiles/vendor/`, then looks for prebuilt artifacts under `treesitter/prebuilt/$(uname -s lower)-$(uname -m)-<glibc|musl>/` and copies `parser/`, `parser-info/`, `queries/`, `registry/`, and `build-info/` into `~/.local/share/nvim/tree-sitter-parsers/`. Neovim appends that parser directory to `runtimepath` and starts native Tree-sitter on filetype buffers. Build all supported parsers with `./treesitter/build_parsers`; prebuilt `.so`, parser-info, queries, registry cache, and `build-info/*.env` are tracked.
 
 **Backup behavior**: Numbered backups in `dotfiles_backups/backup.N/`. Skips files already pointing to the repo. Never overwrites existing backups.
 Backups intentionally exclude font files (`*.ttf`, `*.otf`, `*.pcf`, `*.bdf`, `*.woff`, `*.woff2`, etc.) because vendored Nerd Fonts are large and reproducible.

@@ -59,6 +59,21 @@ Optional corporate/site add-ons can be chained after the global install:
 The hook runs with `bash` and receives `DOTFILES_REPO`, `DOTFILES_HOME`,
 `DOTFILES_MODE`, `DOTFILES_NO_BACKUP`, and `DOTFILES_NO_FONTS`.
 
+Vendored `nvim-treesitter`, the parser registry, and matching prebuilt
+Tree-sitter parsers/queries are installed for offline Neovim v0.12+ use.
+Build or refresh the full parser set with `./treesitter/build_parsers`.
+
+Linux install smoke testing can simulate a fresh user by installing into a temp
+home:
+```bash
+./tests/install_linux_tmp_home
+```
+
+Repo git hooks are installed only in development mode:
+```bash
+./install --dev
+```
+
 **Windows** (PowerShell, no elevation required):
 ```powershell
 .\install.ps1

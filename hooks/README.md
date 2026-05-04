@@ -1,6 +1,6 @@
 # Git Hooks
 
-Git hooks for this repo. They are installed automatically by `./install`.
+Git hooks for this repo. They are installed automatically by `./install --dev`.
 To install manually:
 
 ```bash
@@ -17,6 +17,5 @@ Committing them as-is produces "embedded git repository" warnings and can
 accidentally create git submodules. This hook strips them so they're committed
 as plain directories.
 
-**Always install this hook** when working with bundled plugins — otherwise
-adding a new plugin directory with its `.git` intact will cause commit warnings
-or failures.
+**Always install this hook** when developing this repo or working with bundled
+plugins. Normal end-user installs do not need repo git hooks.

@@ -215,6 +215,22 @@ is_wsl() {
     grep -qiE 'microsoft|wsl' /proc/version 2>/dev/null
 }
 
+treesitter_platform_id() {
+    local os
+    local arch
+    local libc
+
+    os=$(uname -s | tr '[:upper:]' '[:lower:]')
+    arch=$(uname -m)
+    if ldd --version 2>&1 | grep -qi musl; then
+        libc="musl"
+    else
+        libc="glibc"
+    fi
+
+    echo "${os}-${arch}-${libc}"
+}
+
 install_mode() {
     if [[ "$dev_mode" == "1" ]]; then
         echo "dev"
@@ -308,6 +324,62 @@ install_fonts() {
         echo "  WSL note: Linux GUI apps use these fonts through fontconfig."
         echo "  WSL note: Windows Terminal needs fonts installed on the Windows side."
     fi
+}
+
+install_treesitter_parsers() {
+    local platform
+    local src_dir
+    local dest_dir
+
+    platform=$(treesitter_platform_id)
+    src_dir="$repo_dir/treesitter/prebuilt/$platform"
+    dest_dir="$HOME/.local/share/nvim/tree-sitter-parsers"
+
+    echo "Installing Tree-sitter parsers..."
+    if [[ ! -d "$src_dir/parser" ]]; then
+        echo "  No prebuilt parsers for $platform, skipping"
+        return 0
+    fi
+
+    mkdir -p "$dest_dir/parser"
+    rsync -a "$src_dir/parser/" "$dest_dir/parser/"
+    if [[ -d "$src_dir/queries" ]]; then
+        mkdir -p "$dest_dir/queries"
+        rsync -a "$src_dir/queries/" "$dest_dir/queries/"
+    fi
+    if [[ -d "$src_dir/build-info" ]]; then
+        mkdir -p "$dest_dir/build-info"
+        rsync -a "$src_dir/build-info/" "$dest_dir/build-info/"
+    fi
+    if [[ -d "$src_dir/parser-info" ]]; then
+        mkdir -p "$dest_dir/parser-info"
+        rsync -a "$src_dir/parser-info/" "$dest_dir/parser-info/"
+    fi
+    if [[ -d "$src_dir/registry" ]]; then
+        mkdir -p "$dest_dir/registry"
+        rsync -a "$src_dir/registry/" "$dest_dir/registry/"
+    fi
+
+    echo "  Installed: $src_dir/ -> $dest_dir/"
+}
+
+install_nvim_treesitter_vendor() {
+    local src_root
+    local dest_root
+
+    src_root="$repo_dir/treesitter/vendor"
+    dest_root="$HOME/.local/share/nvim/dotfiles/vendor"
+
+    echo "Installing vendored nvim-treesitter..."
+    if [[ ! -d "$src_root/nvim-treesitter" || ! -d "$src_root/treesitter-parser-registry" ]]; then
+        echo "  Vendored nvim-treesitter is missing, skipping"
+        return 0
+    fi
+
+    mkdir -p "$dest_root"
+    rsync -a --delete --exclude .git "$src_root/nvim-treesitter/" "$dest_root/nvim-treesitter/"
+    rsync -a --delete --exclude .git "$src_root/treesitter-parser-registry/" "$dest_root/treesitter-parser-registry/"
+    echo "  Installed: $src_root/ -> $dest_root/"
 }
 
 # --- Restore backup ---
@@ -559,19 +631,27 @@ else
     echo "  Skipped (--no-fonts)"
 fi
 
-# Install git hooks
-echo "Installing git hooks..."
-if [[ -d "$repo_dir/hooks" ]]; then
-    for hook in "$repo_dir/hooks"/*; do
-        if [[ -f "$hook" && ! "$hook" =~ README ]]; then
-            hook_name=$(basename "$hook")
-            cp "$hook" "$repo_dir/.git/hooks/$hook_name"
-            chmod +x "$repo_dir/.git/hooks/$hook_name"
-            echo "  Installed: $hook_name"
-        fi
-    done
+install_nvim_treesitter_vendor
+install_treesitter_parsers
+
+# Install git hooks for repo development only.
+if [[ "$dev_mode" == "1" ]]; then
+    echo "Installing git hooks..."
+    if [[ -d "$repo_dir/hooks" ]]; then
+        for hook in "$repo_dir/hooks"/*; do
+            if [[ -f "$hook" && ! "$hook" =~ README ]]; then
+                hook_name=$(basename "$hook")
+                cp "$hook" "$repo_dir/.git/hooks/$hook_name"
+                chmod +x "$repo_dir/.git/hooks/$hook_name"
+                echo "  Installed: $hook_name"
+            fi
+        done
+    else
+        echo "  No hooks directory found, skipping"
+    fi
 else
-    echo "  No hooks directory found, skipping"
+    echo "Installing git hooks..."
+    echo "  Skipped (use --dev for repo development hooks)"
 fi
 
 if [[ -n "$post_install_hook" ]]; then
