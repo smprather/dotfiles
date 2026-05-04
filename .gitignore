@@ -1,4 +1,5 @@
 dotfiles_backups/
+__pycache__/
 *.log
 !bash/global/grc/share/grc/conf.log
 .claude/
