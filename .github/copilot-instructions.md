@@ -20,8 +20,11 @@ Dotfiles for Electrical Engineering work environments: multi-platform (RedHat 7/
 # Reload bash after changes
 exec bash
 
-# Install git hooks manually
+# Install repo-development git hooks manually
 cp hooks/* .git/hooks/ && chmod +x .git/hooks/*
+
+# Smoke-test a fresh Linux home install
+./tests/install_linux_tmp_home
 ```
 
 ```powershell
@@ -29,7 +32,10 @@ cp hooks/* .git/hooks/ && chmod +x .git/hooks/*
 .\install.ps1
 ```
 
-There are no automated tests or linters for this repo.
+Use `bash -n install` and `bash -n bash/global/bashrc` after shell edits.
+`./tests/install_linux_tmp_home` runs the Linux installer against a temp `HOME`
+with temp XDG cache/state dirs, then smoke-tests offline Tree-sitter with
+headless Neovim.
 
 ## Architecture
 
@@ -66,8 +72,13 @@ Each layer can inject code into `global/bashrc` via numbered files in `<layer>/g
 - **`--links`**: file/dir-level symlinks to repo; `~/.config/bash/global` → `repo/bash/global`; changes take effect immediately
 - **`--dev`**: directory-level symlinks for nvim/vim/tmux/editorconfig; for bash, symlinks individual repo-managed files (`global/`, `functions.sh`, `bashrc`) while preserving user layer dirs as real directories
 - **`--no-backup`**: skip backup creation (useful for clean reinstalls or automation)
+- **`--no-fonts`**: skip vendored font extraction and font cache refresh
+- **`--post-install-hook <script>`**: run an explicit corp/site/user add-on installer after global install steps
 
 Backups are numbered (`dotfiles_backups/backup.N/`). The installer skips targets already pointing into the repo and never overwrites an existing backup.
+Backups intentionally exclude font files because vendored Nerd Font archives are large and reproducible.
+
+Repo git hooks are installed only by `./install --dev`; normal end-user installs skip them.
 
 ### Bundled Plugins
 
@@ -80,6 +91,14 @@ Run `./update_tmux_plugins` to re-clone all tmux plugins from GitHub (pre-commit
 
 Neovim uses Lazy.nvim with versions locked in `nvim/lazy-lock.json`.
 
+Tree-sitter offline support targets Neovim v0.12+ only. Vendored
+`nvim-treesitter` and `treesitter-parser-registry` live under
+`treesitter/vendor/`; prebuilt parsers, parser-info, queries, and registry cache
+live under `treesitter/prebuilt/<platform>/`, where platform is
+`$(uname -s lower)-$(uname -m)-<glibc|musl>`. Build or refresh the full parser
+set with `./treesitter/build_parsers`. The installer copies matching artifacts
+to `~/.local/share/nvim/tree-sitter-parsers/`.
+
 ## Key Conventions
 
 ### Variable Naming in Bash
@@ -89,7 +108,7 @@ Neovim uses Lazy.nvim with versions locked in `nvim/lazy-lock.json`.
 
 ### Pre-commit Hook
 
-`hooks/pre-commit` scans for nested `.git` directories (from bundled plugins), removes them, and re-stages. **Always install this hook** when working with bundled plugins — adding a plugin directory without stripping its `.git` causes "embedded git repository" warnings. The hook runs `git add -A` after cleanup, so the commit proceeds cleanly.
+`hooks/pre-commit` scans for nested `.git` directories (from bundled plugins), removes them, and re-stages. Install this hook when developing this repo or working with bundled plugins. Normal end-user installs do not need repo git hooks. The hook runs `git add -A` after cleanup, so review staged files after it runs.
 
 ### Adding a Bundled Plugin
 
