@@ -133,6 +133,9 @@ fi
 
 assert_exists "$test_home/.config/bash/bashrc"
 assert_exists "$test_home/.config/nvim/init.lua"
+assert_exists "$test_home/.config/nvim/after/ftplugin/tcl.lua"
+assert_exists "$test_home/.config/nvim/after/ftplugin/yaml.lua"
+assert_exists "$test_home/.config/nvim/after/lsp/ty.lua"
 assert_exists "$test_home/.config/tmux/tmux.conf"
 assert_exists "$test_home/.config/starship/starship.toml"
 if [[ -d "$repo_dir/pre_built/el8.x86_64.glibc2p28" ]]; then

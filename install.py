@@ -560,6 +560,10 @@ def install_copy_or_links_mode(repo_dir, home, links_mode):
         install_path(os.path.join(repo_dir, "nvim", rel), os.path.join(nvim_config, rel), links_mode)
     for src in sorted(glob_paths(os.path.join(repo_dir, "nvim", "lsp"))):
         install_path(src, os.path.join(nvim_config, "lsp", os.path.basename(src)), links_mode)
+    for src in sorted(glob_paths(os.path.join(repo_dir, "nvim", "after", "ftplugin"))):
+        install_path(src, os.path.join(nvim_config, "after", "ftplugin", os.path.basename(src)), links_mode)
+    for src in sorted(glob_paths(os.path.join(repo_dir, "nvim", "after", "lsp"))):
+        install_path(src, os.path.join(nvim_config, "after", "lsp", os.path.basename(src)), links_mode)
     if not links_mode:
         plugins_dir = os.path.join(repo_dir, "nvim", "lua", "kickstart", "plugins")
         for src in sorted(glob_paths(plugins_dir)):
