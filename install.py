@@ -377,7 +377,9 @@ def install_fonts(repo_dir, home):
             rejoined_zip = os.path.join(tmp_dir, os.path.basename(split_base))
             print("  Rejoining: {}.part-* -> {}".format(split_base, rejoined_zip))
             with open(rejoined_zip, "wb") as dest:
-                for part in sorted(fnmatch.filter([os.path.join(vendor_fonts_dir, x) for x in os.listdir(vendor_fonts_dir)], os.path.basename(split_base) + ".part-*")):
+                for part in sorted(os.path.join(vendor_fonts_dir, x)
+                                   for x in fnmatch.filter(os.listdir(vendor_fonts_dir),
+                                                           os.path.basename(split_base) + ".part-*")):
                     with open(part, "rb") as src:
                         shutil.copyfileobj(src, dest)
             extract_font_zip(rejoined_zip, user_fonts_dir)
