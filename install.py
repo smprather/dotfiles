@@ -446,7 +446,10 @@ def install_tldr_cache(repo_dir, home):
     ensure_dir(os.path.join(cache_home, "tealdeer"))
     import tarfile
     with tarfile.open(archive, "r:gz") as tf:
-        tf.extractall(os.path.join(cache_home, "tealdeer"))
+        try:
+            tf.extractall(os.path.join(cache_home, "tealdeer"), filter="data")
+        except TypeError:
+            tf.extractall(os.path.join(cache_home, "tealdeer"))
     print("  tldr page cache installed to {}".format(dest_dir))
 
 
