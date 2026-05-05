@@ -34,6 +34,17 @@ def eprint(*args):
     print(*args, file=sys.stderr)
 
 
+def warn(msg):
+    eprint("  WARNING: {}".format(msg))
+
+
+def skipped(reason, consequence=None):
+    msg = "  *** SKIPPED: {} ***".format(reason)
+    if consequence:
+        msg += "\n  ***         {} ***".format(consequence)
+    eprint(msg)
+
+
 def command_exists(name):
     return shutil.which(name) is not None
 
@@ -254,13 +265,15 @@ def install_prebuilt_binaries(repo_dir, home):
 
     print("Installing pre-built binaries...")
     if not os.path.isdir(root_dir):
-        print("  No pre_built directory found, skipping")
+        skipped("pre-built binaries (no pre_built/ directory in repo)",
+                "eza, fd, rg, tmux and other bundled tools will NOT be installed")
         return
 
     src_dir = select_prebuilt_platform_dir(root_dir)
     if not src_dir:
-        print("  No matching pre-built platform found, skipping")
-        print("  Checked: {}".format(" ".join(prebuilt_exact_platform_ids())))
+        skipped("pre-built binaries (no matching platform)",
+                "eza, fd, rg, tmux and other bundled tools will NOT be installed")
+        eprint("  Checked platform IDs: {}".format(" ".join(prebuilt_exact_platform_ids())))
         return
 
     bin_dir = os.path.join(src_dir, "bin")
@@ -292,7 +305,7 @@ def patch_prebuilt_binary_rpaths(dest_bin_dir):
     patchelf = os.path.join(dest_bin_dir, "patchelf")
     rpath = "$ORIGIN/../lib64:$ORIGIN/../lib"
     if not os.path.isfile(patchelf) or not os.access(patchelf, os.X_OK):
-        print("  Warning: vendored patchelf not installed; skipping pre-built binary RPATH patching")
+        warn("vendored patchelf not installed — RPATH patching skipped; binaries may fail to find vendored libs")
         return
 
     for name in sorted(os.listdir(dest_bin_dir)) if os.path.isdir(dest_bin_dir) else []:
@@ -304,14 +317,14 @@ def patch_prebuilt_binary_rpaths(dest_bin_dir):
             continue
         proc = subprocess.run([patchelf, "--set-rpath", rpath, binary])
         if proc.returncode != 0:
-            print("  Warning: failed to patch RPATH for {}".format(binary))
+            warn("failed to patch RPATH for {} — it may fail to find vendored libs".format(binary))
             continue
         print("  patchelf: set RPATH on {} to {}".format(binary, rpath))
 
 
 def check_prebuilt_binary_dependencies(dest_bin_dir):
     if not command_exists("ldd"):
-        print("  Warning: ldd is not available; skipping pre-built dependency check")
+        warn("ldd is not available — shared library dependency check skipped")
         return
 
     missing = False
@@ -323,10 +336,10 @@ def check_prebuilt_binary_dependencies(dest_bin_dir):
         out = proc.stdout.decode("utf-8", "replace")
         if "not found" in out:
             missing = True
-            print("  Warning: missing shared libraries for {}".format(binary))
+            warn("missing shared libraries for {} — this binary may not run".format(binary))
             for line in out.splitlines():
                 if "not found" in line:
-                    print("    {}".format(line.split()[0]))
+                    eprint("    {}".format(line.split()[0]))
     if not missing:
         print("  Shared library check OK")
 
@@ -355,7 +368,8 @@ def install_fonts(repo_dir, home):
 
     if not os.path.isdir(vendor_fonts_dir):
         print("Installing fonts...")
-        print("  No vendored fonts directory found, skipping")
+        skipped("fonts (no fonts/ directory in repo)",
+                "Nerd Fonts will NOT be installed to ~/.local/share/fonts")
         return
 
     print("Installing fonts...")
@@ -402,14 +416,14 @@ def install_fonts(repo_dir, home):
         if command_exists(tool):
             proc = subprocess.run([tool, user_fonts_dir], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
             if proc.returncode != 0:
-                print("  Warning: {} failed for {}".format(tool, user_fonts_dir))
+                warn("{} failed for {} — font metrics may be incomplete".format(tool, user_fonts_dir))
 
     if command_exists("fc-cache"):
         proc = subprocess.run(["fc-cache", "-f", user_fonts_dir], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
         if proc.returncode != 0:
-            print("  Warning: fc-cache failed for {}".format(user_fonts_dir))
+            warn("fc-cache failed for {} — fontconfig cache may be stale".format(user_fonts_dir))
     else:
-        print("  Warning: fc-cache is not available; fontconfig cache was not refreshed")
+        warn("fc-cache is not available — fontconfig cache was NOT refreshed; fonts may not appear until you run fc-cache manually")
 
     if is_wsl():
         print("  WSL note: Linux GUI apps use these fonts through fontconfig.")
@@ -423,7 +437,8 @@ def install_treesitter_parsers(repo_dir, home):
 
     print("Installing Tree-sitter parsers...")
     if not os.path.isdir(os.path.join(src_dir, "parser")):
-        print("  No prebuilt parsers for {}, skipping".format(platform))
+        skipped("Tree-sitter parsers (no prebuilt parsers for {})".format(platform),
+                "Neovim Tree-sitter highlighting will NOT work offline")
         return
 
     for subdir in ("parser", "queries", "build-info", "parser-info", "registry"):
@@ -440,7 +455,8 @@ def install_nvim_treesitter_vendor(repo_dir, home):
     dest_root = os.path.join(home, ".local", "share", "nvim", "dotfiles", "vendor")
     print("Installing vendored nvim-treesitter...")
     if not (os.path.isdir(os.path.join(src_root, "nvim-treesitter")) and os.path.isdir(os.path.join(src_root, "treesitter-parser-registry"))):
-        print("  Vendored nvim-treesitter is missing, skipping")
+        skipped("vendored nvim-treesitter (missing from treesitter/vendor/)",
+                "Neovim Tree-sitter plugin will NOT be available offline")
         return
 
     ensure_dir(dest_root)
@@ -636,11 +652,11 @@ def glob_paths(path):
 def install_git_hooks(repo_dir, dev_mode):
     print("Installing git hooks...")
     if not dev_mode:
-        print("  Skipped (use --dev for repo development hooks)")
+        print("  Skipped (not in --dev mode; run ./install --dev to install repo development hooks)")
         return
     hooks_dir = os.path.join(repo_dir, "hooks")
     if not os.path.isdir(hooks_dir):
-        print("  No hooks directory found, skipping")
+        skipped("git hooks (no hooks/ directory in repo)")
         return
     dest_dir = os.path.join(repo_dir, ".git", "hooks")
     for hook in sorted(os.listdir(hooks_dir)):
@@ -759,7 +775,12 @@ def main(argv):
     os.chdir(home)
 
     backup_dir = ""
-    if not args.dev and not args.no_backup:
+    if args.dev:
+        print("Backup: skipped (dev mode)")
+    elif args.no_backup:
+        skipped("backup (--no-backup)",
+                "existing dotfiles will be overwritten with NO backup")
+    else:
         backup_dir = backup_existing(home, repo_dir)
 
     ensure_dir(os.path.join(home, ".config"))
@@ -770,7 +791,8 @@ def main(argv):
 
     if args.no_fonts:
         print("Installing fonts...")
-        print("  Skipped (--no-fonts)")
+        skipped("fonts (--no-fonts)",
+                "Nerd Fonts will NOT be installed to ~/.local/share/fonts")
     else:
         install_fonts(repo_dir, home)
 
