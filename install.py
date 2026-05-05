@@ -108,13 +108,13 @@ def install_path(src, dest, links_mode):
             remove_path(dest)
         parent = os.path.dirname(dest)
         if parent:
-            os.makedirs(parent, exist_ok=True)
+            ensure_dir(parent)
         shutil.copy2(src, dest)
         print("  cp: {} -> {}".format(src, dest))
 
 
 def backup_item(src, dest):
-    os.makedirs(os.path.dirname(dest), exist_ok=True)
+    ensure_dir(os.path.dirname(dest))
     cmd = ["rsync", "-a"]
     for pattern in FONT_EXCLUDES:
         cmd.append("--exclude={}".format(pattern))
@@ -265,7 +265,7 @@ def install_prebuilt_binaries(repo_dir, home):
 
     bin_dir = os.path.join(src_dir, "bin")
     if os.path.isdir(bin_dir):
-        os.makedirs(dest_bin_dir, exist_ok=True)
+        ensure_dir(dest_bin_dir)
         for gz_file in sorted(fnmatch.filter([os.path.join(bin_dir, x) for x in os.listdir(bin_dir)], "*.gz")):
             dest_file = os.path.join(dest_bin_dir, os.path.basename(gz_file[:-3]))
             with gzip.open(gz_file, "rb") as src, open(dest_file, "wb") as dest:
@@ -275,7 +275,7 @@ def install_prebuilt_binaries(repo_dir, home):
 
     lib64_dir = os.path.join(src_dir, "lib64")
     if os.path.isdir(lib64_dir):
-        os.makedirs(dest_lib64_dir, exist_ok=True)
+        ensure_dir(dest_lib64_dir)
         for gz_file in sorted(fnmatch.filter([os.path.join(lib64_dir, x) for x in os.listdir(lib64_dir)], "*.gz")):
             dest_file = os.path.join(dest_lib64_dir, os.path.basename(gz_file[:-3]))
             with gzip.open(gz_file, "rb") as src, open(dest_file, "wb") as dest:
@@ -430,7 +430,7 @@ def install_treesitter_parsers(repo_dir, home):
         src = os.path.join(src_dir, subdir)
         if os.path.isdir(src):
             dest = os.path.join(dest_dir, subdir)
-            os.makedirs(dest, exist_ok=True)
+            ensure_dir(dest)
             rsync_dir(src, dest)
     print("  Installed: {}/ -> {}/".format(src_dir, dest_dir))
 
@@ -443,7 +443,7 @@ def install_nvim_treesitter_vendor(repo_dir, home):
         print("  Vendored nvim-treesitter is missing, skipping")
         return
 
-    os.makedirs(dest_root, exist_ok=True)
+    ensure_dir(dest_root)
     rsync_dir(os.path.join(src_root, "nvim-treesitter"), os.path.join(dest_root, "nvim-treesitter"), delete=True, excludes=(".git",))
     rsync_dir(os.path.join(src_root, "treesitter-parser-registry"), os.path.join(dest_root, "treesitter-parser-registry"), delete=True, excludes=(".git",))
     print("  Installed: {}/ -> {}/".format(src_root, dest_root))
@@ -487,6 +487,14 @@ def restore_backup(backup_dir, home):
 def remove_if_exists(path):
     if os.path.exists(path) or os.path.islink(path):
         remove_path(path)
+
+
+def ensure_dir(path):
+    """Create directory at path, first removing any dangling or non-directory symlink."""
+    if os.path.islink(path) and not os.path.isdir(path):
+        print("  Removing stale symlink: {}".format(path))
+        os.unlink(path)
+    os.makedirs(path, exist_ok=True)
 
 
 def preserve_bash_layers_from_symlink(home):
@@ -754,7 +762,7 @@ def main(argv):
     if not args.dev and not args.no_backup:
         backup_dir = backup_existing(home, repo_dir)
 
-    os.makedirs(os.path.join(home, ".config"), exist_ok=True)
+    ensure_dir(os.path.join(home, ".config"))
     if args.dev:
         install_dev_mode(repo_dir, home)
     else:
