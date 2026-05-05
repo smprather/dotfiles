@@ -1,11 +1,16 @@
 #!/bin/bash
-# Pre-commit hook to remove .git directories from embedded repositories
-# This prevents "embedded git repository" warnings when adding bundled dependencies
+# Pre-commit hook:
+#   1. Remove .git directories from embedded repositories.
+#   2. Strip pre_built/**/*.gz ELF payloads when any are staged.
+
+set -euo pipefail
+
+script_dir=$(cd "$(dirname "${BASH_SOURCE[0]}")/../" && pwd)
+
+# --- 1. Embedded git repository cleanup ---
 
 echo "Pre-commit: Checking for embedded git repositories..."
 
-# Find all .git directories except the root one
-# Use -mindepth 2 to skip the root .git directory
 embedded_gits=$(find . -mindepth 2 -type d -name ".git" 2>/dev/null)
 
 if [[ -n "$embedded_gits" ]]; then
@@ -14,14 +19,29 @@ if [[ -n "$embedded_gits" ]]; then
         echo "  Removing: $git_dir"
         rm -rf "$git_dir"
     done <<< "$embedded_gits"
-
-    # Re-stage any modified files
     echo "Re-staging affected files..."
     git add -A
-
     echo "✓ Cleaned up embedded git repositories"
 else
     echo "✓ No embedded git repositories found"
+fi
+
+# --- 2. Strip pre-built binaries ---
+
+staged_gz=$(git diff --cached --name-only | grep '^pre_built/.*\.gz$' || true)
+
+if [[ -n "$staged_gz" ]]; then
+    echo "Pre-commit: Stripping pre-built binaries..."
+
+    if ! command -v strip >/dev/null; then
+        echo "  WARNING: 'strip' not found in PATH — skipping ELF stripping." >&2
+        echo "  Run ./strip_pre_built manually before committing pre_built/ changes." >&2
+    else
+        "$script_dir/strip_pre_built"
+        # Re-stage stripped files and updated manifest
+        git add pre_built/
+        echo "✓ Pre-built binaries stripped and staged"
+    fi
 fi
 
 exit 0

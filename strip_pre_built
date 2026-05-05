@@ -6,16 +6,20 @@ usage() {
 Usage: $0 [OPTIONS]
 
 Decompress pre_built/**/*.gz ELF payloads, run strip, and recompress them.
+Tracks stripped files in pre_built/.strip-manifest; files whose sha256
+matches the manifest are skipped.
 
 Options:
   --dry-run         Show what would be stripped without rewriting files.
   --strip <path>    Use a specific strip executable. Default: strip from PATH.
+  --no-manifest     Ignore manifest and strip all ELF files unconditionally.
   --help, -h        Show this help message.
 EOF
 }
 
 dry_run=0
 strip_bin="${STRIP:-strip}"
+use_manifest=1
 
 while [[ $# -gt 0 ]]; do
     case "$1" in
@@ -30,6 +34,10 @@ while [[ $# -gt 0 ]]; do
         fi
         strip_bin="$2"
         shift 2
+        ;;
+    --no-manifest)
+        use_manifest=0
+        shift
         ;;
     --help | -h)
         usage
@@ -53,6 +61,11 @@ if ! command -v file >/dev/null; then
     exit 1
 fi
 
+if ! command -v sha256sum >/dev/null; then
+    echo "Error: sha256sum is required" >&2
+    exit 1
+fi
+
 if ! command -v "$strip_bin" >/dev/null; then
     echo "Error: strip executable not found: $strip_bin" >&2
     exit 1
@@ -60,21 +73,76 @@ fi
 
 script_dir=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 prebuilt_dir="$script_dir/pre_built"
+manifest_file="$prebuilt_dir/.strip-manifest"
 
 if [[ ! -d "$prebuilt_dir" ]]; then
     echo "No pre_built directory found"
     exit 0
 fi
 
+# --- Manifest helpers ---
+
+declare -A manifest
+
+load_manifest() {
+    [[ "$use_manifest" == "0" || ! -f "$manifest_file" ]] && return
+    while IFS= read -r line; do
+        [[ "$line" =~ ^#.*$  || -z "$line" ]] && continue
+        hash="${line%% *}"
+        rel_path="${line##*  }"   # two-space separator (sha256sum format)
+        manifest["$rel_path"]="$hash"
+    done < "$manifest_file"
+}
+
+save_manifest() {
+    [[ "$use_manifest" == "0" || "$dry_run" == "1" ]] && return
+    local tmp
+    tmp=$(mktemp "$manifest_file.XXXXXX")
+    {
+        echo "# strip manifest — sha256 of stripped+compressed payloads"
+        echo "# Files whose checksum matches are skipped on the next run"
+        for key in $(printf '%s\n' "${!manifest[@]}" | sort); do
+            printf '%s  %s\n' "${manifest[$key]}" "$key"
+        done
+    } > "$tmp"
+    mv "$tmp" "$manifest_file"
+}
+
+sha256_of() {
+    sha256sum "$1" | cut -d' ' -f1
+}
+
+manifest_check() {
+    local rel_path="$1"
+    local gz_file="$2"
+    [[ "$use_manifest" == "0" ]] && return 1   # never skip
+    local stored="${manifest[$rel_path]:-}"
+    [[ -z "$stored" ]] && return 1              # not in manifest
+    [[ "$(sha256_of "$gz_file")" == "$stored" ]]
+}
+
+load_manifest
+
+# --- Main loop ---
+
 tmp_dir=$(mktemp -d /tmp/dotfiles-strip-pre-built.XXXXXX)
 trap 'rm -rf "$tmp_dir"' EXIT
 
 processed=0
 stripped=0
-skipped=0
+skipped_manifest=0
+skipped_nonelf=0
 
 while IFS= read -r -d '' gz_file; do
     processed=$((processed + 1))
+    rel_path="${gz_file#"$script_dir/"}"
+
+    if manifest_check "$rel_path" "$gz_file"; then
+        echo "manifest hit (already stripped): $gz_file"
+        skipped_manifest=$((skipped_manifest + 1))
+        continue
+    fi
+
     payload="$tmp_dir/$(basename "${gz_file%.gz}")"
     before_size=$(stat -c %s "$gz_file")
     before_mode=$(stat -c %a "$gz_file")
@@ -83,7 +151,7 @@ while IFS= read -r -d '' gz_file; do
 
     if ! file -b "$payload" | grep -q 'ELF'; then
         echo "skip non-ELF: $gz_file"
-        skipped=$((skipped + 1))
+        skipped_nonelf=$((skipped_nonelf + 1))
         rm -f "$payload"
         continue
     fi
@@ -101,7 +169,11 @@ while IFS= read -r -d '' gz_file; do
     after_size=$(stat -c %s "$gz_file")
     echo "stripped: $gz_file ($before_size -> $after_size bytes)"
     stripped=$((stripped + 1))
+    manifest["$rel_path"]=$(sha256_of "$gz_file")
     rm -f "$payload"
 done < <(find "$prebuilt_dir" -type f -name '*.gz' -print0 | sort -z)
 
-echo "Processed: $processed, stripped: $stripped, skipped: $skipped"
+save_manifest
+
+skipped=$((skipped_manifest + skipped_nonelf))
+echo "Processed: $processed, stripped: $stripped, skipped: $skipped (manifest: $skipped_manifest, non-ELF: $skipped_nonelf)"

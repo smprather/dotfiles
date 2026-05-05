@@ -1,0 +1,21 @@
+# strip manifest — sha256 of stripped+compressed payloads
+# Files whose checksum matches are skipped on the next run
+8f6b1aa7d4d102ec236e11c751c962fd13d721059c8168aa081834fbe41ada5c  pre_built/el8.x86_64.glibc2p28/bin/bat.gz
+a0f002616d27670055c5ea8e8c025ebd09d4b36b3faff87d05f98b77f0eefdf8  pre_built/el8.x86_64.glibc2p28/bin/btm.gz
+305f1c2233e1dad2179af44d281711e2b5f676cdbced9845b37377234a957eea  pre_built/el8.x86_64.glibc2p28/bin/btop.gz
+f19901cd8af9e059dfd79a4affd176872cc616c6c05156c50a5b58acf07ffac4  pre_built/el8.x86_64.glibc2p28/bin/choose.gz
+dfd5cefad717f1154c0becbfc7d665271dfc6500119662be959c63e9f64dfe71  pre_built/el8.x86_64.glibc2p28/bin/dust.gz
+6f4eb756ccfd58e0bc613c3eaea06fea54087bd98ac7119b504b65d75735421a  pre_built/el8.x86_64.glibc2p28/bin/eza.gz
+70864d8780727830c078362c138236a015d0982364917e7926469a87dcd1468d  pre_built/el8.x86_64.glibc2p28/bin/fd.gz
+2ccbd0e0fbf29989df5edc56dd3416176466283bb411625c0db699431eb51422  pre_built/el8.x86_64.glibc2p28/bin/htop.gz
+f8fb40a0a10e89005204b2befbe91f16a56087d1ad08e6614ea8caec8e3cf668  pre_built/el8.x86_64.glibc2p28/bin/patchelf.gz
+41b1a9086f7c20b0c5492e8d690bbb7727dea61042a7c272fff54a17878d1346  pre_built/el8.x86_64.glibc2p28/bin/rg.gz
+72079d21545782f758a8001cd41971b44044b15a3d5255cb0378883ba417f04f  pre_built/el8.x86_64.glibc2p28/bin/ruff.gz
+009dc4b9207c627f1a06b9897f1a7186d7d7480e02ee90c662955ab6504558e1  pre_built/el8.x86_64.glibc2p28/bin/shfmt.gz
+17631a8589d2298526c77a149808b14c11e13f4cbce93afa586e0417bfefe836  pre_built/el8.x86_64.glibc2p28/bin/starship.gz
+778dd85e0f90ea07b92e3120f98be0f5bed4b9382bd0d616b338f0447c7a56e1  pre_built/el8.x86_64.glibc2p28/bin/stylua.gz
+7c827f9f502202a019a0302e9a054147ab46cccdc3edcd71afbeb4c1601d4de8  pre_built/el8.x86_64.glibc2p28/bin/tmux.gz
+34783d8127bdc0055aeacbc9734df49dca00b0bd91adb22fdd8485fa0b4bf32f  pre_built/el8.x86_64.glibc2p28/bin/tree-sitter.gz
+000b3038e8a8603c3017e8901464c09fc671c8d5ba83dc430c768283f7a60c44  pre_built/el8.x86_64.glibc2p28/bin/ty.gz
+7ffb71d8c7705df5ebee17547fc7ec9888669e8dbd46b18b369753c96d55a16b  pre_built/el8.x86_64.glibc2p28/bin/zoxide.gz
+252ca00f2e79e3c330eb2bd461d116dee2b517500fd1661c0d013095c16b0fd0  pre_built/el8.x86_64.glibc2p28/lib64/libevent_core-2.1.so.6.gz
