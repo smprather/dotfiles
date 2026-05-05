@@ -359,6 +359,17 @@ def install_fonts(repo_dir, home):
         return
 
     print("Installing fonts...")
+    if os.path.islink(user_fonts_dir):
+        print("  Removing symlink: {}".format(user_fonts_dir))
+        os.unlink(user_fonts_dir)
+    elif os.path.isdir(user_fonts_dir):
+        backup_path = user_fonts_dir + ".bak"
+        counter = 1
+        while os.path.exists(backup_path):
+            backup_path = "{}.bak.{}".format(user_fonts_dir, counter)
+            counter += 1
+        print("  Backing up existing fonts dir: {} -> {}".format(user_fonts_dir, backup_path))
+        shutil.move(user_fonts_dir, backup_path)
     os.makedirs(user_fonts_dir, exist_ok=True)
 
     for name in sorted(os.listdir(vendor_fonts_dir)):
