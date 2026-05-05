@@ -1,0 +1,28 @@
+#!/usr/bin/env bash
+# Bundle the tealdeer tldr-pages cache for offline installs.
+# Run this on a connected machine, then commit tldr/tldr-pages.tar.gz.
+set -euo pipefail
+
+script_dir=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
+output="$script_dir/tldr/tldr-pages.tar.gz"
+cache_dir="${XDG_CACHE_HOME:-$HOME/.cache}/tealdeer"
+pages_dir="$cache_dir/tldr-pages"
+
+if ! command -v tldr >/dev/null; then
+    echo "Error: tldr not found in PATH" >&2
+    exit 1
+fi
+
+echo "Updating tldr cache..."
+tldr --update
+
+if [[ ! -d "$pages_dir" ]]; then
+    echo "Error: tldr-pages not found at $pages_dir after update" >&2
+    exit 1
+fi
+
+mkdir -p "$script_dir/tldr"
+echo "Bundling $pages_dir -> $output"
+tar czf "$output" -C "$cache_dir" tldr-pages/
+echo "Done: $(du -sh "$output" | cut -f1) written to $output"
+echo "Commit tldr/tldr-pages.tar.gz to make it available offline."

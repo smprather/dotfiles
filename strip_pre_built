@@ -6,6 +6,8 @@ usage() {
 Usage: $0 [OPTIONS]
 
 Decompress pre_built/**/*.gz ELF payloads, run strip, and recompress them.
+Uncompressed ELF files found alongside .gz files are stripped and compressed
+in-place (original removed, .gz created).
 Tracks stripped files in pre_built/.strip-manifest; files whose sha256
 matches the manifest are skipped.
 
@@ -123,8 +125,6 @@ manifest_check() {
 
 load_manifest
 
-# --- Main loop ---
-
 tmp_dir=$(mktemp -d /tmp/dotfiles-strip-pre-built.XXXXXX)
 trap 'rm -rf "$tmp_dir"' EXIT
 
@@ -132,6 +132,36 @@ processed=0
 stripped=0
 skipped_manifest=0
 skipped_nonelf=0
+
+# --- Pre-pass: strip and compress any uncompressed ELF files ---
+
+while IFS= read -r -d '' raw_file; do
+    if ! file -b "$raw_file" | grep -q 'ELF'; then
+        continue
+    fi
+
+    gz_file="${raw_file}.gz"
+    rel_path="${gz_file#"$script_dir/"}"
+    before_size=$(stat -c %s "$raw_file")
+    before_mode=$(stat -c %a "$raw_file")
+
+    if [[ "$dry_run" == "1" ]]; then
+        echo "would strip+compress: $raw_file -> $(basename "$gz_file")"
+        continue
+    fi
+
+    "$strip_bin" --strip-all "$raw_file"
+    gzip -n -9 < "$raw_file" > "$gz_file.tmp"
+    chmod "$before_mode" "$gz_file.tmp"
+    mv "$gz_file.tmp" "$gz_file"
+    rm -f "$raw_file"
+    after_size=$(stat -c %s "$gz_file")
+    echo "stripped+compressed: $raw_file ($before_size -> $after_size bytes)"
+    stripped=$((stripped + 1))
+    manifest["$rel_path"]=$(sha256_of "$gz_file")
+done < <(find "$prebuilt_dir" -type f ! -name '*.gz' ! -name '.strip-manifest' -print0 | sort -z)
+
+# --- Main loop: re-strip .gz files not yet in manifest ---
 
 while IFS= read -r -d '' gz_file; do
     processed=$((processed + 1))

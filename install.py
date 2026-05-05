@@ -430,6 +430,28 @@ def install_fonts(repo_dir, home):
         print("  WSL note: Windows Terminal needs fonts installed on the Windows side.")
 
 
+def install_tldr_cache(repo_dir, home):
+    print("Installing tldr page cache...")
+    archive = os.path.join(repo_dir, "tldr", "tldr-pages.tar.gz")
+    if not os.path.exists(archive):
+        skipped("tldr/tldr-pages.tar.gz not found in repo",
+                "run ./update_tldr_cache on a connected machine to bundle the pages")
+        return
+
+    cache_home = os.environ.get("XDG_CACHE_HOME", os.path.join(home, ".cache"))
+    dest_dir = os.path.join(cache_home, "tealdeer", "tldr-pages")
+    if os.path.exists(dest_dir):
+        skipped("tldr-pages already present at {}".format(dest_dir),
+                "run 'tldr --update' to refresh, or delete and reinstall to replace")
+        return
+
+    ensure_dir(os.path.join(cache_home, "tealdeer"))
+    import tarfile
+    with tarfile.open(archive, "r:gz") as tf:
+        tf.extractall(os.path.join(cache_home, "tealdeer"))
+    print("  tldr page cache installed to {}".format(dest_dir))
+
+
 def install_treesitter_parsers(repo_dir, home):
     platform = treesitter_platform_id()
     src_dir = os.path.join(repo_dir, "treesitter", "prebuilt", platform)
@@ -680,6 +702,7 @@ def run_post_install_hooks(hooks, repo_dir, home, args, backup_dir):
             "DOTFILES_BACKUP_DIR": backup_dir,
             "DOTFILES_NO_BACKUP": "1" if args.no_backup else "0",
             "DOTFILES_NO_FONTS": "1" if args.no_fonts else "0",
+            "DOTFILES_NO_TLDR_CACHE": "1" if args.no_tldr_cache else "0",
         })
         run(["bash", hook], env=env)
 
@@ -703,6 +726,7 @@ def parse_args(argv):
     parser.add_argument("--links", action="store_true")
     parser.add_argument("--no-backup", action="store_true", dest="no_backup")
     parser.add_argument("--no-fonts", action="store_true", dest="no_fonts")
+    parser.add_argument("--no-tldr-cache", action="store_true", dest="no_tldr_cache")
     parser.add_argument("--post-install-hook", action="append", default=[])
     parser.add_argument("--restore-backup")
     parser.add_argument("--verbose", action="store_true")
@@ -713,7 +737,7 @@ def parse_args(argv):
         sys.exit(0)
     if unknown:
         eprint("Unknown option: {}".format(unknown[0]))
-        eprint("Usage: ./install [--dev] [--links] [--no-backup] [--no-fonts] [--post-install-hook <script>] [--verbose] [--restore-backup <dir>]")
+        eprint("Usage: ./install [--dev] [--links] [--no-backup] [--no-fonts] [--no-tldr-cache] [--post-install-hook <script>] [--verbose] [--restore-backup <dir>]")
         eprint("Run './install --help' for details.")
         sys.exit(1)
     return args
@@ -737,6 +761,8 @@ Options:
   --no-backup                Skip creating a backup of existing dotfiles before installing.
 
   --no-fonts                 Skip installing vendored fonts to ~/.local/share/fonts.
+
+  --no-tldr-cache            Skip installing the bundled tldr page cache.
 
   --post-install-hook <script>
                              Run a corp/site/user script after global install steps.
@@ -795,6 +821,13 @@ def main(argv):
                 "Nerd Fonts will NOT be installed to ~/.local/share/fonts")
     else:
         install_fonts(repo_dir, home)
+
+    if args.no_tldr_cache:
+        print("Installing tldr page cache...")
+        skipped("tldr cache (--no-tldr-cache)",
+                "tldr page cache will NOT be installed to ~/.cache/tealdeer")
+    else:
+        install_tldr_cache(repo_dir, home)
 
     install_prebuilt_binaries(repo_dir, home)
     install_nvim_treesitter_vendor(repo_dir, home)
