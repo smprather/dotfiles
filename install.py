@@ -253,8 +253,6 @@ def select_prebuilt_platform_dir(root_dir):
 def install_mode(args):
     if args.dev:
         return "dev"
-    if args.links:
-        return "links"
     return "copy"
 
 
@@ -438,7 +436,7 @@ def install_tldr_cache(repo_dir, home):
                 "run ./update_tldr_cache on a connected machine to bundle the pages")
         return
 
-    cache_home = os.environ.get("XDG_CACHE_HOME", os.path.join(home, ".cache"))
+    cache_home = os.path.join(home, ".cache")
     dest_dir = os.path.join(cache_home, "tealdeer", "tldr-pages")
     if os.path.exists(dest_dir):
         skipped("tldr-pages already present at {}".format(dest_dir),
@@ -606,27 +604,26 @@ def install_dev_mode(repo_dir, home):
     lns(".config/editorconfig/editorconfig", os.path.join(home, ".editorconfig"), verbose=True)
 
 
-def install_copy_or_links_mode(repo_dir, home, links_mode):
+def install_copy_mode(repo_dir, home):
     for entrypoint in BASH_ENTRYPOINTS:
         remove_if_exists(os.path.join(home, entrypoint))
-    install_bash(repo_dir, home, links_mode)
+    install_bash(repo_dir, home, links_mode=False)
 
     nvim_config = os.path.join(home, ".config", "nvim")
     remove_if_exists(nvim_config)
     for sub in ("after/lsp", "after/ftplugin", "lsp", "lua/custom/plugins"):
         os.makedirs(os.path.join(nvim_config, sub), exist_ok=True)
     for rel in ("lua/custom/plugins/init.lua", "lua/kickstart", "doc", "lazy-lock.json", "README.md", "LICENSE.md", "init.lua"):
-        install_path(os.path.join(repo_dir, "nvim", rel), os.path.join(nvim_config, rel), links_mode)
+        install_path(os.path.join(repo_dir, "nvim", rel), os.path.join(nvim_config, rel), False)
     for src in sorted(glob_paths(os.path.join(repo_dir, "nvim", "lsp"))):
-        install_path(src, os.path.join(nvim_config, "lsp", os.path.basename(src)), links_mode)
+        install_path(src, os.path.join(nvim_config, "lsp", os.path.basename(src)), False)
     for src in sorted(glob_paths(os.path.join(repo_dir, "nvim", "after", "ftplugin"))):
-        install_path(src, os.path.join(nvim_config, "after", "ftplugin", os.path.basename(src)), links_mode)
+        install_path(src, os.path.join(nvim_config, "after", "ftplugin", os.path.basename(src)), False)
     for src in sorted(glob_paths(os.path.join(repo_dir, "nvim", "after", "lsp"))):
-        install_path(src, os.path.join(nvim_config, "after", "lsp", os.path.basename(src)), links_mode)
-    if not links_mode:
-        plugins_dir = os.path.join(repo_dir, "nvim", "lua", "kickstart", "plugins")
-        for src in sorted(glob_paths(plugins_dir)):
-            install_path(src, os.path.join(nvim_config, "lua", "kickstart", "plugins", os.path.basename(src)), links_mode)
+        install_path(src, os.path.join(nvim_config, "after", "lsp", os.path.basename(src)), False)
+    plugins_dir = os.path.join(repo_dir, "nvim", "lua", "kickstart", "plugins")
+    for src in sorted(glob_paths(plugins_dir)):
+        install_path(src, os.path.join(nvim_config, "lua", "kickstart", "plugins", os.path.basename(src)), False)
 
     remove_if_exists(os.path.join(home, ".vimrc"))
     remove_if_exists(os.path.join(home, ".vim"))
@@ -636,8 +633,8 @@ def install_copy_or_links_mode(repo_dir, home, links_mode):
     os.makedirs(os.path.join(vim_config, "vim", "pack", "vendor", "opt"), exist_ok=True)
     for start_or_opt in ("start", "opt"):
         for plugin_dir in sorted(glob_paths(os.path.join(repo_dir, "vim", "vim", "pack", "vendor", start_or_opt))):
-            install_path(plugin_dir, os.path.join(vim_config, "vim", "pack", "vendor", start_or_opt, os.path.basename(plugin_dir)), links_mode)
-    install_path(os.path.join(repo_dir, "vim", "vimrc"), os.path.join(vim_config, "vimrc"), links_mode)
+            install_path(plugin_dir, os.path.join(vim_config, "vim", "pack", "vendor", start_or_opt, os.path.basename(plugin_dir)), False)
+    install_path(os.path.join(repo_dir, "vim", "vimrc"), os.path.join(vim_config, "vimrc"), False)
     lns(".config/vim/vimrc", os.path.join(home, ".vimrc"), verbose=True)
 
     remove_if_exists(os.path.join(home, ".tmux.conf"))
@@ -646,9 +643,9 @@ def install_copy_or_links_mode(repo_dir, home, links_mode):
     remove_if_exists(tmux_config)
     os.makedirs(os.path.join(tmux_config, "tmux", "plugins"), exist_ok=True)
     for plugin_dir in sorted(glob_paths(os.path.join(repo_dir, "tmux", "vendor", "plugins"))):
-        install_path(plugin_dir, os.path.join(tmux_config, "tmux", "plugins", os.path.basename(plugin_dir)), links_mode)
-    install_path(os.path.join(repo_dir, "tmux", "tmux.conf"), os.path.join(tmux_config, "tmux.conf"), links_mode)
-    install_path(os.path.join(repo_dir, "tmux", "tmux-3col-layout.sh"), os.path.join(tmux_config, "tmux-3col-layout.sh"), links_mode)
+        install_path(plugin_dir, os.path.join(tmux_config, "tmux", "plugins", os.path.basename(plugin_dir)), False)
+    install_path(os.path.join(repo_dir, "tmux", "tmux.conf"), os.path.join(tmux_config, "tmux.conf"), False)
+    install_path(os.path.join(repo_dir, "tmux", "tmux-3col-layout.sh"), os.path.join(tmux_config, "tmux-3col-layout.sh"), False)
     lns(".config/tmux/tmux.conf", os.path.join(home, ".tmux.conf"), verbose=True)
     lns(".config/tmux/tmux", os.path.join(home, ".tmux"), verbose=True)
 
@@ -656,13 +653,13 @@ def install_copy_or_links_mode(repo_dir, home, links_mode):
     editorconfig_dir = os.path.join(home, ".config", "editorconfig")
     remove_if_exists(editorconfig_dir)
     os.makedirs(editorconfig_dir, exist_ok=True)
-    install_path(os.path.join(repo_dir, "editorconfig", "editorconfig"), os.path.join(editorconfig_dir, "editorconfig"), links_mode)
+    install_path(os.path.join(repo_dir, "editorconfig", "editorconfig"), os.path.join(editorconfig_dir, "editorconfig"), False)
     lns(".config/editorconfig/editorconfig", os.path.join(home, ".editorconfig"), verbose=True)
 
     starship_dir = os.path.join(home, ".config", "starship")
     remove_if_exists(starship_dir)
     os.makedirs(starship_dir, exist_ok=True)
-    install_path(os.path.join(repo_dir, "starship", "starship.toml"), os.path.join(starship_dir, "starship.toml"), links_mode)
+    install_path(os.path.join(repo_dir, "starship", "starship.toml"), os.path.join(starship_dir, "starship.toml"), False)
 
 
 def glob_paths(path):
@@ -703,6 +700,7 @@ def run_post_install_hooks(hooks, repo_dir, home, args, backup_dir):
             "DOTFILES_NO_BACKUP": "1" if args.no_backup else "0",
             "DOTFILES_NO_FONTS": "1" if args.no_fonts else "0",
             "DOTFILES_NO_TLDR_CACHE": "1" if args.no_tldr_cache else "0",
+            "DOTFILES_DEST_DIR": home,
         })
         run(["bash", hook], env=env)
 
@@ -723,7 +721,8 @@ def parse_args(argv):
         formatter_class=argparse.RawTextHelpFormatter,
     )
     parser.add_argument("--dev", action="store_true")
-    parser.add_argument("--links", action="store_true")
+    parser.add_argument("--dest-dir", default=None, dest="dest_dir",
+                        metavar="DIR", help="Install root (default: $HOME)")
     parser.add_argument("--no-backup", action="store_true", dest="no_backup")
     parser.add_argument("--no-fonts", action="store_true", dest="no_fonts")
     parser.add_argument("--no-tldr-cache", action="store_true", dest="no_tldr_cache")
@@ -737,7 +736,7 @@ def parse_args(argv):
         sys.exit(0)
     if unknown:
         eprint("Unknown option: {}".format(unknown[0]))
-        eprint("Usage: ./install [--dev] [--links] [--no-backup] [--no-fonts] [--no-tldr-cache] [--post-install-hook <script>] [--verbose] [--restore-backup <dir>]")
+        eprint("Usage: ./install [--dev] [--dest-dir DIR] [--no-backup] [--no-fonts] [--no-tldr-cache] [--post-install-hook <script>] [--verbose] [--restore-backup <dir>]")
         eprint("Run './install --help' for details.")
         sys.exit(1)
     return args
@@ -752,11 +751,11 @@ Options:
   (default)                  Copy files from repo - no symlinks to the repo remain.
                              Re-run ./install after repo changes to update.
 
-  --links                    Symlink individual files/dirs to the repo instead of copying.
-                             Changes in the repo take effect immediately.
-
   --dev                      Directory-level symlinks to the repo (e.g. ~/.config/nvim -> repo/nvim).
                              Easiest when editing files frequently. Skips backups.
+
+  --dest-dir <dir>           Install into <dir> as the root instead of $HOME.
+                             Useful for staging installs or testing.
 
   --no-backup                Skip creating a backup of existing dotfiles before installing.
 
@@ -782,13 +781,15 @@ def main(argv):
 
     args = parse_args(argv)
     repo_dir = os.path.dirname(os.path.abspath(__file__))
-    home = os.path.expanduser("~")
+    home = os.path.abspath(args.dest_dir) if args.dest_dir else os.path.expanduser("~")
 
     if args.restore_backup:
         restore_backup(args.restore_backup, home)
         return 0
 
     print("Dotfiles repo base directory: {}".format(repo_dir))
+    if args.dest_dir:
+        print("Destination directory: {}".format(home))
 
     hooks = []
     for hook in args.post_install_hook:
@@ -797,7 +798,8 @@ def main(argv):
             return 1
         hooks.append(os.path.abspath(hook))
 
-    print("Changing directory to ~")
+    print("Changing directory to {}".format(home))
+    ensure_dir(home)
     os.chdir(home)
 
     backup_dir = ""
@@ -813,7 +815,7 @@ def main(argv):
     if args.dev:
         install_dev_mode(repo_dir, home)
     else:
-        install_copy_or_links_mode(repo_dir, home, args.links)
+        install_copy_mode(repo_dir, home)
 
     if args.no_fonts:
         print("Installing fonts...")

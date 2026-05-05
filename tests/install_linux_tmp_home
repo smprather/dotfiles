@@ -42,17 +42,15 @@ done
 script_dir=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 repo_dir=$(cd "$script_dir/.." && pwd)
 test_home=$(mktemp -d /tmp/dotfiles-install-home.XXXXXX)
-test_cache=$(mktemp -d /tmp/dotfiles-install-cache.XXXXXX)
 test_state=$(mktemp -d /tmp/dotfiles-install-state.XXXXXX)
 test_hooks=$(mktemp -d /tmp/dotfiles-install-hooks.XXXXXX)
 
 cleanup() {
     if [[ "$keep_home" == "1" ]]; then
         echo "Kept temp HOME: $test_home"
-        echo "Kept XDG_CACHE_HOME: $test_cache"
         echo "Kept XDG_STATE_HOME: $test_state"
     else
-        rm -rf "$test_home" "$test_cache" "$test_state" "$test_hooks"
+        rm -rf "$test_home" "$test_state" "$test_hooks"
     fi
 }
 trap cleanup EXIT
@@ -80,6 +78,7 @@ set -euo pipefail
     echo "hook1"
     echo "repo=$DOTFILES_REPO"
     echo "home=$DOTFILES_HOME"
+    echo "dest_dir=$DOTFILES_DEST_DIR"
     echo "mode=$DOTFILES_MODE"
     echo "backup=$DOTFILES_BACKUP_DIR"
     echo "no_backup=$DOTFILES_NO_BACKUP"
@@ -95,7 +94,7 @@ EOF
 
 chmod +x "$test_hooks/hook1.sh" "$test_hooks/hook2.sh"
 
-install_args=(--post-install-hook "$test_hooks/hook1.sh" --post-install-hook "$test_hooks/hook2.sh")
+install_args=(--dest-dir "$test_home" --post-install-hook "$test_hooks/hook1.sh" --post-install-hook "$test_hooks/hook2.sh")
 if [[ "$with_fonts" != "1" ]]; then
     install_args+=(--no-fonts)
 fi
@@ -103,9 +102,7 @@ fi
 echo "Temp HOME: $test_home"
 (
     cd /tmp
-    HOME="$test_home" \
-        XDG_CACHE_HOME="$test_cache" \
-        XDG_STATE_HOME="$test_state" \
+    XDG_STATE_HOME="$test_state" \
         "$repo_dir/install" "${install_args[@]}"
 )
 
@@ -130,6 +127,11 @@ if ! grep -q "^backup=$test_home/dotfiles_backups/backup" "$test_home/post-insta
     cat "$test_home/post-install-hooks.log" >&2
     exit 1
 fi
+if ! grep -q "^dest_dir=$test_home" "$test_home/post-install-hooks.log"; then
+    echo "Expected DOTFILES_DEST_DIR to equal --dest-dir value" >&2
+    cat "$test_home/post-install-hooks.log" >&2
+    exit 1
+fi
 
 assert_exists "$test_home/.config/bash/bashrc"
 assert_exists "$test_home/.config/nvim/init.lua"
@@ -138,6 +140,9 @@ assert_exists "$test_home/.config/nvim/after/ftplugin/yaml.lua"
 assert_exists "$test_home/.config/nvim/after/lsp/ty.lua"
 assert_exists "$test_home/.config/tmux/tmux.conf"
 assert_exists "$test_home/.config/starship/starship.toml"
+if [[ -f "$repo_dir/tldr/tldr-pages.tar.gz" ]]; then
+    assert_exists "$test_home/.cache/tealdeer/tldr-pages"
+fi
 if [[ -d "$repo_dir/pre_built/el8.x86_64.glibc2p28" ]]; then
     assert_exists "$test_home/.local/bin/fd"
     assert_exists "$test_home/.local/bin/eza"
@@ -160,7 +165,6 @@ assert_exists "$test_home/.local/share/nvim/tree-sitter-parsers/parser-info/pyth
 if command -v nvim >/dev/null; then
     printf 'print("ok")\n' > "$test_home/tree-sitter-smoke.py"
     HOME="$test_home" \
-        XDG_CACHE_HOME="$test_cache" \
         XDG_STATE_HOME="$test_state" \
         nvim --clean --headless -n "$test_home/tree-sitter-smoke.py" \
         +"set runtimepath+=$test_home/.local/share/nvim/dotfiles/vendor/treesitter-parser-registry" \
