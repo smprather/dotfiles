@@ -5,3 +5,4 @@ __pycache__/
 .claude/
 bash/corp
 vendor/fonts.scale
+resume_claude.sh
