@@ -1,10 +1,10 @@
 #!/usr/bin/env bash
 # Bundle the tealdeer tldr-pages cache for offline installs.
-# Run this on a connected machine, then commit tldr/tldr-pages.tar.gz.
+# Run this on a connected machine, then commit tldr/tldr-pages.tar.bz2.
 set -euo pipefail
 
 script_dir=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
-output="$script_dir/tldr/tldr-pages.tar.gz"
+output="$script_dir/tldr/tldr-pages.tar.bz2"
 cache_dir="${XDG_CACHE_HOME:-$HOME/.cache}/tealdeer"
 pages_dir="$cache_dir/tldr-pages"
 
@@ -23,6 +23,7 @@ fi
 
 mkdir -p "$script_dir/tldr"
 echo "Bundling $pages_dir -> $output"
-tar czf "$output" -C "$cache_dir" tldr-pages/
+rm -f "$script_dir/tldr/tldr-pages.tar.gz"
+tar cjf "$output" -C "$cache_dir" tldr-pages/
 echo "Done: $(du -sh "$output" | cut -f1) written to $output"
-echo "Commit tldr/tldr-pages.tar.gz to make it available offline."
+echo "Commit tldr/tldr-pages.tar.bz2 to make it available offline."

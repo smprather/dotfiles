@@ -30,7 +30,7 @@ installer while keeping `./install` as the stable command entrypoint.
    - Preserve argument forwarding.
 
 3. Preserve install behavior.
-   - Copy mode, links mode, and dev mode.
+   - Copy mode and dev mode. `--links` has been retired.
    - Bash layer preservation for `corp`, `site`, `project`, and `user`.
    - Managed shell entrypoint symlinks:
      `~/.bashrc`, `~/.bash_profile`, `~/.bash_login`, `~/.profile`.

@@ -8,4 +8,10 @@ if ! command -v python3 >/dev/null; then
     exit 1
 fi
 
+if ! python3 -c 'import sys; raise SystemExit(0 if sys.version_info >= (3, 6) else 1)' >/dev/null 2>&1; then
+    python_version=$(python3 -c 'import sys; print(".".join(map(str, sys.version_info[:3])))' 2>/dev/null || echo unknown)
+    echo "Error: This installer requires python3 >= 3.6; found $python_version." >&2
+    exit 1
+fi
+
 exec python3 "$script_dir/install.py" "$@"

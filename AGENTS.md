@@ -4,13 +4,20 @@ Scope: entire repository.
 
 ## Commit Rule
 
-Before every commit, sync the project Markdown docs that help agents cold-start:
+Before every commit, sync every project Markdown doc that helps agents or users
+cold-start. Do this before staging the commit, and do not commit known doc drift.
+At minimum check and update:
 
 - `README.md` for user-facing behavior and install options.
 - `CLAUDE.md` for detailed repository architecture and operational notes.
 - `AGENTS.md` for current agent rules, repo-specific pitfalls, and lessons learned.
+- `.github/copilot-instructions.md` for GitHub/Copilot agent cold-start notes.
+- Any active plan or handoff Markdown, such as `INSTALL_PYTHON_PORT_PLAN.md`,
+  when the area it describes changes.
 
-Do this before staging the commit so the docs match the code being committed.
+Use `rg` to search these docs for renamed commands, retired flags, new
+environment variables, and changed install behavior. The docs must match the
+code being committed.
 
 ## Cold Start
 
@@ -28,7 +35,9 @@ XDG_CACHE_HOME=/tmp/codex-nvim-cache XDG_STATE_HOME=/tmp/codex-nvim-state nvim -
 - Vendored fonts belong in `~/.local/share/fonts`. Generate `fonts.scale`/`fonts.dir` when `mkfontscale`/`mkfontdir` exist, but rely on `fc-cache` for actual desktop app discovery.
 - Font archives live under top-level `fonts/`. Archives over normal GitHub size limits should be split as `fonts/Name.zip.part-000`, `Name.zip.part-001`, etc. The installer rejoins split archives under `/tmp` before unzipping. Use 45 MiB chunks to stay below GitHub's 50 MB warning threshold.
 - Pre-built Linux binaries live under `pre_built/<platform>/`, for example `pre_built/el8.x86_64.glibc2p28/`. Installer decompresses `bin/*.gz` to `~/.local/bin` and `lib64/*.gz` to `~/.local/lib64`, then uses vendored `patchelf` to set `RPATH=$ORIGIN/../lib64:$ORIGIN/../lib` on dynamic executables. Prefer this over global `LD_LIBRARY_PATH`. Installer runs `ldd` afterward and warns about missing `.so` dependencies.
-- Use `./strip_pre_built` after adding pre-built binaries or libs; it strips ELF payloads inside `pre_built/**/*.gz` and recompresses with deterministic gzip metadata.
+- Use the Python 3.6-compatible `./strip_all_elf_binaries` after adding vendored binaries, libs, parser grammars, or tar archives. It walks the repo outside `.git`, strips raw ELF files in place, strips ELF payloads inside `.gz`, and rewrites tar archives as `.tar.bz2`. Tar archives are skipped on later runs when their size and modification time still match the strip manifest.
+- `./update_tldr_cache` writes `tldr/tldr-pages.tar.bz2`; installer still accepts legacy `.tar.gz`, but strip normalization will convert tar archives to bzip2.
+- Helix runtime is optional and lives at `helix/helix_runtime.tar.bz2`. Installer extracts it to `~/.config/helix/runtime`; `~/.config/helix/runtime/tutor` is the smoke-test sentinel.
 - WSL Windows Terminal does not read WSL fontconfig. Fonts must also be installed on the Windows side for Windows Terminal UI selection.
 - Do not backup font files during pre-install backups; vendored Nerd Font archives are large. Backup uses `rsync` with font-extension excludes.
 - `Snacks.nvim` provides the no-argument Neovim dashboard. Its dashboard buffer has filetype `snacks_dashboard`.

@@ -1,7 +1,7 @@
 #!/bin/bash
 # Pre-commit hook:
 #   1. Remove .git directories from embedded repositories.
-#   2. Strip pre_built/**/*.gz ELF payloads when any are staged.
+#   2. Strip repo ELF payloads when staged binary/archive candidates change.
 
 set -euo pipefail
 
@@ -26,21 +26,42 @@ else
     echo "✓ No embedded git repositories found"
 fi
 
-# --- 2. Strip pre-built binaries ---
+# --- 2. Strip repo binaries and binary archives ---
 
-staged_gz=$(git diff --cached --name-only | grep '^pre_built/.*\.gz$' || true)
+staged_strip_candidates=$(
+    git diff --cached --name-only --diff-filter=ACM |
+        grep -E '(^|/)([^/]+)$' |
+        grep -E '\.(gz|so|tar|tgz|tbz2|txz|tar\.bz2|tar\.gz|tar\.xz)$|(^|/)(bin|lib64|grammars|parser)/' || true
+)
 
-if [[ -n "$staged_gz" ]]; then
-    echo "Pre-commit: Stripping pre-built binaries..."
+if [[ -n "$staged_strip_candidates" ]]; then
+    echo "Pre-commit: Stripping repo binaries and archives..."
 
     if ! command -v strip >/dev/null; then
         echo "  WARNING: 'strip' not found in PATH — skipping ELF stripping." >&2
-        echo "  Run ./strip_pre_built manually before committing pre_built/ changes." >&2
+        echo "  Run ./strip_all_elf_binaries manually before committing binary/archive changes." >&2
     else
-        "$script_dir/strip_pre_built"
-        # Re-stage stripped files and updated manifest
-        git add pre_built/
-        echo "✓ Pre-built binaries stripped and staged"
+        "$script_dir/strip_all_elf_binaries"
+        # Re-stage candidate files, converted tar.bz2 names, removals, and updated manifests
+        # without sweeping unrelated untracked files into the commit.
+        git add -u
+        while IFS= read -r candidate; do
+            [[ -z "$candidate" ]] && continue
+            [[ -e "$candidate" ]] && git add -- "$candidate"
+            case "$candidate" in
+            *.tar.gz) converted="${candidate%.tar.gz}.tar.bz2" ;;
+            *.tgz) converted="${candidate%.tgz}.tar.bz2" ;;
+            *.tar.xz) converted="${candidate%.tar.xz}.tar.bz2" ;;
+            *.txz) converted="${candidate%.txz}.tar.bz2" ;;
+            *.tbz2) converted="${candidate%.tbz2}.tar.bz2" ;;
+            *.tar) converted="${candidate%.tar}.tar.bz2" ;;
+            *) converted="" ;;
+            esac
+            [[ -n "$converted" && -e "$converted" ]] && git add -- "$converted"
+        done <<< "$staged_strip_candidates"
+        [[ -f .strip-manifest ]] && git add .strip-manifest
+        [[ -f pre_built/.strip-manifest ]] && git add pre_built/.strip-manifest
+        echo "✓ Repo binaries and archives stripped and staged"
     fi
 fi
 

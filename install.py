@@ -10,7 +10,9 @@ import shutil
 import stat
 import subprocess
 import sys
+import tarfile
 import tempfile
+import warnings
 import zipfile
 
 
@@ -430,9 +432,14 @@ def install_fonts(repo_dir, home):
 
 def install_tldr_cache(repo_dir, home):
     print("Installing tldr page cache...")
-    archive = os.path.join(repo_dir, "tldr", "tldr-pages.tar.gz")
-    if not os.path.exists(archive):
-        skipped("tldr/tldr-pages.tar.gz not found in repo",
+    archive = None
+    for candidate in ("tldr-pages.tar.bz2", "tldr-pages.tar.gz"):
+        path = os.path.join(repo_dir, "tldr", candidate)
+        if os.path.exists(path):
+            archive = path
+            break
+    if not archive:
+        skipped("tldr/tldr-pages.tar.bz2 or tldr/tldr-pages.tar.gz not found in repo",
                 "run ./update_tldr_cache on a connected machine to bundle the pages")
         return
 
@@ -444,13 +451,46 @@ def install_tldr_cache(repo_dir, home):
         return
 
     ensure_dir(os.path.join(cache_home, "tealdeer"))
-    import tarfile
-    with tarfile.open(archive, "r:gz") as tf:
-        try:
-            tf.extractall(os.path.join(cache_home, "tealdeer"), filter="data")
-        except TypeError:
-            tf.extractall(os.path.join(cache_home, "tealdeer"))
+    with tarfile.open(archive, "r:*") as tf:
+        safe_extract_tar(tf, os.path.join(cache_home, "tealdeer"))
     print("  tldr page cache installed to {}".format(dest_dir))
+
+
+def safe_extract_tar(tf, dest_dir):
+    dest_real = os.path.realpath(dest_dir)
+    for member in tf.getmembers():
+        target_real = os.path.realpath(os.path.join(dest_dir, member.name))
+        if not (target_real == dest_real or target_real.startswith(dest_real + os.sep)):
+            raise RuntimeError("unsafe tar member path: {}".format(member.name))
+    try:
+        tf.extractall(dest_dir, filter="data")
+    except TypeError:
+        with warnings.catch_warnings():
+            warnings.filterwarnings("ignore", message="The default behavior of tarfile extraction has been changed.*")
+            tf.extractall(dest_dir)
+
+
+def install_helix_runtime(repo_dir, home):
+    print("Installing Helix runtime...")
+    archive = os.path.join(repo_dir, "helix", "helix_runtime.tar.bz2")
+    if not os.path.isfile(archive):
+        skipped("Helix runtime (helix/helix_runtime.tar.bz2 not found in repo)",
+                "hx will NOT have the vendored runtime at ~/.config/helix/runtime")
+        return
+
+    helix_config_dir = os.path.join(home, ".config", "helix")
+    runtime_dir = os.path.join(helix_config_dir, "runtime")
+    ensure_dir(helix_config_dir)
+    remove_if_exists(runtime_dir)
+
+    with tarfile.open(archive, "r:bz2") as tf:
+        safe_extract_tar(tf, helix_config_dir)
+
+    tutor = os.path.join(runtime_dir, "tutor")
+    if os.path.isfile(tutor):
+        print("  Installed: {} -> {}/".format(archive, runtime_dir))
+    else:
+        warn("Helix runtime archive did not install {}/tutor as expected".format(runtime_dir))
 
 
 def install_treesitter_parsers(repo_dir, home):
@@ -505,7 +545,8 @@ def restore_backup(backup_dir, home):
             remove_if_exists(os.path.join(bash_config, name))
 
     for rel in list(BASH_ENTRYPOINTS) + [".vimrc", ".tmux.conf", ".editorconfig", ".tmux", ".vim",
-                                        ".config/nvim", ".config/tmux", ".config/editorconfig", ".config/starship", ".config/vim"]:
+                                        ".config/nvim", ".config/tmux", ".config/editorconfig", ".config/starship", ".config/vim",
+                                        ".config/helix/runtime"]:
         path = os.path.join(home, rel)
         if os.path.exists(path) or os.path.islink(path):
             print("  Removing: {}".format(path))
@@ -577,7 +618,7 @@ def backup_existing(home, repo_dir):
                                         ".config/vim", ".config/nvim", ".config/bash/global",
                                         ".config/bash/functions.sh", ".config/bash/README.md",
                                         ".config/bash/bashrc", ".config/tmux", ".config/starship",
-                                        ".config/editorconfig"]:
+                                        ".config/editorconfig", ".config/helix/runtime"]:
         path = os.path.join(home, rel)
         if not (os.path.exists(path) or os.path.islink(path)):
             continue
@@ -835,6 +876,7 @@ def main(argv):
         install_tldr_cache(repo_dir, home)
 
     install_prebuilt_binaries(repo_dir, home)
+    install_helix_runtime(repo_dir, home)
     install_nvim_treesitter_vendor(repo_dir, home)
     install_treesitter_parsers(repo_dir, home)
     install_git_hooks(repo_dir, args.dev)

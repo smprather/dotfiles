@@ -83,6 +83,7 @@ set -euo pipefail
     echo "backup=$DOTFILES_BACKUP_DIR"
     echo "no_backup=$DOTFILES_NO_BACKUP"
     echo "no_fonts=$DOTFILES_NO_FONTS"
+    echo "no_tldr_cache=$DOTFILES_NO_TLDR_CACHE"
 } >> "$DOTFILES_HOME/post-install-hooks.log"
 EOF
 
@@ -140,7 +141,7 @@ assert_exists "$test_home/.config/nvim/after/ftplugin/yaml.lua"
 assert_exists "$test_home/.config/nvim/after/lsp/ty.lua"
 assert_exists "$test_home/.config/tmux/tmux.conf"
 assert_exists "$test_home/.config/starship/starship.toml"
-if [[ -f "$repo_dir/tldr/tldr-pages.tar.gz" ]]; then
+if [[ -f "$repo_dir/tldr/tldr-pages.tar.bz2" || -f "$repo_dir/tldr/tldr-pages.tar.gz" ]]; then
     assert_exists "$test_home/.cache/tealdeer/tldr-pages"
 fi
 if [[ -d "$repo_dir/pre_built/el8.x86_64.glibc2p28" ]]; then
@@ -155,6 +156,9 @@ if [[ -d "$repo_dir/pre_built/el8.x86_64.glibc2p28" ]]; then
         echo "Expected tmux RPATH to include vendored lib64 path, got: $rpath" >&2
         exit 1
     fi
+fi
+if [[ -f "$repo_dir/helix/helix_runtime.tar.bz2" ]]; then
+    assert_exists "$test_home/.config/helix/runtime/tutor"
 fi
 assert_exists "$test_home/.local/share/nvim/dotfiles/vendor/nvim-treesitter/lua/nvim-treesitter/init.lua"
 assert_exists "$test_home/.local/share/nvim/dotfiles/vendor/treesitter-parser-registry/registry.json"

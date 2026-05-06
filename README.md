@@ -14,6 +14,7 @@ without modification and overridden without forking.
 | **Neovim** | Kickstart.nvim base, Lazy.nvim, LSP, treesitter, locked plugin versions |
 | **Vim** | Bundled plugins (NERDTree, SimpylFold), no internet required |
 | **Tmux** | Bundled plugins (resurrect, continuum, better-mouse-mode), `Ctrl-\` prefix |
+| **Helix** | Optional vendored runtime archive installed to `~/.config/helix/runtime` |
 | **PowerShell** | Aliases, Unix coreutils wrappers, PSReadLine, Starship, zoxide, PSFzf |
 | **WezTerm** | Terminal config |
 | **Starship** | Cross-shell prompt config installed to `~/.config/starship/starship.toml` |
@@ -47,6 +48,15 @@ The Linux installer can be invoked from outside the repo root. `./install` is a
 small Bash shim that runs the Python 3.6-compatible implementation in
 `install.py`.
 
+Useful install options:
+```bash
+./install --dev                  # repo symlinks for development
+./install --dest-dir /tmp/home   # stage/test install into another root
+./install --no-backup            # overwrite managed files without backup
+./install --no-fonts             # skip vendored font install
+./install --no-tldr-cache        # skip bundled tldr page cache
+```
+
 Vendored Nerd Fonts from top-level `fonts/` are installed to
 `~/.local/share/fonts` and refreshed with
 fontconfig (`fc-cache`) when available. This works for normal Linux desktop
@@ -61,8 +71,11 @@ are decompressed into `~/.local/bin`; matching `lib64/*.gz` files go to
 `~/.local/lib64`. Platform directories use names like
 `el8.x86_64.glibc2p28`. The installer uses vendored `patchelf` to set
 `$ORIGIN/../lib64:$ORIGIN/../lib` RPATHs on installed dynamic binaries.
-Run `./strip_pre_built` after adding binaries or libraries to remove debug
-symbols and recompress the vendored payloads.
+Run the Python 3.6-compatible `./strip_all_elf_binaries` helper after adding
+binaries, libraries, parser grammars, or tar archives to remove debug symbols
+and recompress vendored ELF payloads. Tar archives are normalized to
+`.tar.bz2`; unchanged processed tarballs are skipped by size and modification
+time.
 
 Optional corporate/site add-ons can be chained after the global install:
 ```bash
@@ -71,7 +84,8 @@ Optional corporate/site add-ons can be chained after the global install:
 `--post-install-hook` can be provided multiple times; hooks run in argument
 order. Each hook runs with `bash` and receives `DOTFILES_REPO`,
 `DOTFILES_HOME`, `DOTFILES_MODE`, `DOTFILES_BACKUP_DIR`,
-`DOTFILES_NO_BACKUP`, and `DOTFILES_NO_FONTS`.
+`DOTFILES_DEST_DIR`, `DOTFILES_NO_BACKUP`, `DOTFILES_NO_FONTS`, and
+`DOTFILES_NO_TLDR_CACHE`.
 
 Vendored `nvim-treesitter`, the parser registry, and matching prebuilt
 Tree-sitter parsers/queries are installed for offline Neovim v0.12+ use.
@@ -82,6 +96,14 @@ home:
 ```bash
 ./tests/install_linux_tmp_home
 ```
+
+The optional offline tldr cache is bundled as `tldr/tldr-pages.tar.bz2` by
+`./update_tldr_cache`; legacy `tldr-pages.tar.gz` is still accepted by the
+installer.
+
+If `helix/helix_runtime.tar.bz2` is present, the Linux installer extracts it
+into `~/.config/helix/`, producing paths such as
+`~/.config/helix/runtime/tutor`.
 
 Repo git hooks are installed only in development mode:
 ```bash
@@ -105,8 +127,8 @@ Windows AutoHotKey notes:
 - The installer patches those feature flags into `%USERPROFILE%\autohotkey\hotkeys.ahk` after copying it.
 - Current feature IDs: `corp-logins`, `mouse-wiggle`, `cisco-secure-client-vpn`, `password-manager`, `tmux-hotkeys`, `f1f2f3-as-mouse-buttons`, `thinlinc-reconnect`.
 
-See [CLAUDE.md](CLAUDE.md) for full details: `--dev`, `--links`, `--no-backup`,
-backup/restore, layer overrides, and Windows copy destinations.
+See [CLAUDE.md](CLAUDE.md) for full details: `--dev`, `--dest-dir`,
+`--no-backup`, backup/restore, layer overrides, and Windows copy destinations.
 
 # Related
 

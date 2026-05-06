@@ -1,0 +1,358 @@
+#!/usr/bin/env python3
+from __future__ import print_function
+
+import argparse
+import bz2
+import gzip
+import hashlib
+import os
+import shutil
+import stat
+import subprocess
+import sys
+import tarfile
+import tempfile
+import warnings
+
+
+ARCHIVE_SUFFIXES = (
+    ".tar.gz",
+    ".tar.bz2",
+    ".tar.xz",
+    ".tgz",
+    ".tbz2",
+    ".txz",
+    ".tar",
+)
+
+
+def eprint(*args):
+    print(*args, file=sys.stderr)
+
+
+def command_exists(name):
+    return shutil.which(name) is not None
+
+
+def repo_rel(repo_dir, path):
+    return os.path.relpath(path, repo_dir)
+
+
+def sha256_of(path):
+    h = hashlib.sha256()
+    with open(path, "rb") as fh:
+        for chunk in iter(lambda: fh.read(1024 * 1024), b""):
+            h.update(chunk)
+    return h.hexdigest()
+
+
+def file_size(path):
+    return os.stat(path).st_size
+
+
+def file_mtime(path):
+    return int(os.stat(path).st_mtime)
+
+
+def is_elf_file(path):
+    try:
+        with open(path, "rb") as fh:
+            return fh.read(4) == b"\x7fELF"
+    except IOError:
+        return False
+
+
+def is_archive_name(path):
+    return any(path.endswith(suffix) for suffix in ARCHIVE_SUFFIXES)
+
+
+def is_tar_path(path):
+    if not is_archive_name(path):
+        return False
+    try:
+        return tarfile.is_tarfile(path)
+    except (tarfile.TarError, IOError):
+        return False
+
+
+def tar_bz2_path(path):
+    for suffix in (".tar.gz", ".tar.xz", ".tar.bz2"):
+        if path.endswith(suffix):
+            return path[:-len(suffix)] + ".tar.bz2"
+    for suffix in (".tgz", ".tbz2", ".txz", ".tar"):
+        if path.endswith(suffix):
+            return path[:-len(suffix)] + ".tar.bz2"
+    return path + ".tar.bz2"
+
+
+def walk_files(repo_dir):
+    for root, dirs, files in os.walk(repo_dir):
+        if ".git" in dirs:
+            dirs.remove(".git")
+        dirs[:] = sorted(dirs)
+        for name in sorted(files):
+            yield os.path.join(root, name)
+
+
+class Manifest(object):
+    def __init__(self, repo_dir, use_manifest):
+        self.repo_dir = repo_dir
+        self.use_manifest = use_manifest
+        self.path = os.path.join(repo_dir, ".strip-manifest")
+        self.legacy_path = os.path.join(repo_dir, "pre_built", ".strip-manifest")
+        self.entries = {}
+
+    def load(self):
+        if not self.use_manifest:
+            return
+        self._load_file(self.legacy_path)
+        self._load_file(self.path)
+
+    def _load_file(self, path):
+        if not os.path.isfile(path):
+            return
+        with open(path, "r") as fh:
+            for raw in fh:
+                line = raw.rstrip("\n")
+                if not line or line.startswith("#"):
+                    continue
+                parts = line.split("  ")
+                if len(parts) >= 3 and parts[0] == "sha256":
+                    self.entries[parts[2]] = ("sha256", parts[1])
+                elif len(parts) >= 4 and parts[0] == "tar-meta":
+                    self.entries[parts[3]] = ("tar-meta", parts[1], parts[2])
+                elif len(parts) >= 2 and len(parts[0]) == 64:
+                    self.entries[parts[1]] = ("sha256", parts[0])
+
+    def save(self, dry_run):
+        if not self.use_manifest or dry_run:
+            return
+        tmp = tempfile.NamedTemporaryFile("w", delete=False, dir=self.repo_dir, prefix=".strip-manifest.")
+        try:
+            tmp.write("# strip manifest\n")
+            tmp.write("# sha256 entries skip unchanged stripped raw/gzip payloads\n")
+            tmp.write("# tar-meta entries skip unchanged processed tar.bz2 archives by size+mtime\n")
+            for key in sorted(self.entries):
+                entry = self.entries[key]
+                if entry[0] == "sha256":
+                    tmp.write("sha256  {}  {}\n".format(entry[1], key))
+                elif entry[0] == "tar-meta":
+                    tmp.write("tar-meta  {}  {}  {}\n".format(entry[1], entry[2], key))
+            tmp.close()
+            os.rename(tmp.name, self.path)
+        finally:
+            try:
+                os.unlink(tmp.name)
+            except OSError:
+                pass
+
+    def sha_hit(self, rel, path):
+        if not self.use_manifest:
+            return False
+        entry = self.entries.get(rel)
+        return bool(entry and entry[0] == "sha256" and sha256_of(path) == entry[1])
+
+    def tar_hit(self, rel, path):
+        if not self.use_manifest:
+            return False
+        entry = self.entries.get(rel)
+        return bool(entry and entry[0] == "tar-meta"
+                    and str(file_size(path)) == entry[1]
+                    and str(file_mtime(path)) == entry[2])
+
+    def record_sha(self, rel, path):
+        self.entries[rel] = ("sha256", sha256_of(path))
+
+    def record_tar(self, rel, path):
+        self.entries[rel] = ("tar-meta", str(file_size(path)), str(file_mtime(path)))
+
+
+def strip_file(strip_bin, path):
+    subprocess.check_call([strip_bin, "--strip-all", path])
+
+
+def gzip_write_deterministic(src_path, dest_path):
+    with open(src_path, "rb") as src:
+        with open(dest_path, "wb") as raw_dest:
+            with gzip.GzipFile(filename="", mode="wb", compresslevel=9, fileobj=raw_dest, mtime=0) as gz_dest:
+                shutil.copyfileobj(src, gz_dest)
+
+
+def process_gzip(repo_dir, manifest, strip_bin, gz_path, tmp_dir, dry_run, stats):
+    rel = repo_rel(repo_dir, gz_path)
+    if manifest.sha_hit(rel, gz_path):
+        print("manifest hit (already stripped): {}".format(gz_path))
+        stats["skipped_manifest"] += 1
+        return
+
+    stats["processed"] += 1
+    payload = os.path.join(tmp_dir, os.path.basename(gz_path[:-3]) + ".payload")
+    with gzip.open(gz_path, "rb") as src, open(payload, "wb") as dest:
+        shutil.copyfileobj(src, dest)
+
+    if not is_elf_file(payload):
+        print("skip non-ELF gzip payload: {}".format(gz_path))
+        stats["skipped_nonelf"] += 1
+        os.unlink(payload)
+        return
+
+    if dry_run:
+        print("would strip gzip payload: {}".format(gz_path))
+        os.unlink(payload)
+        return
+
+    before_size = file_size(gz_path)
+    mode = stat.S_IMODE(os.stat(gz_path).st_mode)
+    strip_file(strip_bin, payload)
+    tmp_gz = gz_path + ".tmp"
+    gzip_write_deterministic(payload, tmp_gz)
+    os.chmod(tmp_gz, mode)
+    os.rename(tmp_gz, gz_path)
+    after_size = file_size(gz_path)
+    print("stripped gzip payload: {} ({} -> {} bytes)".format(gz_path, before_size, after_size))
+    stats["stripped"] += 1
+    manifest.record_sha(rel, gz_path)
+    os.unlink(payload)
+
+
+def process_raw_elf(repo_dir, manifest, strip_bin, path, dry_run, stats):
+    rel = repo_rel(repo_dir, path)
+    if manifest.sha_hit(rel, path):
+        print("manifest hit (already stripped): {}".format(path))
+        stats["skipped_manifest"] += 1
+        return
+
+    stats["processed"] += 1
+    if dry_run:
+        print("would strip: {}".format(path))
+        return
+
+    before_size = file_size(path)
+    strip_file(strip_bin, path)
+    after_size = file_size(path)
+    print("stripped: {} ({} -> {} bytes)".format(path, before_size, after_size))
+    stats["stripped"] += 1
+    manifest.record_sha(rel, path)
+
+
+def add_tree_to_tar(tf, source_dir):
+    for root, dirs, files in os.walk(source_dir):
+        dirs[:] = sorted(dirs)
+        files = sorted(files)
+        rel_root = os.path.relpath(root, source_dir)
+        arc_root = "." if rel_root == "." else os.path.join(".", rel_root)
+        if rel_root != ".":
+            tf.add(root, arcname=arc_root, recursive=False)
+        for name in files:
+            path = os.path.join(root, name)
+            arcname = os.path.join(arc_root, name)
+            tf.add(path, arcname=arcname, recursive=False)
+
+
+def process_tar(repo_dir, manifest, strip_bin, tar_path, tmp_dir, dry_run, stats):
+    out_path = tar_bz2_path(tar_path)
+    out_rel = repo_rel(repo_dir, out_path)
+    if os.path.isfile(out_path) and manifest.tar_hit(out_rel, out_path):
+        print("manifest hit (already processed tar): {}".format(out_path))
+        stats["skipped_manifest"] += 1
+        return
+
+    stats["processed"] += 1
+    if dry_run:
+        if tar_path == out_path:
+            print("would strip tar contents and rewrite: {}".format(tar_path))
+        else:
+            print("would strip tar contents and convert: {} -> {}".format(tar_path, out_path))
+        return
+
+    work_dir = tempfile.mkdtemp(prefix="tar.", dir=tmp_dir)
+    before_size = file_size(tar_path)
+    with tarfile.open(tar_path, "r:*") as tf:
+        with warnings.catch_warnings():
+            warnings.filterwarnings("ignore", message="The default behavior of tarfile extraction has been changed.*")
+            tf.extractall(work_dir)
+
+    tar_stripped = 0
+    for member in walk_files(work_dir):
+        if is_elf_file(member):
+            strip_file(strip_bin, member)
+            tar_stripped += 1
+
+    tmp_out = out_path + ".tmp"
+    with tarfile.open(tmp_out, "w:bz2") as tf:
+        add_tree_to_tar(tf, work_dir)
+    os.rename(tmp_out, out_path)
+    if tar_path != out_path:
+        os.unlink(tar_path)
+
+    after_size = file_size(out_path)
+    print("rewrote tar.bz2: {} -> {} ({} -> {} bytes, stripped {} ELF files)".format(
+        tar_path, out_path, before_size, after_size, tar_stripped))
+    stats["rewritten_tar"] += 1
+    stats["stripped"] += tar_stripped
+    manifest.record_tar(out_rel, out_path)
+    shutil.rmtree(work_dir)
+
+
+def parse_args(argv):
+    parser = argparse.ArgumentParser(
+        description="Strip ELF payloads anywhere in this repository.",
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        epilog="""Behavior:
+  Raw ELF files are stripped in place.
+  *.gz files are stripped if their decompressed payload is ELF.
+  Tar archives are rewritten as *.tar.bz2 after stripping ELF contents.
+  .git is skipped.""")
+    parser.add_argument("--dry-run", action="store_true", help="show what would be stripped")
+    parser.add_argument("--strip", default=os.environ.get("STRIP", "strip"), help="strip executable path")
+    parser.add_argument("--no-manifest", action="store_true", help="ignore manifest and strip unconditionally")
+    return parser.parse_args(argv)
+
+
+def main(argv):
+    args = parse_args(argv)
+    strip_bin = args.strip
+    if not command_exists(strip_bin):
+        eprint("Error: strip executable not found: {}".format(strip_bin))
+        return 1
+
+    repo_dir = os.path.dirname(os.path.abspath(__file__))
+    manifest = Manifest(repo_dir, not args.no_manifest)
+    manifest.load()
+    tmp_dir = tempfile.mkdtemp(prefix="dotfiles-strip.", dir="/tmp")
+    stats = {
+        "processed": 0,
+        "stripped": 0,
+        "rewritten_tar": 0,
+        "skipped_manifest": 0,
+        "skipped_nonelf": 0,
+    }
+
+    try:
+        for path in list(walk_files(repo_dir)):
+            if is_tar_path(path):
+                process_tar(repo_dir, manifest, strip_bin, path, tmp_dir, args.dry_run, stats)
+
+        for path in list(walk_files(repo_dir)):
+            if path.endswith(".gz") and not path.endswith(".tar.gz"):
+                process_gzip(repo_dir, manifest, strip_bin, path, tmp_dir, args.dry_run, stats)
+
+        manifest_names = {manifest.path, manifest.legacy_path}
+        for path in list(walk_files(repo_dir)):
+            if path in manifest_names or path.endswith(".gz") or is_archive_name(path):
+                continue
+            if is_elf_file(path):
+                process_raw_elf(repo_dir, manifest, strip_bin, path, args.dry_run, stats)
+
+        manifest.save(args.dry_run)
+    finally:
+        shutil.rmtree(tmp_dir)
+
+    skipped = stats["skipped_manifest"] + stats["skipped_nonelf"]
+    print("Processed: {processed}, stripped ELF files: {stripped}, rewritten tar archives: {rewritten_tar}, skipped: {skipped} (manifest: {skipped_manifest}, non-ELF gzip: {skipped_nonelf})".format(
+        skipped=skipped, **stats))
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main(sys.argv[1:]))

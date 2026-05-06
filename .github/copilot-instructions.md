@@ -8,14 +8,18 @@ Dotfiles for Electrical Engineering work environments: multi-platform (RedHat 7/
 # Linux install (copies files — no repo references remain)
 ./install
 
-# Install with file-level symlinks (repo changes take effect immediately)
-./install --links
-
 # Install with directory-level symlinks (easiest for editing)
 ./install --dev
 
+# Stage an install into a temp/test root
+./install --dest-dir /tmp/dotfiles-home
+
 # Restore from numbered backup
 ./install --restore-backup dotfiles_backups/backup.1
+
+# Skip optional large/offline payloads
+./install --no-fonts
+./install --no-tldr-cache
 
 # Reload bash after changes
 exec bash
@@ -70,10 +74,11 @@ Each layer can inject code into `global/bashrc` via numbered files in `<layer>/g
 ### Install Modes
 
 - **Production** (default): copies files; re-run `./install` to pick up repo changes
-- **`--links`**: file/dir-level symlinks to repo; `~/.config/bash/global` → `repo/bash/global`; changes take effect immediately
 - **`--dev`**: directory-level symlinks for nvim/vim/tmux/starship/editorconfig; for bash, symlinks individual repo-managed files (`global/`, `functions.sh`, `bashrc`) while preserving user layer dirs as real directories
+- **`--dest-dir <dir>`**: install into an alternate root instead of `$HOME`; used by installer tests and staging
 - **`--no-backup`**: skip backup creation (useful for clean reinstalls or automation)
 - **`--no-fonts`**: skip vendored font extraction and font cache refresh
+- **`--no-tldr-cache`**: skip bundled tealdeer/tldr page cache install
 - **`--post-install-hook <script>`**: run an explicit corp/site/user add-on installer after global install steps; can be repeated and hooks run in argument order
 
 Backups are numbered (`dotfiles_backups/backup.N/`). The installer skips targets already pointing into the repo and never overwrites an existing backup.
@@ -86,7 +91,15 @@ Pre-built Linux binaries live under `pre_built/<platform>/`, using names like
 `~/.local/bin` and `lib64/*.gz` to `~/.local/lib64`, then uses vendored
 `patchelf` to set `$ORIGIN/../lib64:$ORIGIN/../lib` RPATHs on dynamic binaries
 and runs `ldd` to warn about missing `.so` dependencies.
-Use `./strip_pre_built` after adding pre-built binaries or libraries.
+If `helix/helix_runtime.tar.bz2` exists, the installer extracts it to
+`~/.config/helix/runtime`; `runtime/tutor` is the expected sentinel file.
+Use the Python 3.6-compatible `./strip_all_elf_binaries` after adding vendored
+binaries, libraries, parser grammars, or tar archives. It walks the repo
+outside `.git`, strips raw ELF files in place, strips ELF payloads inside
+`.gz`, and rewrites tar archives as `.tar.bz2`; processed tarballs are skipped
+later when size and modification time match the strip manifest.
+`./update_tldr_cache` writes `tldr/tldr-pages.tar.bz2`; the installer also
+accepts legacy `.tar.gz`.
 
 ### Bundled Plugins
 
@@ -116,7 +129,7 @@ to `~/.local/share/nvim/tree-sitter-parsers/`.
 
 ### Pre-commit Hook
 
-`hooks/pre-commit` scans for nested `.git` directories (from bundled plugins), removes them, and re-stages. Install this hook when developing this repo or working with bundled plugins. Normal end-user installs do not need repo git hooks. The hook runs `git add -A` after cleanup, so review staged files after it runs.
+`hooks/pre-commit` scans for nested `.git` directories (from bundled plugins), removes them, and re-stages. It also runs `./strip_all_elf_binaries` when staged binary/archive candidates change. Install this hook when developing this repo or working with bundled plugins. Normal end-user installs do not need repo git hooks. The embedded `.git` cleanup may broadly re-stage affected files; the binary stripping path restages only tracked updates, staged candidates, converted `.tar.bz2` archives, and strip manifests. Review staged files after it runs.
 
 ### Adding a Bundled Plugin
 
