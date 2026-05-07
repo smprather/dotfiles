@@ -19,7 +19,7 @@ Build selected parsers while testing:
 Output is platform-specific:
 
 ```text
-treesitter/prebuilt/<os>-<arch>-<libc>/parser/*.so
+treesitter/prebuilt/<os>-<arch>-<libc>/parser/*.so.bz2
 treesitter/prebuilt/<os>-<arch>-<libc>/parser-info/*.lua
 treesitter/prebuilt/<os>-<arch>-<libc>/queries/*/*.scm
 treesitter/prebuilt/<os>-<arch>-<libc>/registry/registry-cache.lua
@@ -35,6 +35,7 @@ The Linux installer copies vendored plugins to:
 ~/.local/share/nvim/dotfiles/vendor/
 ```
 
-and copies matching prebuilt parsers and queries to
-`~/.local/share/nvim/tree-sitter-parsers/`. Neovim v0.12+ then starts native
-Tree-sitter highlighting from the offline parser directory.
+and decompresses matching prebuilt parsers to
+`~/.local/share/nvim/tree-sitter-parsers/parser/*.so`, then copies queries and
+metadata. Neovim v0.12+ then starts native Tree-sitter highlighting from the
+offline parser directory.

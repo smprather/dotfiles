@@ -1,5 +1,5 @@
 return {
-  ["parser_version"] = "7e254abb76618227806f6881525980231faa1610",
-  ["queries_version"] = "2dea1e29029b540e11dae62348ad5c0ebb198997",
+  ["parser_version"] = "792cc9ebb30c1dbe4f349bd0a9928f0f7581baee",
+  ["queries_version"] = "b5572884821b1a4d6cbde0bf21784c9320a0424f",
   ["type"] = "external_queries"
 }

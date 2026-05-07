@@ -66,8 +66,8 @@ side. Large font archives may be stored as `*.zip.part-*`; the installer
 rejoins them in `/tmp` before extracting. Use `./install --no-fonts` to skip
 font installation.
 
-Platform-matched pre-built Linux binaries from `pre_built/<platform>/bin/*.gz`
-are decompressed into `~/.local/bin`; matching `lib64/*.gz` files go to
+Platform-matched pre-built Linux binaries from `pre_built/<platform>/bin/*.bz2`
+are decompressed into `~/.local/bin`; matching `lib64/*.bz2` files go to
 `~/.local/lib64`. Platform directories use names like
 `el8.x86_64.glibc2p28`. The installer uses vendored `patchelf` to set
 `$ORIGIN/../lib64:$ORIGIN/../lib` RPATHs on installed dynamic binaries.
@@ -87,8 +87,8 @@ order. Each hook runs with `bash` and receives `DOTFILES_REPO`,
 `DOTFILES_DEST_DIR`, `DOTFILES_NO_BACKUP`, `DOTFILES_NO_FONTS`, and
 `DOTFILES_NO_TLDR_CACHE`.
 
-Vendored `nvim-treesitter`, the parser registry, and matching prebuilt
-Tree-sitter parsers/queries are installed for offline Neovim v0.12+ use.
+Vendored `nvim-treesitter`, the parser registry, and matching bzip2-compressed
+prebuilt Tree-sitter parsers/queries are installed for offline Neovim v0.12+ use.
 Build or refresh the full parser set with `./treesitter/build_parsers`.
 
 Linux install smoke testing can simulate a fresh user by installing into a temp

@@ -3,7 +3,6 @@ from __future__ import print_function
 
 import argparse
 import bz2
-import gzip
 import hashlib
 import os
 import shutil
@@ -130,9 +129,11 @@ class Manifest(object):
         tmp = tempfile.NamedTemporaryFile("w", delete=False, dir=self.repo_dir, prefix=".strip-manifest.")
         try:
             tmp.write("# strip manifest\n")
-            tmp.write("# sha256 entries skip unchanged stripped raw/gzip payloads\n")
+            tmp.write("# sha256 entries skip unchanged stripped raw/bzip2 payloads\n")
             tmp.write("# tar-meta entries skip unchanged processed tar.bz2 archives by size+mtime\n")
             for key in sorted(self.entries):
+                if not os.path.exists(os.path.join(self.repo_dir, key)):
+                    continue
                 entry = self.entries[key]
                 if entry[0] == "sha256":
                     tmp.write("sha256  {}  {}\n".format(entry[1], key))
@@ -171,47 +172,46 @@ def strip_file(strip_bin, path):
     subprocess.check_call([strip_bin, "--strip-all", path])
 
 
-def gzip_write_deterministic(src_path, dest_path):
+def bzip2_write(src_path, dest_path):
     with open(src_path, "rb") as src:
-        with open(dest_path, "wb") as raw_dest:
-            with gzip.GzipFile(filename="", mode="wb", compresslevel=9, fileobj=raw_dest, mtime=0) as gz_dest:
-                shutil.copyfileobj(src, gz_dest)
+        with bz2.open(dest_path, "wb", compresslevel=9) as dest:
+            shutil.copyfileobj(src, dest)
 
 
-def process_gzip(repo_dir, manifest, strip_bin, gz_path, tmp_dir, dry_run, stats):
-    rel = repo_rel(repo_dir, gz_path)
-    if manifest.sha_hit(rel, gz_path):
-        print("manifest hit (already stripped): {}".format(gz_path))
+def process_bzip2(repo_dir, manifest, strip_bin, bz2_path, tmp_dir, dry_run, stats):
+    rel = repo_rel(repo_dir, bz2_path)
+    if manifest.sha_hit(rel, bz2_path):
+        print("manifest hit (already stripped): {}".format(bz2_path))
         stats["skipped_manifest"] += 1
         return
 
     stats["processed"] += 1
-    payload = os.path.join(tmp_dir, os.path.basename(gz_path[:-3]) + ".payload")
-    with gzip.open(gz_path, "rb") as src, open(payload, "wb") as dest:
+    payload = os.path.join(tmp_dir, os.path.basename(bz2_path[:-4]) + ".payload")
+    with bz2.open(bz2_path, "rb") as src, open(payload, "wb") as dest:
         shutil.copyfileobj(src, dest)
 
     if not is_elf_file(payload):
-        print("skip non-ELF gzip payload: {}".format(gz_path))
+        print("skip non-ELF bzip2 payload: {}".format(bz2_path))
         stats["skipped_nonelf"] += 1
         os.unlink(payload)
         return
 
     if dry_run:
-        print("would strip gzip payload: {}".format(gz_path))
+        print("would strip bzip2 payload: {}".format(bz2_path))
         os.unlink(payload)
         return
 
-    before_size = file_size(gz_path)
-    mode = stat.S_IMODE(os.stat(gz_path).st_mode)
+    before_size = file_size(bz2_path)
+    mode = stat.S_IMODE(os.stat(bz2_path).st_mode)
     strip_file(strip_bin, payload)
-    tmp_gz = gz_path + ".tmp"
-    gzip_write_deterministic(payload, tmp_gz)
-    os.chmod(tmp_gz, mode)
-    os.rename(tmp_gz, gz_path)
-    after_size = file_size(gz_path)
-    print("stripped gzip payload: {} ({} -> {} bytes)".format(gz_path, before_size, after_size))
+    tmp_bz2 = bz2_path + ".tmp"
+    bzip2_write(payload, tmp_bz2)
+    os.chmod(tmp_bz2, mode)
+    os.rename(tmp_bz2, bz2_path)
+    after_size = file_size(bz2_path)
+    print("stripped bzip2 payload: {} ({} -> {} bytes)".format(bz2_path, before_size, after_size))
     stats["stripped"] += 1
-    manifest.record_sha(rel, gz_path)
+    manifest.record_sha(rel, bz2_path)
     os.unlink(payload)
 
 
@@ -300,7 +300,7 @@ def parse_args(argv):
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""Behavior:
   Raw ELF files are stripped in place.
-  *.gz files are stripped if their decompressed payload is ELF.
+  Standalone *.bz2 files are stripped if their decompressed payload is ELF.
   Tar archives are rewritten as *.tar.bz2 after stripping ELF contents.
   .git is skipped.""")
     parser.add_argument("--dry-run", action="store_true", help="show what would be stripped")
@@ -334,12 +334,12 @@ def main(argv):
                 process_tar(repo_dir, manifest, strip_bin, path, tmp_dir, args.dry_run, stats)
 
         for path in list(walk_files(repo_dir)):
-            if path.endswith(".gz") and not path.endswith(".tar.gz"):
-                process_gzip(repo_dir, manifest, strip_bin, path, tmp_dir, args.dry_run, stats)
+            if path.endswith(".bz2") and not path.endswith(".tar.bz2"):
+                process_bzip2(repo_dir, manifest, strip_bin, path, tmp_dir, args.dry_run, stats)
 
         manifest_names = {manifest.path, manifest.legacy_path}
         for path in list(walk_files(repo_dir)):
-            if path in manifest_names or path.endswith(".gz") or is_archive_name(path):
+            if path in manifest_names or path.endswith(".bz2") or is_archive_name(path):
                 continue
             if is_elf_file(path):
                 process_raw_elf(repo_dir, manifest, strip_bin, path, args.dry_run, stats)
@@ -349,7 +349,7 @@ def main(argv):
         shutil.rmtree(tmp_dir)
 
     skipped = stats["skipped_manifest"] + stats["skipped_nonelf"]
-    print("Processed: {processed}, stripped ELF files: {stripped}, rewritten tar archives: {rewritten_tar}, skipped: {skipped} (manifest: {skipped_manifest}, non-ELF gzip: {skipped_nonelf})".format(
+    print("Processed: {processed}, stripped ELF files: {stripped}, rewritten tar archives: {rewritten_tar}, skipped: {skipped} (manifest: {skipped_manifest}, non-ELF bzip2: {skipped_nonelf})".format(
         skipped=skipped, **stats))
     return 0
 

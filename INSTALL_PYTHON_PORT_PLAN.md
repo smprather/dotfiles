@@ -19,8 +19,8 @@ installer while keeping `./install` as the stable command entrypoint.
 
 1. Add `install.py`.
    - Use only Python 3.6-compatible syntax and standard library.
-   - Keep subprocess calls for existing system tools: `rsync`, `gzip`,
-     `unzip`, `mkfontscale`, `mkfontdir`, `fc-cache`, `patchelf`, `ldd`.
+   - Keep subprocess calls for existing system tools: `rsync`, `unzip`,
+     `mkfontscale`, `mkfontdir`, `fc-cache`, `patchelf`, `ldd`.
    - Resolve the repo from the script path, not the current working directory.
    - Resolve repeated `--post-install-hook` paths before changing to `$HOME`.
 

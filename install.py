@@ -2,8 +2,8 @@
 from __future__ import print_function
 
 import argparse
+import bz2
 import fnmatch
-import gzip
 import os
 import re
 import shutil
@@ -279,22 +279,22 @@ def install_prebuilt_binaries(repo_dir, home):
     bin_dir = os.path.join(src_dir, "bin")
     if os.path.isdir(bin_dir):
         ensure_dir(dest_bin_dir)
-        for gz_file in sorted(fnmatch.filter([os.path.join(bin_dir, x) for x in os.listdir(bin_dir)], "*.gz")):
-            dest_file = os.path.join(dest_bin_dir, os.path.basename(gz_file[:-3]))
-            with gzip.open(gz_file, "rb") as src, open(dest_file, "wb") as dest:
+        for bz2_file in sorted(fnmatch.filter([os.path.join(bin_dir, x) for x in os.listdir(bin_dir)], "*.bz2")):
+            dest_file = os.path.join(dest_bin_dir, os.path.basename(bz2_file[:-4]))
+            with bz2.open(bz2_file, "rb") as src, open(dest_file, "wb") as dest:
                 shutil.copyfileobj(src, dest)
             os.chmod(dest_file, 0o755)
-            print("  gzip: {} -> {}".format(gz_file, dest_file))
+            print("  bzip2: {} -> {}".format(bz2_file, dest_file))
 
     lib64_dir = os.path.join(src_dir, "lib64")
     if os.path.isdir(lib64_dir):
         ensure_dir(dest_lib64_dir)
-        for gz_file in sorted(fnmatch.filter([os.path.join(lib64_dir, x) for x in os.listdir(lib64_dir)], "*.gz")):
-            dest_file = os.path.join(dest_lib64_dir, os.path.basename(gz_file[:-3]))
-            with gzip.open(gz_file, "rb") as src, open(dest_file, "wb") as dest:
+        for bz2_file in sorted(fnmatch.filter([os.path.join(lib64_dir, x) for x in os.listdir(lib64_dir)], "*.bz2")):
+            dest_file = os.path.join(dest_lib64_dir, os.path.basename(bz2_file[:-4]))
+            with bz2.open(bz2_file, "rb") as src, open(dest_file, "wb") as dest:
                 shutil.copyfileobj(src, dest)
             os.chmod(dest_file, 0o644)
-            print("  gzip: {} -> {}".format(gz_file, dest_file))
+            print("  bzip2: {} -> {}".format(bz2_file, dest_file))
 
     patch_prebuilt_binary_rpaths(dest_bin_dir)
     check_prebuilt_binary_dependencies(dest_bin_dir)
@@ -504,12 +504,31 @@ def install_treesitter_parsers(repo_dir, home):
                 "Neovim Tree-sitter highlighting will NOT work offline")
         return
 
-    for subdir in ("parser", "queries", "build-info", "parser-info", "registry"):
+    for subdir in ("queries", "build-info", "parser-info", "registry"):
         src = os.path.join(src_dir, subdir)
         if os.path.isdir(src):
             dest = os.path.join(dest_dir, subdir)
             ensure_dir(dest)
             rsync_dir(src, dest)
+
+    parser_src = os.path.join(src_dir, "parser")
+    parser_dest = os.path.join(dest_dir, "parser")
+    ensure_dir(parser_dest)
+    for name in sorted(os.listdir(parser_src)):
+        src = os.path.join(parser_src, name)
+        if not os.path.isfile(src):
+            continue
+        if name.endswith(".so.bz2"):
+            dest = os.path.join(parser_dest, name[:-4])
+            with bz2.open(src, "rb") as src_fh, open(dest, "wb") as dest_fh:
+                shutil.copyfileobj(src_fh, dest_fh)
+            os.chmod(dest, 0o644)
+            print("  bzip2: {} -> {}".format(src, dest))
+        elif name.endswith(".so"):
+            dest = os.path.join(parser_dest, name)
+            shutil.copy2(src, dest)
+            os.chmod(dest, 0o644)
+            print("  cp: {} -> {}".format(src, dest))
     print("  Installed: {}/ -> {}/".format(src_dir, dest_dir))
 
 

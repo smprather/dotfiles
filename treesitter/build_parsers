@@ -90,7 +90,7 @@ while [[ $# -gt 0 ]]; do
     esac
 done
 
-for tool in nvim tree-sitter curl tar git; do
+for tool in nvim tree-sitter curl tar git bzip2; do
     if ! command -v "$tool" >/dev/null; then
         echo "Error: required tool not found: $tool" >&2
         exit 1
@@ -138,6 +138,10 @@ TS_INSTALL_DIR="$install_dir" \
     -l "$plugin_dir/scripts/install-parsers.lua" \
     "${args[@]}"
 
+if [[ -d "$install_dir/parser" ]]; then
+    find "$install_dir/parser" -maxdepth 1 -type f -name '*.so' -print0 | sort -z | xargs -0r bzip2 -f -9
+fi
+
 cat > "$install_dir/build-info/platform.env" <<EOF
 platform=$(platform_id)
 os=$(uname -s)
@@ -149,7 +153,8 @@ compiler=$(command -v cc 2>/dev/null || true)
 compiler_version=$(cc --version 2>&1 | head -n 1 || true)
 repo=$repo_dir
 output=$install_dir
+parser_compression=bzip2
 EOF
 
-echo "Built parsers: $(find "$install_dir/parser" -maxdepth 1 -name '*.so' 2>/dev/null | wc -l)"
+echo "Built parsers: $(find "$install_dir/parser" -maxdepth 1 -name '*.so.bz2' 2>/dev/null | wc -l)"
 echo "Build info: $install_dir/build-info/platform.env"

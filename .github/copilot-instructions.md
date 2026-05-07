@@ -87,8 +87,8 @@ Backups intentionally exclude font files because vendored Nerd Font archives are
 Repo git hooks are installed only by `./install --dev`; normal end-user installs skip them.
 The Linux installer resolves the repo from the `install`/`install.py` script path, not the current working directory. `install` is a Bash shim over Python 3.6-compatible `install.py`.
 Pre-built Linux binaries live under `pre_built/<platform>/`, using names like
-`el8.x86_64.glibc2p28`. The installer decompresses `bin/*.gz` to
-`~/.local/bin` and `lib64/*.gz` to `~/.local/lib64`, then uses vendored
+`el8.x86_64.glibc2p28`. The installer decompresses `bin/*.bz2` to
+`~/.local/bin` and `lib64/*.bz2` to `~/.local/lib64`, then uses vendored
 `patchelf` to set `$ORIGIN/../lib64:$ORIGIN/../lib` RPATHs on dynamic binaries
 and runs `ldd` to warn about missing `.so` dependencies.
 If `helix/helix_runtime.tar.bz2` exists, the installer extracts it to
@@ -96,7 +96,7 @@ If `helix/helix_runtime.tar.bz2` exists, the installer extracts it to
 Use the Python 3.6-compatible `./strip_all_elf_binaries` after adding vendored
 binaries, libraries, parser grammars, or tar archives. It walks the repo
 outside `.git`, strips raw ELF files in place, strips ELF payloads inside
-`.gz`, and rewrites tar archives as `.tar.bz2`; processed tarballs are skipped
+standalone `.bz2`, and rewrites tar archives as `.tar.bz2`; processed tarballs are skipped
 later when size and modification time match the strip manifest.
 `./update_tldr_cache` writes `tldr/tldr-pages.tar.bz2`; the installer also
 accepts legacy `.tar.gz`.
@@ -117,8 +117,9 @@ Tree-sitter offline support targets Neovim v0.12+ only. Vendored
 `treesitter/vendor/`; prebuilt parsers, parser-info, queries, and registry cache
 live under `treesitter/prebuilt/<platform>/`, where platform is
 `$(uname -s lower)-$(uname -m)-<glibc|musl>`. Build or refresh the full parser
-set with `./treesitter/build_parsers`. The installer copies matching artifacts
-to `~/.local/share/nvim/tree-sitter-parsers/`.
+set with `./treesitter/build_parsers`; it stores parsers as `parser/*.so.bz2`.
+The installer decompresses matching parser artifacts to installed `parser/*.so`
+and copies metadata directories to `~/.local/share/nvim/tree-sitter-parsers/`.
 
 ## Key Conventions
 
