@@ -79,6 +79,10 @@ and recompress vendored ELF payloads. Tar archives are normalized to
 `.tar.bz2`; unchanged processed tarballs are skipped by size and modification
 time.
 
+Tmux double-click word selection treats common emoji and symbol ranges as word
+separators via `tmux/tmux-word-separators`, so prompt icons such as Starship's
+read-only lock are not captured with nearby path text.
+
 Optional corporate/site add-ons can be chained after the global install:
 ```bash
 ./install --post-install-hook ~/corp-dotfiles/install.sh

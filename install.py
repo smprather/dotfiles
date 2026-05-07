@@ -757,6 +757,7 @@ def install_copy_mode(repo_dir, home):
         install_path(plugin_dir, os.path.join(tmux_config, "tmux", "plugins", os.path.basename(plugin_dir)), False)
     install_path(os.path.join(repo_dir, "tmux", "tmux.conf"), os.path.join(tmux_config, "tmux.conf"), False)
     install_path(os.path.join(repo_dir, "tmux", "tmux-3col-layout.sh"), os.path.join(tmux_config, "tmux-3col-layout.sh"), False)
+    install_path(os.path.join(repo_dir, "tmux", "tmux-word-separators"), os.path.join(tmux_config, "tmux-word-separators"), False)
     lns(".config/tmux/tmux.conf", os.path.join(home, ".tmux.conf"), verbose=True)
     lns(".config/tmux/tmux", os.path.join(home, ".tmux"), verbose=True)
 

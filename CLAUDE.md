@@ -83,6 +83,7 @@ vim/
 
 tmux/
   tmux.conf                 - Tmux config → ~/.tmux.conf
+  tmux-word-separators      - Expands tmux double-click word separators with emoji ranges
   tmux/vendor/plugins/      - Bundled plugins (tpm, resurrect, continuum, better-mouse-mode)
 
 helix/
@@ -145,6 +146,8 @@ The Linux installer resolves the repo from the `install`/`install.py` script pat
 Backups intentionally exclude font files (`*.ttf`, `*.otf`, `*.pcf`, `*.bdf`, `*.woff`, `*.woff2`, etc.) because vendored Nerd Fonts are large and reproducible.
 
 **Tmux plugin behavior**: All bundled plugins are always copied/linked from the repo. Run `./update_tmux_plugins` to re-clone them from GitHub (pre-commit hook strips `.git` dirs on next commit).
+
+**Tmux selection behavior**: `tmux/tmux-word-separators` is run from `tmux.conf` to append broad emoji ranges to `word-separators`. Tmux only supports literal separator characters, not Unicode classes, so keep this helper in sync with `tmux.conf` if double-click word selection starts capturing prompt icons such as Starship's read-only lock.
 
 **Linux symlink map:**
 - `~/.bashrc`, `~/.bash_profile`, `~/.bash_login`, `~/.profile` → `~/.config/bash/bashrc` → `repo/bash/bashrc`
