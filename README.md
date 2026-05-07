@@ -70,7 +70,9 @@ Platform-matched pre-built Linux binaries from `pre_built/<platform>/bin/*.bz2`
 are decompressed into `~/.local/bin`; matching `lib64/*.bz2` files go to
 `~/.local/lib64`. Platform directories use names like
 `el8.x86_64.glibc2p28`. The installer uses vendored `patchelf` to set
-`$ORIGIN/../lib64:$ORIGIN/../lib` RPATHs on installed dynamic binaries.
+`$ORIGIN/../lib64:$ORIGIN/../lib` RPATHs on installed dynamic binaries. If a
+running binary cannot be replaced or patched, the installer continues and ends
+with a retry notice naming the binaries to exit before re-running.
 Run the Python 3.6-compatible `./strip_all_elf_binaries` helper after adding
 binaries, libraries, parser grammars, or tar archives to remove debug symbols
 and recompress vendored ELF payloads. Tar archives are normalized to
@@ -99,7 +101,8 @@ home:
 
 The optional offline tldr cache is bundled as `tldr/tldr-pages.tar.bz2` by
 `./update_tldr_cache`; legacy `tldr-pages.tar.gz` is still accepted by the
-installer.
+installer. Unless `--no-tldr-cache` is passed, the installer replaces any
+existing `~/.cache/tealdeer/tldr-pages` with the bundled cache.
 
 If `helix/helix_runtime.tar.bz2` is present, the Linux installer extracts it
 into `~/.config/helix/`, producing paths such as

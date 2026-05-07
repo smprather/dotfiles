@@ -3,6 +3,7 @@ from __future__ import print_function
 
 import argparse
 import bz2
+import errno
 import fnmatch
 import os
 import re
@@ -38,6 +39,9 @@ def eprint(*args):
 
 def warn(msg):
     eprint("  WARNING: {}".format(msg))
+
+
+FINAL_NOTICES = []
 
 
 def skipped(reason, consequence=None):
@@ -267,23 +271,32 @@ def install_prebuilt_binaries(repo_dir, home):
     if not os.path.isdir(root_dir):
         skipped("pre-built binaries (no pre_built/ directory in repo)",
                 "eza, fd, rg, tmux and other bundled tools will NOT be installed")
-        return
+        return set()
 
     src_dir = select_prebuilt_platform_dir(root_dir)
     if not src_dir:
         skipped("pre-built binaries (no matching platform)",
                 "eza, fd, rg, tmux and other bundled tools will NOT be installed")
         eprint("  Checked platform IDs: {}".format(" ".join(prebuilt_exact_platform_ids())))
-        return
+        return set()
 
+    blocked_binaries = set()
     bin_dir = os.path.join(src_dir, "bin")
     if os.path.isdir(bin_dir):
         ensure_dir(dest_bin_dir)
         for bz2_file in sorted(fnmatch.filter([os.path.join(bin_dir, x) for x in os.listdir(bin_dir)], "*.bz2")):
             dest_file = os.path.join(dest_bin_dir, os.path.basename(bz2_file[:-4]))
-            with bz2.open(bz2_file, "rb") as src, open(dest_file, "wb") as dest:
-                shutil.copyfileobj(src, dest)
-            os.chmod(dest_file, 0o755)
+            name = os.path.basename(dest_file)
+            try:
+                with bz2.open(bz2_file, "rb") as src, open(dest_file, "wb") as dest:
+                    shutil.copyfileobj(src, dest)
+                os.chmod(dest_file, 0o755)
+            except OSError as exc:
+                if exc.errno == errno.ETXTBSY:
+                    blocked_binaries.add(name)
+                    warn("could not replace {} because it is currently running".format(dest_file))
+                    continue
+                raise
             print("  bzip2: {} -> {}".format(bz2_file, dest_file))
 
     lib64_dir = os.path.join(src_dir, "lib64")
@@ -296,30 +309,41 @@ def install_prebuilt_binaries(repo_dir, home):
             os.chmod(dest_file, 0o644)
             print("  bzip2: {} -> {}".format(bz2_file, dest_file))
 
-    patch_prebuilt_binary_rpaths(dest_bin_dir)
+    blocked_binaries.update(patch_prebuilt_binary_rpaths(dest_bin_dir, blocked_binaries))
     check_prebuilt_binary_dependencies(dest_bin_dir)
     print("  Installed: {}/ -> {}/.local/".format(src_dir, home))
+    return blocked_binaries
 
 
-def patch_prebuilt_binary_rpaths(dest_bin_dir):
+def patch_prebuilt_binary_rpaths(dest_bin_dir, skipped_names=None):
+    skipped_names = skipped_names or set()
+    blocked_binaries = set()
     patchelf = os.path.join(dest_bin_dir, "patchelf")
     rpath = "$ORIGIN/../lib64:$ORIGIN/../lib"
     if not os.path.isfile(patchelf) or not os.access(patchelf, os.X_OK):
         warn("vendored patchelf not installed — RPATH patching skipped; binaries may fail to find vendored libs")
-        return
+        return blocked_binaries
 
     for name in sorted(os.listdir(dest_bin_dir)) if os.path.isdir(dest_bin_dir) else []:
         binary = os.path.join(dest_bin_dir, name)
+        if name in skipped_names:
+            continue
         if binary == patchelf or not os.path.isfile(binary) or not os.access(binary, os.X_OK):
             continue
         proc = subprocess.run([patchelf, "--print-interpreter", binary], stdout=subprocess.PIPE, stderr=subprocess.PIPE)
         if proc.returncode != 0:
             continue
-        proc = subprocess.run([patchelf, "--set-rpath", rpath, binary])
+        proc = subprocess.run([patchelf, "--set-rpath", rpath, binary], stdout=subprocess.PIPE, stderr=subprocess.PIPE)
         if proc.returncode != 0:
+            err = proc.stderr.decode("utf-8", "replace")
+            if "Text file busy" in err:
+                blocked_binaries.add(name)
+                warn("could not patch RPATH for {} because it is currently running".format(binary))
+                continue
             warn("failed to patch RPATH for {} — it may fail to find vendored libs".format(binary))
             continue
         print("  patchelf: set RPATH on {} to {}".format(binary, rpath))
+    return blocked_binaries
 
 
 def check_prebuilt_binary_dependencies(dest_bin_dir):
@@ -342,6 +366,29 @@ def check_prebuilt_binary_dependencies(dest_bin_dir):
                     eprint("    {}".format(line.split()[0]))
     if not missing:
         print("  Shared library check OK")
+
+
+def add_prebuilt_binary_retry_notice(blocked_binaries):
+    if not blocked_binaries:
+        return
+    names = sorted(blocked_binaries)
+    FINAL_NOTICES.append(
+        "Pre-built binary install incomplete: could not replace or patch {} because {} currently running. "
+        "Exit all running instances of {} and re-run the installer to get the dotfiles version.".format(
+            ", ".join(names),
+            "it is" if len(names) == 1 else "they are",
+            names[0] if len(names) == 1 else "these binaries",
+        )
+    )
+
+
+def print_final_notices():
+    if not FINAL_NOTICES:
+        return
+    print("")
+    print("Important final notices:")
+    for notice in FINAL_NOTICES:
+        print("  - {}".format(notice))
 
 
 def font_member(name):
@@ -445,12 +492,13 @@ def install_tldr_cache(repo_dir, home):
 
     cache_home = os.path.join(home, ".cache")
     dest_dir = os.path.join(cache_home, "tealdeer", "tldr-pages")
-    if os.path.exists(dest_dir):
-        skipped("tldr-pages already present at {}".format(dest_dir),
-                "run 'tldr --update' to refresh, or delete and reinstall to replace")
-        return
-
     ensure_dir(os.path.join(cache_home, "tealdeer"))
+    if os.path.lexists(dest_dir):
+        if os.path.isdir(dest_dir) and not os.path.islink(dest_dir):
+            shutil.rmtree(dest_dir)
+        else:
+            os.unlink(dest_dir)
+
     with tarfile.open(archive, "r:*") as tf:
         safe_extract_tar(tf, os.path.join(cache_home, "tealdeer"))
     print("  tldr page cache installed to {}".format(dest_dir))
@@ -894,13 +942,15 @@ def main(argv):
     else:
         install_tldr_cache(repo_dir, home)
 
-    install_prebuilt_binaries(repo_dir, home)
+    blocked_prebuilt_binaries = install_prebuilt_binaries(repo_dir, home)
+    add_prebuilt_binary_retry_notice(blocked_prebuilt_binaries)
     install_helix_runtime(repo_dir, home)
     install_nvim_treesitter_vendor(repo_dir, home)
     install_treesitter_parsers(repo_dir, home)
     install_git_hooks(repo_dir, args.dev)
     run_post_install_hooks(hooks, repo_dir, home, args, backup_dir)
     run_layer_install_scripts(home)
+    print_final_notices()
     return 0
 
 

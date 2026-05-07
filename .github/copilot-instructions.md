@@ -90,7 +90,9 @@ Pre-built Linux binaries live under `pre_built/<platform>/`, using names like
 `el8.x86_64.glibc2p28`. The installer decompresses `bin/*.bz2` to
 `~/.local/bin` and `lib64/*.bz2` to `~/.local/lib64`, then uses vendored
 `patchelf` to set `$ORIGIN/../lib64:$ORIGIN/../lib` RPATHs on dynamic binaries
-and runs `ldd` to warn about missing `.so` dependencies.
+and runs `ldd` to warn about missing `.so` dependencies. If a running binary
+cannot be replaced or patched, installer continues and prints a final retry
+notice naming the binaries to exit before re-running.
 If `helix/helix_runtime.tar.bz2` exists, the installer extracts it to
 `~/.config/helix/runtime`; `runtime/tutor` is the expected sentinel file.
 Use the Python 3.6-compatible `./strip_all_elf_binaries` after adding vendored
@@ -99,7 +101,8 @@ outside `.git`, strips raw ELF files in place, strips ELF payloads inside
 standalone `.bz2`, and rewrites tar archives as `.tar.bz2`; processed tarballs are skipped
 later when size and modification time match the strip manifest.
 `./update_tldr_cache` writes `tldr/tldr-pages.tar.bz2`; the installer also
-accepts legacy `.tar.gz`.
+accepts legacy `.tar.gz` and replaces any existing tealdeer cache unless
+`--no-tldr-cache` is passed.
 
 ### Bundled Plugins
 
