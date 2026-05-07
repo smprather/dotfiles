@@ -31,6 +31,7 @@ sha256  bea3ce9700843bb1c2595ed7f924762dff65abe6f8d5cef36f80cfe78243ae99  pre_bu
 sha256  544f21a66c8024670f4740a0bc0664005080377de42d98070d43462e9726d026  pre_built/el8.x86_64.glibc2p28/bin/ty.bz2
 sha256  4bef592efb87467295a0d82b11618627b8d287b36a81c6b84995ce5cdd4b3551  pre_built/el8.x86_64.glibc2p28/bin/zoxide.bz2
 sha256  c0a7179cfbadd1796dee9afb069f784a678a4b1cc407886310ca836c546e21b1  pre_built/el8.x86_64.glibc2p28/lib64/libevent_core-2.1.so.6.bz2
+sha256  fcf47e453dd59a265b921a1f73b523343383fa654110cc8dde2c1def45c70cbe  pre_built/el8.x86_64.glibc2p28/lib64/libxxhash.so.0.bz2
 tar-meta  939973  1778105745  tldr/tldr-pages.tar.bz2
 sha256  b4c80182d31ad43e135cc7d29564901a7c5f262025d3a7b6e4552933d09b445a  treesitter/prebuilt/linux-x86_64-glibc/parser/ada.so.bz2
 sha256  ff6db2805bed6efcc0504fe6a1706bdc7e47311f02e3cb47374162437bc90302  treesitter/prebuilt/linux-x86_64-glibc/parser/agda.so.bz2
