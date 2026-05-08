@@ -44,13 +44,14 @@ repo_dir=$(cd "$script_dir/.." && pwd)
 test_home=$(mktemp -d /tmp/dotfiles-install-home.XXXXXX)
 test_state=$(mktemp -d /tmp/dotfiles-install-state.XXXXXX)
 test_hooks=$(mktemp -d /tmp/dotfiles-install-hooks.XXXXXX)
+install_log=$(mktemp /tmp/dotfiles-install-log.XXXXXX)
 
 cleanup() {
     if [[ "$keep_home" == "1" ]]; then
         echo "Kept temp HOME: $test_home"
         echo "Kept XDG_STATE_HOME: $test_state"
     else
-        rm -rf "$test_home" "$test_state" "$test_hooks"
+        rm -rf "$test_home" "$test_state" "$test_hooks" "$install_log"
     fi
 }
 trap cleanup EXIT
@@ -87,15 +88,17 @@ set -euo pipefail
 } >> "$DOTFILES_HOME/post-install-hooks.log"
 EOF
 
-cat > "$test_hooks/hook2.sh" <<'EOF'
-#!/usr/bin/env bash
-set -euo pipefail
-echo "hook2" >> "$DOTFILES_HOME/post-install-hooks.log"
+cat > "$test_hooks/hook2.py" <<'EOF'
+#!/usr/bin/env python3
+import os
+
+with open(os.path.join(os.environ["DOTFILES_HOME"], "post-install-hooks.log"), "a") as fh:
+    fh.write("hook2\n")
 EOF
 
-chmod +x "$test_hooks/hook1.sh" "$test_hooks/hook2.sh"
+chmod +x "$test_hooks/hook1.sh" "$test_hooks/hook2.py"
 
-install_args=(--dest-dir "$test_home" --post-install-hook "$test_hooks/hook1.sh" --post-install-hook "$test_hooks/hook2.sh")
+install_args=(--dest-dir "$test_home" --post-install-hook "$test_hooks/hook1.sh" --post-install-hook "$test_hooks/hook2.py")
 if [[ "$with_fonts" != "1" ]]; then
     install_args+=(--no-fonts)
 fi
@@ -110,7 +113,20 @@ echo "Temp HOME: $test_home"
     cd /tmp
     XDG_STATE_HOME="$test_state" \
         "$repo_dir/install" "${install_args[@]}"
-)
+) 2>&1 | tee "$install_log"
+
+if ! grep -q "^Install results:" "$install_log"; then
+    echo "Expected final install results table" >&2
+    exit 1
+fi
+if ! grep -Eq "^[[:space:]]+dotfiles[[:space:]]+yes[[:space:]]*$" "$install_log"; then
+    echo "Expected dotfiles success row in install results table" >&2
+    exit 1
+fi
+if ! grep -Eq "^[[:space:]]+fonts[[:space:]]+skip[[:space:]]+--no-fonts[[:space:]]*$" "$install_log"; then
+    echo "Expected fonts skip row in install results table" >&2
+    exit 1
+fi
 
 assert_symlink "$test_home/.bashrc"
 assert_symlink "$test_home/.bash_profile"

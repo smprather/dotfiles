@@ -1,17 +1,1090 @@
-#!/usr/bin/env bash
-set -euo pipefail
+#!/usr/bin/env python3
+import os
+import sys
 
-script_dir=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
+if sys.version_info < (3, 6):
+    version = ".".join(str(part) for part in sys.version_info[:3])
+    print("Error: This installer requires python3 >= 3.6; found {}.".format(version), file=sys.stderr)
+    raise SystemExit(1)
 
-if ! command -v python3 >/dev/null; then
-    echo "Error: This installer requires python3." >&2
-    exit 1
-fi
+import argparse
+import bz2
+import errno
+import fnmatch
+import re
+import shutil
+import stat
+import subprocess
+import tarfile
+import tempfile
+import warnings
+import zipfile
 
-if ! python3 -c 'import sys; raise SystemExit(0 if sys.version_info >= (3, 6) else 1)' >/dev/null 2>&1; then
-    python_version=$(python3 -c 'import sys; print(".".join(map(str, sys.version_info[:3])))' 2>/dev/null || echo unknown)
-    echo "Error: This installer requires python3 >= 3.6; found $python_version." >&2
-    exit 1
-fi
 
-exec python3 "$script_dir/install.py" "$@"
+FONT_EXCLUDES = (
+    "*.bdf",
+    "*.eot",
+    "*.fon",
+    "*.otf",
+    "*.pcf",
+    "*.ttc",
+    "*.ttf",
+    "*.woff",
+    "*.woff2",
+)
+
+BASH_LAYERS = ("corp", "site", "project", "user")
+BASH_ENTRYPOINTS = (".bashrc", ".bash_profile", ".bash_login", ".profile")
+
+
+def eprint(*args):
+    print(*args, file=sys.stderr)
+
+
+def warn(msg):
+    eprint("  WARNING: {}".format(msg))
+
+
+FINAL_NOTICES = []
+INSTALL_RESULTS = []
+
+
+class InstallRefused(Exception):
+    pass
+
+
+def display_name(path):
+    home = os.path.expanduser("~")
+    try:
+        if path == home:
+            return "~"
+        if path.startswith(home + os.sep):
+            return "~/" + os.path.relpath(path, home)
+    except ValueError:
+        pass
+    return path
+
+
+def nearest_existing_parent(path):
+    path = os.path.abspath(path)
+    while path and not os.path.exists(path):
+        parent = os.path.dirname(path)
+        if parent == path:
+            break
+        path = parent
+    return path
+
+
+def require_writable_dir(path, thing):
+    target = os.path.abspath(path)
+    existing = target if os.path.exists(target) else nearest_existing_parent(target)
+    if not existing:
+        existing = os.path.abspath(os.sep)
+    if os.path.exists(target) and not os.path.isdir(target):
+        existing = os.path.dirname(target)
+    if not os.path.isdir(existing) or not os.access(existing, os.W_OK | os.X_OK):
+        raise InstallRefused("{} target directory is not writable: {}".format(thing, display_name(existing)))
+    if os.path.isdir(target) and not os.access(target, os.W_OK | os.X_OK):
+        raise InstallRefused("{} target directory is not writable: {}".format(thing, display_name(target)))
+
+
+def require_writable_parent(path, thing):
+    require_writable_dir(os.path.dirname(os.path.abspath(path)) or ".", thing)
+
+
+def record_result(thing, status, detail=""):
+    INSTALL_RESULTS.append((thing, status, detail))
+
+
+def run_install_step(thing, func, *args, **kwargs):
+    try:
+        result = func(*args, **kwargs)
+        if not any(row[0] == thing for row in INSTALL_RESULTS):
+            record_result(thing, "OK", "")
+        return result
+    except InstallRefused as exc:
+        warn(str(exc))
+        record_result(thing, "FAIL", str(exc))
+        return None
+    except (OSError, subprocess.CalledProcessError) as exc:
+        detail = "{} failed: {}".format(thing, exc)
+        warn(detail)
+        record_result(thing, "FAIL", detail)
+        return None
+
+
+def skipped(reason, consequence=None):
+    msg = "  *** SKIPPED: {} ***".format(reason)
+    if consequence:
+        msg += "\n  ***         {} ***".format(consequence)
+    eprint(msg)
+
+
+def command_exists(name):
+    return shutil.which(name) is not None
+
+
+def run(cmd, cwd=None, env=None, check=True, stdout=None, stderr=None):
+    return subprocess.run(cmd, cwd=cwd, env=env, check=check, stdout=stdout, stderr=stderr)
+
+
+def output(cmd, cwd=None, env=None, check=True):
+    proc = subprocess.run(cmd, cwd=cwd, env=env, check=check, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+    return proc.stdout.decode("utf-8", "replace")
+
+
+def remove_path(path):
+    require_writable_parent(path, "remove")
+    if os.path.islink(path) or os.path.isfile(path):
+        os.unlink(path)
+    elif os.path.isdir(path):
+        shutil.rmtree(path)
+
+
+def lns(target, link_name, unsafe=False, verbose=False):
+    require_writable_parent(link_name, "symlink")
+    if os.path.lexists(link_name):
+        if os.path.isdir(link_name) and not os.path.islink(link_name):
+            if not unsafe:
+                eprint("Error: '{}' exists as a directory and cannot be removed (use --unsafe to override)".format(link_name))
+                sys.exit(1)
+            if verbose:
+                eprint("rm -rf '{}'".format(link_name))
+            shutil.rmtree(link_name)
+        else:
+            if verbose:
+                eprint("rm -f '{}'".format(link_name))
+            os.unlink(link_name)
+    if verbose:
+        eprint("ln -s {} {}".format(target, link_name))
+    os.symlink(target, link_name)
+
+
+def mkdirn(base_dir):
+    require_writable_dir(os.path.dirname(os.path.abspath(base_dir)), "backup")
+    target_dir = base_dir
+    counter = 1
+    while os.path.exists(target_dir):
+        target_dir = "{}.{}".format(base_dir, counter)
+        counter += 1
+    os.makedirs(target_dir)
+    return target_dir
+
+
+def rsync_dir(src, dest, delete=False, excludes=None):
+    require_writable_dir(dest if os.path.isdir(dest) else os.path.dirname(dest), "rsync")
+    cmd = ["rsync", "-a"]
+    if delete:
+        cmd.append("--delete")
+    for pattern in excludes or ():
+        cmd.append("--exclude={}".format(pattern))
+    cmd.extend([src.rstrip("/") + "/", dest.rstrip("/") + "/"])
+    run(cmd)
+
+
+def install_path(src, dest, links_mode):
+    if links_mode:
+        lns(src, dest, verbose=True)
+        return
+
+    require_writable_parent(dest, "install")
+    if os.path.isdir(src) and not os.path.islink(src):
+        if os.path.lexists(dest):
+            remove_path(dest)
+        os.makedirs(dest)
+        rsync_dir(src, dest)
+        print("  rsync: {}/ -> {}/".format(src, dest))
+    else:
+        if os.path.lexists(dest):
+            remove_path(dest)
+        parent = os.path.dirname(dest)
+        if parent:
+            ensure_dir(parent)
+        shutil.copy2(src, dest)
+        print("  cp: {} -> {}".format(src, dest))
+
+
+def backup_item(src, dest):
+    require_writable_parent(dest, "backup")
+    ensure_dir(os.path.dirname(dest))
+    cmd = ["rsync", "-a"]
+    for pattern in FONT_EXCLUDES:
+        cmd.append("--exclude={}".format(pattern))
+    cmd.extend([src, dest])
+    run(cmd)
+
+
+def is_wsl():
+    try:
+        with open("/proc/version", "r") as fh:
+            return re.search(r"microsoft|wsl", fh.read(), re.IGNORECASE) is not None
+    except IOError:
+        return False
+
+
+def uname(flag):
+    return output(["uname", flag]).strip()
+
+
+def ldd_is_musl():
+    proc = subprocess.run(["ldd", "--version"], stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
+    return b"musl" in proc.stdout.lower()
+
+
+def treesitter_platform_id():
+    libc = "musl" if ldd_is_musl() else "glibc"
+    return "{}-{}-{}".format(uname("-s").lower(), uname("-m"), libc)
+
+
+def glibc_version_id():
+    try:
+        text = output(["getconf", "GNU_LIBC_VERSION"], check=False).strip()
+        parts = text.split()
+        if len(parts) >= 2:
+            return parts[1]
+    except OSError:
+        pass
+    proc = subprocess.run(["ldd", "--version"], stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
+    match = re.search(rb"[0-9]+\.[0-9]+", proc.stdout)
+    return match.group(0).decode("ascii") if match else ""
+
+
+def glibc_version_num(version):
+    match = re.match(r"^([0-9]+)\.([0-9]+)", version or "")
+    if not match:
+        return 0
+    return int(match.group(1)) * 1000 + int(match.group(2))
+
+
+def read_os_release():
+    data = {}
+    try:
+        with open("/etc/os-release", "r") as fh:
+            for line in fh:
+                line = line.strip()
+                if not line or line.startswith("#") or "=" not in line:
+                    continue
+                key, value = line.split("=", 1)
+                data[key] = value.strip().strip('"')
+    except IOError:
+        pass
+    return data
+
+
+def prebuilt_exact_platform_ids():
+    arch = uname("-m")
+    if ldd_is_musl():
+        return ["linux.{}.musl".format(arch), "linux-{}-musl".format(arch)]
+
+    glibc_version = glibc_version_id()
+    glibc_id = "glibc{}".format(glibc_version.replace(".", "p")) if glibc_version else ""
+    osr = read_os_release()
+    distro_id = osr.get("ID", "")
+    id_like = osr.get("ID_LIKE", "")
+    version_id = osr.get("VERSION_ID", "")
+    platform_id = osr.get("PLATFORM_ID", "")
+    el_id = ""
+
+    if platform_id.startswith("platform:el"):
+        el_id = platform_id[len("platform:"):]
+    elif any(x in (" " + distro_id + " " + id_like + " ") for x in (" rhel ", " centos ", " almalinux ", " rocky ", " ol ")):
+        el_id = "el{}".format(version_id.split(".", 1)[0])
+
+    ids = []
+    if el_id and glibc_id:
+        ids.append("{}.{}.{}".format(el_id, arch, glibc_id))
+    if glibc_id:
+        ids.append("linux.{}.{}".format(arch, glibc_id))
+    ids.append("linux.{}.glibc".format(arch))
+    ids.append("linux-{}-glibc".format(arch))
+    return ids
+
+
+def select_prebuilt_platform_dir(root_dir):
+    for candidate in prebuilt_exact_platform_ids():
+        path = os.path.join(root_dir, candidate)
+        if os.path.isdir(path):
+            return path
+
+    arch = uname("-m")
+    host_num = glibc_version_num(glibc_version_id())
+    if not host_num:
+        return None
+
+    best_dir = None
+    best_num = 0
+    if not os.path.isdir(root_dir):
+        return None
+    for name in os.listdir(root_dir):
+        path = os.path.join(root_dir, name)
+        if not os.path.isdir(path):
+            continue
+        if not (fnmatch.fnmatch(name, "el*.{}.glibc*p*".format(arch)) or fnmatch.fnmatch(name, "linux.{}.glibc*p*".format(arch))):
+            continue
+        match = re.search(r"\.glibc([0-9]+)p([0-9]+)$", name)
+        if not match:
+            continue
+        build_num = glibc_version_num("{}.{}".format(match.group(1), match.group(2)))
+        if build_num <= host_num and build_num > best_num:
+            best_num = build_num
+            best_dir = path
+    return best_dir
+
+
+def install_mode(args):
+    if args.dev:
+        return "dev"
+    return "copy"
+
+
+def install_prebuilt_binaries(repo_dir, home):
+    root_dir = os.path.join(repo_dir, "pre_built")
+    dest_bin_dir = os.path.join(home, ".local", "bin")
+    dest_lib64_dir = os.path.join(home, ".local", "lib64")
+
+    print("Installing pre-built binaries...")
+    if not os.path.isdir(root_dir):
+        skipped("pre-built binaries (no pre_built/ directory in repo)",
+                "eza, fd, rg, tmux and other bundled tools will NOT be installed")
+        record_result("pre-built binaries", "SKIP", "no pre_built/ directory")
+        return set()
+
+    src_dir = select_prebuilt_platform_dir(root_dir)
+    if not src_dir:
+        skipped("pre-built binaries (no matching platform)",
+                "eza, fd, rg, tmux and other bundled tools will NOT be installed")
+        eprint("  Checked platform IDs: {}".format(" ".join(prebuilt_exact_platform_ids())))
+        record_result("pre-built binaries", "SKIP", "no matching platform")
+        return set()
+
+    blocked_binaries = set()
+    bin_dir = os.path.join(src_dir, "bin")
+    if os.path.isdir(bin_dir):
+        ensure_dir(dest_bin_dir, "pre-built binaries")
+        for bz2_file in sorted(fnmatch.filter([os.path.join(bin_dir, x) for x in os.listdir(bin_dir)], "*.bz2")):
+            dest_file = os.path.join(dest_bin_dir, os.path.basename(bz2_file[:-4]))
+            name = os.path.basename(dest_file)
+            try:
+                require_writable_parent(dest_file, "pre-built binaries")
+                with bz2.open(bz2_file, "rb") as src, open(dest_file, "wb") as dest:
+                    shutil.copyfileobj(src, dest)
+                os.chmod(dest_file, 0o755)
+            except OSError as exc:
+                if exc.errno == errno.ETXTBSY:
+                    blocked_binaries.add(name)
+                    warn("could not replace {} because it is currently running".format(dest_file))
+                    continue
+                raise
+            print("  bzip2: {} -> {}".format(bz2_file, dest_file))
+
+    lib64_dir = os.path.join(src_dir, "lib64")
+    if os.path.isdir(lib64_dir):
+        ensure_dir(dest_lib64_dir, "pre-built libraries")
+        for bz2_file in sorted(fnmatch.filter([os.path.join(lib64_dir, x) for x in os.listdir(lib64_dir)], "*.bz2")):
+            dest_file = os.path.join(dest_lib64_dir, os.path.basename(bz2_file[:-4]))
+            require_writable_parent(dest_file, "pre-built libraries")
+            with bz2.open(bz2_file, "rb") as src, open(dest_file, "wb") as dest:
+                shutil.copyfileobj(src, dest)
+            os.chmod(dest_file, 0o644)
+            print("  bzip2: {} -> {}".format(bz2_file, dest_file))
+
+    blocked_binaries.update(patch_prebuilt_binary_rpaths(dest_bin_dir, blocked_binaries))
+    check_prebuilt_binary_dependencies(dest_bin_dir)
+    print("  Installed: {}/ -> {}/.local/".format(src_dir, home))
+    if blocked_binaries:
+        record_result("pre-built binaries", "FAIL", "busy: {}".format(", ".join(sorted(blocked_binaries))))
+    return blocked_binaries
+
+
+def patch_prebuilt_binary_rpaths(dest_bin_dir, skipped_names=None):
+    skipped_names = skipped_names or set()
+    blocked_binaries = set()
+    patchelf = os.path.join(dest_bin_dir, "patchelf")
+    rpath = "$ORIGIN/../lib64:$ORIGIN/../lib"
+    if not os.path.isfile(patchelf) or not os.access(patchelf, os.X_OK):
+        warn("vendored patchelf not installed — RPATH patching skipped; binaries may fail to find vendored libs")
+        return blocked_binaries
+
+    for name in sorted(os.listdir(dest_bin_dir)) if os.path.isdir(dest_bin_dir) else []:
+        binary = os.path.join(dest_bin_dir, name)
+        if name in skipped_names:
+            continue
+        if binary == patchelf or not os.path.isfile(binary) or not os.access(binary, os.X_OK):
+            continue
+        proc = subprocess.run([patchelf, "--print-interpreter", binary], stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+        if proc.returncode != 0:
+            continue
+        require_writable_parent(binary, "pre-built binary RPATH")
+        proc = subprocess.run([patchelf, "--set-rpath", rpath, binary], stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+        if proc.returncode != 0:
+            err = proc.stderr.decode("utf-8", "replace")
+            if "Text file busy" in err:
+                blocked_binaries.add(name)
+                warn("could not patch RPATH for {} because it is currently running".format(binary))
+                continue
+            warn("failed to patch RPATH for {} — it may fail to find vendored libs".format(binary))
+            continue
+        print("  patchelf: set RPATH on {} to {}".format(binary, rpath))
+    return blocked_binaries
+
+
+def check_prebuilt_binary_dependencies(dest_bin_dir):
+    if not command_exists("ldd"):
+        warn("ldd is not available — shared library dependency check skipped")
+        return
+
+    missing = False
+    for name in sorted(os.listdir(dest_bin_dir)) if os.path.isdir(dest_bin_dir) else []:
+        binary = os.path.join(dest_bin_dir, name)
+        if not os.path.isfile(binary) or not os.access(binary, os.X_OK):
+            continue
+        proc = subprocess.run(["ldd", binary], stdout=subprocess.PIPE, stderr=subprocess.DEVNULL)
+        out = proc.stdout.decode("utf-8", "replace")
+        if "not found" in out:
+            missing = True
+            warn("missing shared libraries for {} — this binary may not run".format(binary))
+            for line in out.splitlines():
+                if "not found" in line:
+                    eprint("    {}".format(line.split()[0]))
+    if not missing:
+        print("  Shared library check OK")
+
+
+def add_prebuilt_binary_retry_notice(blocked_binaries):
+    if not blocked_binaries:
+        return
+    names = sorted(blocked_binaries)
+    FINAL_NOTICES.append(
+        "Pre-built binary install incomplete: could not replace or patch {} because {} currently running. "
+        "Exit all running instances of {} and re-run the installer to get the dotfiles version.".format(
+            ", ".join(names),
+            "it is" if len(names) == 1 else "they are",
+            names[0] if len(names) == 1 else "these binaries",
+        )
+    )
+
+
+def print_final_notices():
+    if not FINAL_NOTICES:
+        return
+    print("")
+    print("Important final notices:")
+    for notice in FINAL_NOTICES:
+        print("  - {}".format(notice))
+
+
+def print_install_results():
+    if not INSTALL_RESULTS:
+        return
+    rows = []
+    for thing, status, detail in INSTALL_RESULTS:
+        success = {"OK": "yes", "FAIL": "no", "SKIP": "skip"}.get(status, status.lower())
+        rows.append((thing, success, detail or ""))
+    widths = [
+        max(len("Thing"), *(len(row[0]) for row in rows)),
+        max(len("Success"), *(len(row[1]) for row in rows)),
+        max(len("Detail"), *(len(row[2]) for row in rows)),
+    ]
+    print("")
+    print("Install results:")
+    print("  {:{}}  {:{}}  {:{}}".format("Thing", widths[0], "Success", widths[1], "Detail", widths[2]))
+    print("  {}  {}  {}".format("-" * widths[0], "-" * widths[1], "-" * widths[2]))
+    for thing, success, detail in rows:
+        print("  {:{}}  {:{}}  {:{}}".format(thing, widths[0], success, widths[1], detail, widths[2]))
+
+
+def font_member(name):
+    lower = name.lower()
+    return lower.endswith((".ttf", ".otf", ".pcf", ".bdf", ".pcf.gz", ".bdf.gz"))
+
+
+def extract_font_zip(zip_path, user_fonts_dir):
+    print("  Extracting: {} -> {}/".format(zip_path, user_fonts_dir))
+    with zipfile.ZipFile(zip_path, "r") as zf:
+        for member in zf.namelist():
+            if not font_member(member):
+                continue
+            dest = os.path.join(user_fonts_dir, os.path.basename(member))
+            if not os.path.basename(member):
+                continue
+            require_writable_parent(dest, "fonts")
+            with zf.open(member) as src, open(dest, "wb") as out:
+                shutil.copyfileobj(src, out)
+
+
+def install_fonts(repo_dir, home):
+    vendor_fonts_dir = os.path.join(repo_dir, "fonts")
+    user_fonts_dir = os.path.join(home, ".local", "share", "fonts")
+
+    if not os.path.isdir(vendor_fonts_dir):
+        print("Installing fonts...")
+        skipped("fonts (no fonts/ directory in repo)",
+                "Nerd Fonts will NOT be installed to ~/.local/share/fonts")
+        record_result("fonts", "SKIP", "no fonts/ directory")
+        return
+
+    print("Installing fonts...")
+    if os.path.islink(user_fonts_dir):
+        require_writable_parent(user_fonts_dir, "fonts")
+        print("  Removing symlink: {}".format(user_fonts_dir))
+        os.unlink(user_fonts_dir)
+    elif os.path.isdir(user_fonts_dir):
+        require_writable_parent(user_fonts_dir, "fonts")
+        require_writable_dir(user_fonts_dir, "fonts")
+        backup_path = user_fonts_dir + ".bak"
+        counter = 1
+        while os.path.exists(backup_path):
+            backup_path = "{}.bak.{}".format(user_fonts_dir, counter)
+            counter += 1
+        print("  Backing up existing fonts dir: {} -> {}".format(user_fonts_dir, backup_path))
+        shutil.move(user_fonts_dir, backup_path)
+    ensure_dir(user_fonts_dir, "fonts")
+
+    for name in sorted(os.listdir(vendor_fonts_dir)):
+        if name.endswith(".zip"):
+            extract_font_zip(os.path.join(vendor_fonts_dir, name), user_fonts_dir)
+
+    tmp_dir = None
+    try:
+        for name in sorted(os.listdir(vendor_fonts_dir)):
+            if not name.endswith(".zip.part-000"):
+                continue
+            if tmp_dir is None:
+                tmp_dir = tempfile.mkdtemp(prefix="dotfiles-fonts.", dir="/tmp")
+            first_part = os.path.join(vendor_fonts_dir, name)
+            split_base = first_part[:-len(".part-000")]
+            rejoined_zip = os.path.join(tmp_dir, os.path.basename(split_base))
+            print("  Rejoining: {}.part-* -> {}".format(split_base, rejoined_zip))
+            require_writable_parent(rejoined_zip, "fonts")
+            with open(rejoined_zip, "wb") as dest:
+                for part in sorted(os.path.join(vendor_fonts_dir, x)
+                                   for x in fnmatch.filter(os.listdir(vendor_fonts_dir),
+                                                           os.path.basename(split_base) + ".part-*")):
+                    with open(part, "rb") as src:
+                        shutil.copyfileobj(src, dest)
+            extract_font_zip(rejoined_zip, user_fonts_dir)
+    finally:
+        if tmp_dir:
+            shutil.rmtree(tmp_dir)
+
+    for tool in ("mkfontscale", "mkfontdir"):
+        if command_exists(tool):
+            proc = subprocess.run([tool, user_fonts_dir], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+            if proc.returncode != 0:
+                warn("{} failed for {} — font metrics may be incomplete".format(tool, user_fonts_dir))
+
+    if command_exists("fc-cache"):
+        proc = subprocess.run(["fc-cache", "-f", user_fonts_dir], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        if proc.returncode != 0:
+            warn("fc-cache failed for {} — fontconfig cache may be stale".format(user_fonts_dir))
+    else:
+        warn("fc-cache is not available — fontconfig cache was NOT refreshed; fonts may not appear until you run fc-cache manually")
+
+    if is_wsl():
+        print("  WSL note: Linux GUI apps use these fonts through fontconfig.")
+        print("  WSL note: Windows Terminal needs fonts installed on the Windows side.")
+
+
+def install_tldr_cache(repo_dir, home):
+    print("Installing tldr page cache...")
+    archive = None
+    for candidate in ("tldr-pages.tar.bz2", "tldr-pages.tar.gz"):
+        path = os.path.join(repo_dir, "tldr", candidate)
+        if os.path.exists(path):
+            archive = path
+            break
+    if not archive:
+        skipped("tldr/tldr-pages.tar.bz2 or tldr/tldr-pages.tar.gz not found in repo",
+                "run ./update_tldr_cache on a connected machine to bundle the pages")
+        record_result("tldr cache", "SKIP", "no bundled cache archive")
+        return
+
+    cache_home = os.path.join(home, ".cache")
+    dest_dir = os.path.join(cache_home, "tealdeer", "tldr-pages")
+    ensure_dir(os.path.join(cache_home, "tealdeer"), "tldr cache")
+    if os.path.lexists(dest_dir):
+        require_writable_parent(dest_dir, "tldr cache")
+        if os.path.isdir(dest_dir) and not os.path.islink(dest_dir):
+            require_writable_dir(dest_dir, "tldr cache")
+            shutil.rmtree(dest_dir)
+        else:
+            os.unlink(dest_dir)
+
+    with tarfile.open(archive, "r:*") as tf:
+        safe_extract_tar(tf, os.path.join(cache_home, "tealdeer"))
+    print("  tldr page cache installed to {}".format(dest_dir))
+
+
+def safe_extract_tar(tf, dest_dir):
+    require_writable_dir(dest_dir, "archive extraction")
+    dest_real = os.path.realpath(dest_dir)
+    for member in tf.getmembers():
+        target_real = os.path.realpath(os.path.join(dest_dir, member.name))
+        if not (target_real == dest_real or target_real.startswith(dest_real + os.sep)):
+            raise RuntimeError("unsafe tar member path: {}".format(member.name))
+    try:
+        tf.extractall(dest_dir, filter="data")
+    except TypeError:
+        with warnings.catch_warnings():
+            warnings.filterwarnings("ignore", message="The default behavior of tarfile extraction has been changed.*")
+            tf.extractall(dest_dir)
+
+
+def install_helix_runtime(repo_dir, home):
+    print("Installing Helix runtime...")
+    archive = os.path.join(repo_dir, "helix", "helix_runtime.tar.bz2")
+    if not os.path.isfile(archive):
+        skipped("Helix runtime (helix/helix_runtime.tar.bz2 not found in repo)",
+                "hx will NOT have the vendored runtime at ~/.config/helix/runtime")
+        record_result("Helix runtime", "SKIP", "no bundled runtime archive")
+        return
+
+    helix_config_dir = os.path.join(home, ".config", "helix")
+    runtime_dir = os.path.join(helix_config_dir, "runtime")
+    ensure_dir(helix_config_dir, "Helix runtime")
+    remove_if_exists(runtime_dir)
+
+    with tarfile.open(archive, "r:bz2") as tf:
+        safe_extract_tar(tf, helix_config_dir)
+
+    tutor = os.path.join(runtime_dir, "tutor")
+    if os.path.isfile(tutor):
+        print("  Installed: {} -> {}/".format(archive, runtime_dir))
+    else:
+        warn("Helix runtime archive did not install {}/tutor as expected".format(runtime_dir))
+
+
+def install_treesitter_parsers(repo_dir, home):
+    platform = treesitter_platform_id()
+    src_dir = os.path.join(repo_dir, "treesitter", "prebuilt", platform)
+    dest_dir = os.path.join(home, ".local", "share", "nvim", "tree-sitter-parsers")
+
+    print("Installing Tree-sitter parsers...")
+    if not os.path.isdir(os.path.join(src_dir, "parser")):
+        skipped("Tree-sitter parsers (no prebuilt parsers for {})".format(platform),
+                "Neovim Tree-sitter highlighting will NOT work offline")
+        record_result("Tree-sitter parsers", "SKIP", "no prebuilt parsers for {}".format(platform))
+        return
+
+    for subdir in ("queries", "build-info", "parser-info", "registry"):
+        src = os.path.join(src_dir, subdir)
+        if os.path.isdir(src):
+            dest = os.path.join(dest_dir, subdir)
+            ensure_dir(dest, "Tree-sitter parsers")
+            rsync_dir(src, dest)
+
+    parser_src = os.path.join(src_dir, "parser")
+    parser_dest = os.path.join(dest_dir, "parser")
+    ensure_dir(parser_dest, "Tree-sitter parsers")
+    for name in sorted(os.listdir(parser_src)):
+        src = os.path.join(parser_src, name)
+        if not os.path.isfile(src):
+            continue
+        if name.endswith(".so.bz2"):
+            dest = os.path.join(parser_dest, name[:-4])
+            require_writable_parent(dest, "Tree-sitter parsers")
+            with bz2.open(src, "rb") as src_fh, open(dest, "wb") as dest_fh:
+                shutil.copyfileobj(src_fh, dest_fh)
+            os.chmod(dest, 0o644)
+            print("  bzip2: {} -> {}".format(src, dest))
+        elif name.endswith(".so"):
+            dest = os.path.join(parser_dest, name)
+            require_writable_parent(dest, "Tree-sitter parsers")
+            shutil.copy2(src, dest)
+            os.chmod(dest, 0o644)
+            print("  cp: {} -> {}".format(src, dest))
+    print("  Installed: {}/ -> {}/".format(src_dir, dest_dir))
+
+
+def install_nvim_treesitter_vendor(repo_dir, home):
+    src_root = os.path.join(repo_dir, "treesitter", "vendor")
+    dest_root = os.path.join(home, ".local", "share", "nvim", "dotfiles", "vendor")
+    print("Installing vendored nvim-treesitter...")
+    if not (os.path.isdir(os.path.join(src_root, "nvim-treesitter")) and os.path.isdir(os.path.join(src_root, "treesitter-parser-registry"))):
+        skipped("vendored nvim-treesitter (missing from treesitter/vendor/)",
+                "Neovim Tree-sitter plugin will NOT be available offline")
+        record_result("nvim-treesitter vendor", "SKIP", "missing treesitter/vendor/")
+        return
+
+    ensure_dir(dest_root, "nvim-treesitter vendor")
+    rsync_dir(os.path.join(src_root, "nvim-treesitter"), os.path.join(dest_root, "nvim-treesitter"), delete=True, excludes=(".git",))
+    rsync_dir(os.path.join(src_root, "treesitter-parser-registry"), os.path.join(dest_root, "treesitter-parser-registry"), delete=True, excludes=(".git",))
+    print("  Installed: {}/ -> {}/".format(src_root, dest_root))
+
+
+def restore_backup(backup_dir, home):
+    if not os.path.isdir(backup_dir):
+        eprint("Error: Backup directory not found: {}".format(backup_dir))
+        sys.exit(1)
+
+    print("Restoring dotfiles from backup: {}".format(backup_dir))
+    print("")
+    print("Removing current dotfiles...")
+    bash_config = os.path.join(home, ".config", "bash")
+    if os.path.islink(bash_config):
+        os.unlink(bash_config)
+    elif os.path.isdir(bash_config):
+        remove_if_exists(os.path.join(bash_config, "global"))
+        for name in ("functions.sh", "README.md", "bashrc"):
+            remove_if_exists(os.path.join(bash_config, name))
+
+    for rel in list(BASH_ENTRYPOINTS) + [".vimrc", ".tmux.conf", ".editorconfig", ".tmux", ".vim",
+                                        ".config/nvim", ".config/tmux", ".config/editorconfig", ".config/starship", ".config/vim",
+                                        ".config/helix/runtime"]:
+        path = os.path.join(home, rel)
+        if os.path.exists(path) or os.path.islink(path):
+            print("  Removing: {}".format(path))
+            remove_path(path)
+
+    print("")
+    print("Restoring files from backup...")
+    if not os.listdir(backup_dir):
+        eprint("Error: Backup directory is empty")
+        sys.exit(1)
+    run(["cp", "-rPp", ".", home], cwd=backup_dir)
+    print("")
+    print("Backup restored successfully!")
+    print("")
+    print("Restored from: {}".format(backup_dir))
+
+
+def remove_if_exists(path):
+    if os.path.exists(path) or os.path.islink(path):
+        remove_path(path)
+
+
+def ensure_dir(path, thing="directory"):
+    """Create directory at path, first removing any dangling or non-directory symlink."""
+    require_writable_dir(path, thing)
+    if os.path.islink(path) and not os.path.isdir(path):
+        require_writable_parent(path, thing)
+        print("  Removing stale symlink: {}".format(path))
+        os.unlink(path)
+    os.makedirs(path, exist_ok=True)
+
+
+def preserve_bash_layers_from_symlink(home):
+    bash_config = os.path.join(home, ".config", "bash")
+    saved = {}
+    if os.path.islink(bash_config):
+        for layer in BASH_LAYERS:
+            src = os.path.join(bash_config, layer)
+            if os.path.isdir(src):
+                tmp = tempfile.mkdtemp(prefix="dotfiles_bash_{}_".format(layer), dir="/tmp")
+                shutil.rmtree(tmp)
+                shutil.copytree(src, tmp, symlinks=True)
+                saved[layer] = tmp
+        require_writable_parent(bash_config, "bash config")
+        os.unlink(bash_config)
+        ensure_dir(bash_config, "bash config")
+        for layer, tmp in saved.items():
+            shutil.move(tmp, os.path.join(bash_config, layer))
+    else:
+        ensure_dir(bash_config, "bash config")
+        remove_if_exists(os.path.join(bash_config, "global"))
+        for name in ("functions.sh", "README.md", "bashrc"):
+            remove_if_exists(os.path.join(bash_config, name))
+
+
+def install_bash(repo_dir, home, links_mode):
+    bash_config = os.path.join(home, ".config", "bash")
+    preserve_bash_layers_from_symlink(home)
+    install_path(os.path.join(repo_dir, "bash", "global"), os.path.join(bash_config, "global"), links_mode)
+    install_path(os.path.join(repo_dir, "bash", "functions.sh"), os.path.join(bash_config, "functions.sh"), links_mode)
+    install_path(os.path.join(repo_dir, "bash", "README.md"), os.path.join(bash_config, "README.md"), links_mode)
+    install_path(os.path.join(repo_dir, "bash", "bashrc"), os.path.join(bash_config, "bashrc"), links_mode)
+    for entrypoint in BASH_ENTRYPOINTS:
+        lns(".config/bash/bashrc", os.path.join(home, entrypoint), verbose=True)
+
+
+def backup_existing(home, repo_dir):
+    backup_rel = mkdirn(os.path.join(home, "dotfiles_backups", "backup"))
+    backup_dir = os.path.abspath(backup_rel)
+    print("Making backups in: {}".format(backup_dir))
+    for rel in list(BASH_ENTRYPOINTS) + [".vimrc", ".vim", ".tmux", ".tmux.conf", ".editorconfig",
+                                        ".config/vim", ".config/nvim", ".config/bash/global",
+                                        ".config/bash/functions.sh", ".config/bash/README.md",
+                                        ".config/bash/bashrc", ".config/tmux", ".config/starship",
+                                        ".config/editorconfig", ".config/helix/runtime"]:
+        path = os.path.join(home, rel)
+        if not (os.path.exists(path) or os.path.islink(path)):
+            continue
+        if os.path.islink(path):
+            link_target = os.readlink(path)
+            real = os.path.realpath(path) if os.path.exists(path) else ""
+            if link_target.startswith(repo_dir) or real.startswith(repo_dir):
+                print("  Skipping (points to repo): {}".format(rel))
+                continue
+        print("  Backing up: {}".format(rel))
+        backup_item(path, os.path.join(backup_dir, rel))
+    print("")
+    return backup_dir
+
+
+def install_dev_mode(repo_dir, home):
+    config_dir = os.path.join(home, ".config")
+    ensure_dir(config_dir, "dotfiles")
+    for name in ("nvim", "vim", "tmux", "starship", "editorconfig"):
+        remove_if_exists(os.path.join(config_dir, name))
+        lns(os.path.join(repo_dir, name), os.path.join(config_dir, name), verbose=True)
+
+    install_bash(repo_dir, home, links_mode=True)
+    lns(".config/vim/vimrc", os.path.join(home, ".vimrc"), verbose=True)
+    lns(".config/vim/vim", os.path.join(home, ".vim"), verbose=True)
+    lns(".config/tmux/tmux.conf", os.path.join(home, ".tmux.conf"), verbose=True)
+    lns(".config/tmux/tmux", os.path.join(home, ".tmux"), verbose=True)
+    lns(".config/editorconfig/editorconfig", os.path.join(home, ".editorconfig"), verbose=True)
+
+
+def install_copy_mode(repo_dir, home):
+    for entrypoint in BASH_ENTRYPOINTS:
+        remove_if_exists(os.path.join(home, entrypoint))
+    install_bash(repo_dir, home, links_mode=False)
+
+    nvim_config = os.path.join(home, ".config", "nvim")
+    remove_if_exists(nvim_config)
+    for sub in ("after/lsp", "after/ftplugin", "lsp", "lua/custom/plugins"):
+        ensure_dir(os.path.join(nvim_config, sub), "Neovim config")
+    for rel in ("lua/custom/plugins/init.lua", "lua/kickstart", "doc", "lazy-lock.json", "README.md", "LICENSE.md", "init.lua"):
+        install_path(os.path.join(repo_dir, "nvim", rel), os.path.join(nvim_config, rel), False)
+    for src in sorted(glob_paths(os.path.join(repo_dir, "nvim", "lsp"))):
+        install_path(src, os.path.join(nvim_config, "lsp", os.path.basename(src)), False)
+    for src in sorted(glob_paths(os.path.join(repo_dir, "nvim", "after", "ftplugin"))):
+        install_path(src, os.path.join(nvim_config, "after", "ftplugin", os.path.basename(src)), False)
+    for src in sorted(glob_paths(os.path.join(repo_dir, "nvim", "after", "lsp"))):
+        install_path(src, os.path.join(nvim_config, "after", "lsp", os.path.basename(src)), False)
+    plugins_dir = os.path.join(repo_dir, "nvim", "lua", "kickstart", "plugins")
+    for src in sorted(glob_paths(plugins_dir)):
+        install_path(src, os.path.join(nvim_config, "lua", "kickstart", "plugins", os.path.basename(src)), False)
+
+    remove_if_exists(os.path.join(home, ".vimrc"))
+    remove_if_exists(os.path.join(home, ".vim"))
+    vim_config = os.path.join(home, ".config", "vim")
+    remove_if_exists(vim_config)
+    ensure_dir(os.path.join(vim_config, "vim", "pack", "vendor", "start"), "Vim config")
+    ensure_dir(os.path.join(vim_config, "vim", "pack", "vendor", "opt"), "Vim config")
+    for start_or_opt in ("start", "opt"):
+        for plugin_dir in sorted(glob_paths(os.path.join(repo_dir, "vim", "vim", "pack", "vendor", start_or_opt))):
+            install_path(plugin_dir, os.path.join(vim_config, "vim", "pack", "vendor", start_or_opt, os.path.basename(plugin_dir)), False)
+    install_path(os.path.join(repo_dir, "vim", "vimrc"), os.path.join(vim_config, "vimrc"), False)
+    lns(".config/vim/vimrc", os.path.join(home, ".vimrc"), verbose=True)
+
+    remove_if_exists(os.path.join(home, ".tmux.conf"))
+    remove_if_exists(os.path.join(home, ".tmux"))
+    tmux_config = os.path.join(home, ".config", "tmux")
+    remove_if_exists(tmux_config)
+    ensure_dir(os.path.join(tmux_config, "tmux", "plugins"), "tmux config")
+    for plugin_dir in sorted(glob_paths(os.path.join(repo_dir, "tmux", "vendor", "plugins"))):
+        install_path(plugin_dir, os.path.join(tmux_config, "tmux", "plugins", os.path.basename(plugin_dir)), False)
+    install_path(os.path.join(repo_dir, "tmux", "tmux.conf"), os.path.join(tmux_config, "tmux.conf"), False)
+    install_path(os.path.join(repo_dir, "tmux", "tmux-3col-layout.sh"), os.path.join(tmux_config, "tmux-3col-layout.sh"), False)
+    install_path(os.path.join(repo_dir, "tmux", "tmux-word-separators"), os.path.join(tmux_config, "tmux-word-separators"), False)
+    lns(".config/tmux/tmux.conf", os.path.join(home, ".tmux.conf"), verbose=True)
+    lns(".config/tmux/tmux", os.path.join(home, ".tmux"), verbose=True)
+
+    remove_if_exists(os.path.join(home, ".editorconfig"))
+    editorconfig_dir = os.path.join(home, ".config", "editorconfig")
+    remove_if_exists(editorconfig_dir)
+    ensure_dir(editorconfig_dir, "editorconfig")
+    install_path(os.path.join(repo_dir, "editorconfig", "editorconfig"), os.path.join(editorconfig_dir, "editorconfig"), False)
+    lns(".config/editorconfig/editorconfig", os.path.join(home, ".editorconfig"), verbose=True)
+
+    starship_dir = os.path.join(home, ".config", "starship")
+    remove_if_exists(starship_dir)
+    ensure_dir(starship_dir, "starship config")
+    install_path(os.path.join(repo_dir, "starship", "starship.toml"), os.path.join(starship_dir, "starship.toml"), False)
+
+
+def glob_paths(path):
+    if not os.path.isdir(path):
+        return []
+    return [os.path.join(path, x) for x in os.listdir(path)]
+
+
+def install_git_hooks(repo_dir, dev_mode):
+    print("Installing git hooks...")
+    if not dev_mode:
+        print("  Skipped (not in --dev mode; run ./install --dev to install repo development hooks)")
+        record_result("git hooks", "SKIP", "not in --dev mode")
+        return
+    hooks_dir = os.path.join(repo_dir, "hooks")
+    if not os.path.isdir(hooks_dir):
+        skipped("git hooks (no hooks/ directory in repo)")
+        record_result("git hooks", "SKIP", "no hooks/ directory")
+        return
+    dest_dir = os.path.join(repo_dir, ".git", "hooks")
+    for hook in sorted(os.listdir(hooks_dir)):
+        src = os.path.join(hooks_dir, hook)
+        if os.path.isfile(src) and "README" not in hook:
+            dest = os.path.join(dest_dir, hook)
+            require_writable_parent(dest, "git hooks")
+            shutil.copy2(src, dest)
+            mode = os.stat(dest).st_mode
+            os.chmod(dest, mode | stat.S_IXUSR | stat.S_IXGRP | stat.S_IXOTH)
+            print("  Installed: {}".format(hook))
+
+
+def run_post_install_hooks(hooks, repo_dir, home, args, backup_dir):
+    for hook in hooks:
+        print("Running post-install hook: {}".format(hook))
+        env = os.environ.copy()
+        env.update({
+            "DOTFILES_REPO": repo_dir,
+            "DOTFILES_HOME": home,
+            "DOTFILES_MODE": install_mode(args),
+            "DOTFILES_BACKUP_DIR": backup_dir,
+            "DOTFILES_NO_BACKUP": "1" if args.no_backup else "0",
+            "DOTFILES_NO_FONTS": "1" if args.no_fonts else "0",
+            "DOTFILES_NO_TLDR_CACHE": "1" if args.no_tldr_cache else "0",
+            "DOTFILES_DEST_DIR": home,
+        })
+        run([hook], env=env)
+
+
+def run_layer_install_scripts(home):
+    for layer in BASH_LAYERS:
+        install_script = os.path.join(home, ".config", "bash", layer, "install.sh")
+        if os.path.isfile(install_script) and os.access(install_script, os.R_OK):
+            print("Sourcing '{}' ...".format(install_script))
+            run(["bash", "-c", 'source "$1"', "bash", install_script])
+
+
+def parse_args(argv):
+    parser = argparse.ArgumentParser(
+        prog="./install",
+        description="Install dotfiles to the home directory.",
+        add_help=False,
+        formatter_class=argparse.RawTextHelpFormatter,
+    )
+    parser.add_argument("--dev", action="store_true")
+    parser.add_argument("--dest-dir", default=None, dest="dest_dir",
+                        metavar="DIR", help="Install root (default: $HOME)")
+    parser.add_argument("--no-backup", action="store_true", dest="no_backup")
+    parser.add_argument("--no-fonts", action="store_true", dest="no_fonts")
+    parser.add_argument("--no-tldr-cache", action="store_true", dest="no_tldr_cache")
+    parser.add_argument("--post-install-hook", action="append", default=[])
+    parser.add_argument("--restore-backup")
+    parser.add_argument("--verbose", action="store_true")
+    parser.add_argument("--help", "-h", action="store_true")
+    args, unknown = parser.parse_known_args(argv)
+    if args.help:
+        print_help()
+        sys.exit(0)
+    if unknown:
+        eprint("Unknown option: {}".format(unknown[0]))
+        eprint("Usage: ./install [--dev] [--dest-dir DIR] [--no-backup] [--no-fonts] [--no-tldr-cache] [--post-install-hook <script>] [--verbose] [--restore-backup <dir>]")
+        eprint("Run './install --help' for details.")
+        sys.exit(1)
+    return args
+
+
+def print_help():
+    print("""Usage: ./install [OPTIONS]
+
+Install dotfiles to the home directory.
+
+Options:
+  (default)                  Copy files from repo - no symlinks to the repo remain.
+                             Re-run ./install after repo changes to update.
+
+  --dev                      Directory-level symlinks to the repo (e.g. ~/.config/nvim -> repo/nvim).
+                             Easiest when editing files frequently. Skips backups.
+
+  --dest-dir <dir>           Install into <dir> as the root instead of $HOME.
+                             Useful for staging installs or testing.
+
+  --no-backup                Skip creating a backup of existing dotfiles before installing.
+
+  --no-fonts                 Skip installing vendored fonts to ~/.local/share/fonts.
+
+  --no-tldr-cache            Skip installing the bundled tldr page cache.
+
+  --post-install-hook <script>
+                             Run a corp/site/user hook after global install steps.
+                             Can be given multiple times; hooks run in argument order.
+                             Hooks are executed directly and receive DOTFILES_* env vars.
+
+  --restore-backup <dir>     Restore dotfiles from a previous backup directory.
+                             Example: ./install --restore-backup dotfiles_backups/backup.1
+
+  --help, -h                 Show this help message.""")
+
+
+def main(argv):
+    if not command_exists("rsync"):
+        eprint("Error: This script requires rsync.")
+        return 1
+
+    args = parse_args(argv)
+    repo_dir = os.path.dirname(os.path.abspath(__file__))
+    home = os.path.abspath(args.dest_dir) if args.dest_dir else os.path.expanduser("~")
+
+    if args.restore_backup:
+        restore_backup(args.restore_backup, home)
+        return 0
+
+    print("Dotfiles repo base directory: {}".format(repo_dir))
+    if args.dest_dir:
+        print("Destination directory: {}".format(home))
+
+    hooks = []
+    for hook in args.post_install_hook:
+        if not os.path.isfile(hook) or not os.access(hook, os.X_OK):
+            eprint("Error: Post-install hook is not executable: {}".format(hook))
+            return 1
+        hooks.append(os.path.abspath(hook))
+
+    print("Changing directory to {}".format(home))
+    ensure_dir(home, "install destination")
+    os.chdir(home)
+
+    backup_dir = ""
+    if args.dev:
+        print("Backup: skipped (dev mode)")
+        record_result("backup", "SKIP", "dev mode")
+    elif args.no_backup:
+        skipped("backup (--no-backup)",
+                "existing dotfiles will be overwritten with NO backup")
+        record_result("backup", "SKIP", "--no-backup")
+    else:
+        backup_dir = run_install_step("backup", backup_existing, home, repo_dir) or ""
+
+    if args.dev:
+        run_install_step("dotfiles", install_dev_mode, repo_dir, home)
+    else:
+        run_install_step("dotfiles", install_copy_mode, repo_dir, home)
+
+    if args.no_fonts:
+        print("Installing fonts...")
+        skipped("fonts (--no-fonts)",
+                "Nerd Fonts will NOT be installed to ~/.local/share/fonts")
+        record_result("fonts", "SKIP", "--no-fonts")
+    else:
+        run_install_step("fonts", install_fonts, repo_dir, home)
+
+    if args.no_tldr_cache:
+        print("Installing tldr page cache...")
+        skipped("tldr cache (--no-tldr-cache)",
+                "tldr page cache will NOT be installed to ~/.cache/tealdeer")
+        record_result("tldr cache", "SKIP", "--no-tldr-cache")
+    else:
+        run_install_step("tldr cache", install_tldr_cache, repo_dir, home)
+
+    blocked_prebuilt_binaries = run_install_step("pre-built binaries", install_prebuilt_binaries, repo_dir, home) or set()
+    add_prebuilt_binary_retry_notice(blocked_prebuilt_binaries)
+    run_install_step("Helix runtime", install_helix_runtime, repo_dir, home)
+    run_install_step("nvim-treesitter vendor", install_nvim_treesitter_vendor, repo_dir, home)
+    run_install_step("Tree-sitter parsers", install_treesitter_parsers, repo_dir, home)
+    run_install_step("git hooks", install_git_hooks, repo_dir, args.dev)
+    if hooks:
+        run_install_step("post-install hooks", run_post_install_hooks, hooks, repo_dir, home, args, backup_dir)
+    else:
+        record_result("post-install hooks", "SKIP", "none requested")
+    run_install_step("layer install scripts", run_layer_install_scripts, home)
+    print_final_notices()
+    print_install_results()
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main(sys.argv[1:]))

@@ -45,8 +45,8 @@ every preference is a `cfg_*` variable you can override in your user layer.
 ./install
 ```
 The Linux installer can be invoked from outside the repo root. `./install` is a
-small Bash shim that runs the Python 3.6-compatible implementation in
-`install.py`.
+Python 3.6-compatible executable script and checks the Python version before
+running.
 
 Useful install options:
 ```bash
@@ -73,6 +73,9 @@ are decompressed into `~/.local/bin`; matching `lib64/*.bz2` files go to
 `$ORIGIN/../lib64:$ORIGIN/../lib` RPATHs on installed dynamic binaries. If a
 running binary cannot be replaced or patched, the installer continues and ends
 with a retry notice naming the binaries to exit before re-running.
+Before each install area writes files, the installer verifies the target
+directory is writable. Unwritable areas are refused with a warning while later
+areas continue, and the run ends with an install results table.
 Run the Python 3.6-compatible `./strip_all_elf_binaries` helper after adding
 binaries, libraries, parser grammars, or tar archives to remove debug symbols
 and recompress vendored ELF payloads. Tar archives are normalized to
@@ -88,8 +91,9 @@ Optional corporate/site add-ons can be chained after the global install:
 ./install --post-install-hook ~/corp-dotfiles/install.sh
 ```
 `--post-install-hook` can be provided multiple times; hooks run in argument
-order. Each hook runs with `bash` and receives `DOTFILES_REPO`,
-`DOTFILES_HOME`, `DOTFILES_MODE`, `DOTFILES_BACKUP_DIR`,
+order. Each hook is executed directly, so it must be executable and provide its
+own shebang or binary format. Hooks receive `DOTFILES_REPO`, `DOTFILES_HOME`,
+`DOTFILES_MODE`, `DOTFILES_BACKUP_DIR`,
 `DOTFILES_DEST_DIR`, `DOTFILES_NO_BACKUP`, `DOTFILES_NO_FONTS`, and
 `DOTFILES_NO_TLDR_CACHE`.
 

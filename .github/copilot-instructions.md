@@ -36,8 +36,8 @@ cp hooks/* .git/hooks/ && chmod +x .git/hooks/*
 .\install.ps1
 ```
 
-Use `bash -n install`, `python3 -m py_compile install.py`, and
-`bash -n bash/global/bashrc` after installer or shell edits.
+Use `python3 -m py_compile install` and `bash -n bash/global/bashrc` after
+installer or shell edits.
 `./tests/install_linux_tmp_home` runs the Linux installer against a temp `HOME`
 with temp XDG cache/state dirs from `/tmp`, then smoke-tests offline Tree-sitter
 with headless Neovim.
@@ -79,13 +79,18 @@ Each layer can inject code into `global/bashrc` via numbered files in `<layer>/g
 - **`--no-backup`**: skip backup creation (useful for clean reinstalls or automation)
 - **`--no-fonts`**: skip vendored font extraction and font cache refresh
 - **`--no-tldr-cache`**: skip bundled tealdeer/tldr page cache install
-- **`--post-install-hook <script>`**: run an explicit corp/site/user add-on installer after global install steps; can be repeated and hooks run in argument order
+- **`--post-install-hook <script>`**: execute an explicit corp/site/user add-on hook after global install steps; can be repeated and hooks run in argument order; each hook must be executable and provide its own shebang or binary format
 
 Backups are numbered (`dotfiles_backups/backup.N/`). The installer skips targets already pointing into the repo and never overwrites an existing backup.
 Backups intentionally exclude font files because vendored Nerd Font archives are large and reproducible.
 
 Repo git hooks are installed only by `./install --dev`; normal end-user installs skip them.
-The Linux installer resolves the repo from the `install`/`install.py` script path, not the current working directory. `install` is a Bash shim over Python 3.6-compatible `install.py`.
+The Linux installer resolves the repo from the `install` script path, not the
+current working directory. `install` is a Python 3.6-compatible executable and
+checks the Python version before running.
+Before each install area writes files, the installer verifies that the target
+directory is writable. Unwritable areas are refused with warnings, later areas
+continue when possible, and the run ends with an install results table.
 Pre-built Linux binaries live under `pre_built/<platform>/`, using names like
 `el8.x86_64.glibc2p28`. The installer decompresses `bin/*.bz2` to
 `~/.local/bin` and `lib64/*.bz2` to `~/.local/lib64`, then uses vendored
