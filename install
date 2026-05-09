@@ -654,6 +654,35 @@ def install_helix_runtime(repo_dir, home):
         warn("Helix runtime archive did not install {}/tutor as expected".format(runtime_dir))
 
 
+def install_vim_runtime(repo_dir, home):
+    print("Installing Vim runtime...")
+    archive = os.path.join(repo_dir, "vim", "runtime.tar.bz2")
+    if not os.path.isfile(archive):
+        skipped("Vim runtime (vim/runtime.tar.bz2 not found in repo)",
+                "vim will NOT have the vendored runtime at ~/.local/share/vim/vim92")
+        record_result("Vim runtime", "SKIP", "no bundled runtime archive")
+        return
+
+    vim_share_dir = os.path.join(home, ".local", "share", "vim")
+    runtime_dir = os.path.join(vim_share_dir, "runtime")
+    vim92_dir = os.path.join(vim_share_dir, "vim92")
+    ensure_dir(vim_share_dir, "Vim runtime")
+    remove_if_exists(runtime_dir)
+    remove_if_exists(vim92_dir)
+
+    with tarfile.open(archive, "r:bz2") as tf:
+        safe_extract_tar(tf, vim_share_dir)
+
+    if os.path.isdir(runtime_dir):
+        os.rename(runtime_dir, vim92_dir)
+
+    sentinel = os.path.join(vim92_dir, "filetype.vim")
+    if os.path.isfile(sentinel):
+        print("  Installed: {} -> {}/".format(archive, vim92_dir))
+    else:
+        warn("Vim runtime archive did not install {} as expected".format(sentinel))
+
+
 def install_treesitter_parsers(repo_dir, home):
     platform = treesitter_platform_id()
     src_dir = os.path.join(repo_dir, "treesitter", "prebuilt", platform)
@@ -1073,6 +1102,7 @@ def main(argv):
     blocked_prebuilt_binaries = run_install_step("pre-built binaries", install_prebuilt_binaries, repo_dir, home) or set()
     add_prebuilt_binary_retry_notice(blocked_prebuilt_binaries)
     run_install_step("Helix runtime", install_helix_runtime, repo_dir, home)
+    run_install_step("Vim runtime", install_vim_runtime, repo_dir, home)
     run_install_step("nvim-treesitter vendor", install_nvim_treesitter_vendor, repo_dir, home)
     run_install_step("Tree-sitter parsers", install_treesitter_parsers, repo_dir, home)
     run_install_step("git hooks", install_git_hooks, repo_dir, args.dev)
