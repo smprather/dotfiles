@@ -463,7 +463,7 @@ def install_portable_python(repo_dir, home):
     try:
         print("  extracting {}...".format(archive))
         with tarfile.open(archive, "r:bz2") as tf:
-            tf.extractall(tmp_dir)
+            safe_extract_tar(tf, tmp_dir)
 
         extracted_dirs = [
             os.path.join(tmp_dir, d) for d in os.listdir(tmp_dir)
