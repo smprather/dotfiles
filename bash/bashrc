@@ -40,7 +40,8 @@ export HOME=$(getent passwd $USER | cut -d: -f6)
 #    fi
 #done
 #export BASH_CONFIG_ROOT_DIR="$(cd -P "$(dirname "$_source_path")" >/dev/null 2>&1 && pwd)"
-export BASH_CONFIG_ROOT_DIR="$HOME/.config/bash"
+
+[[ -z "$BASH_CONFIG_ROOT_DIR" ]] && export BASH_CONFIG_ROOT_DIR="$HOME/.config/bash"
 source $BASH_CONFIG_ROOT_DIR/functions.sh
 
 # I could do the layering in a function, but I like to use 'gf' in nvim for easy exploration.
@@ -71,7 +72,7 @@ if [[ $- == *i* && -n "${cfg_preferred_bash:-}" && -x "$cfg_preferred_bash" ]]; 
     _preferred_real=$(realpath "$cfg_preferred_bash" 2>/dev/null)
     _current_real=$(realpath /proc/$$/exe 2>/dev/null || realpath "$BASH" 2>/dev/null)
     if [[ -n "$_preferred_real" && "$_current_real" != "$_preferred_real" ]]; then
-        exec "$cfg_preferred_bash"
+        DOTFILES_BASHRC_SOURCED=0 exec "$cfg_preferred_bash" --init-file "${BASH_SOURCE[0]}"
     fi
 fi
 

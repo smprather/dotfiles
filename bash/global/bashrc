@@ -206,7 +206,7 @@ set_prompt() {
 unset PROMPT_COMMAND
 if is_truthy $cfg_enable_starship && command -v starship >/dev/null; then
     # Default location is $HOME/.config/starship.toml
-    export STARSHIP_CONFIG="$HOME/.config/starship/starship.toml"
+    export STARSHIP_CONFIG="${BASH_CONFIG_ROOT_DIR%/bash}/starship/starship.toml"
     eval "$(starship init bash)"
     # Sometimes, ctrl-c killing a process leaves the the -echo stty option enabled, which
     # makes it so that you can't see the text you're typeing (like when entering a pw).
