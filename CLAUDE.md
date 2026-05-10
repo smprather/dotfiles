@@ -86,8 +86,25 @@ tmux/
   tmux-word-separators      - Expands tmux double-click word separators with emoji ranges
   tmux/vendor/plugins/      - Bundled plugins (tpm, resurrect, continuum, better-mouse-mode)
 
-helix/
-  helix_runtime.tar.bz2     - Optional Helix runtime archive → ~/.config/helix/runtime/
+pre_built/
+  <platform>/               - Platform dir, e.g. el8.x86_64.glibc2p28
+    bin/*.bz2               - Compressed binaries → ~/.local/bin
+    lib64/*.bz2             - Compressed shared libs → ~/.local/lib64
+    runtime/                - Runtime archives (platform-matched)
+      helix.tar.bz2         - Helix runtime → ~/.config/helix/runtime/
+      vim92.tar.bz2         - Vim 9.2 runtime → ~/.local/share/vim/vim92/
+      runtime_config.toml   - Runtime install metadata
+    portable-python-*.tar.bz2 - BOLT-optimized Python archive (NOSTRIP — never run strip on it)
+  build_scripts/            - Helper scripts (not installed)
+    import-portable-python  - Package a portable-python dir → pre_built/<platform>/*.tar.bz2
+    farm-versions           - Query installed binary versions (json/tsv/text output)
+    build-kakoune.sh        - Build kakoune from source
+    build-jq.sh             - Build jq from source
+    build-ncdu.sh           - Build ncdu from source
+    reproduce-llvm-build.sh - LLVM build reproduction script
+  .strip-manifest           - sha256/tar-meta cache for strip_all_elf_binaries
+
+helix/                      - (empty; runtime archive moved to pre_built/<platform>/runtime/)
 
 editorconfig/
   editorconfig              - → ~/.editorconfig
@@ -107,7 +124,7 @@ autohotkey/
 hooks/
   pre-commit                - Removes embedded .git dirs before commits; installed by ./install --dev
 
-install                     - Python 3.6-compatible Linux installer executable
+install                     - Python 3.6-compatible Linux installer executable (shebang: #!/usr/bin/python3)
 install-powershell-latest.ps1 - Windows PowerShell 5.1 bootstrapper for pwsh via winget
 install.ps1                 - Windows installation script (PowerShell)
 update_tmux_plugins         - Re-clones all tmux plugins listed in tmux.conf from GitHub (strips .git on next commit)
@@ -135,13 +152,17 @@ The Linux installer resolves the repo from the `install` script path, so it can 
 
 **Font behavior**: Linux installer extracts vendored fonts from top-level `fonts/*.zip` into `~/.local/share/fonts`. Large archives can be stored as split chunks named `*.zip.part-000`, `*.zip.part-001`, etc.; use 45 MiB chunks to stay below GitHub's 50 MB warning threshold. The installer rejoins them under `/tmp/dotfiles-fonts.*` before extraction. It generates `fonts.scale`/`fonts.dir` when `mkfontscale`/`mkfontdir` are present and refreshes fontconfig with `fc-cache`. Font discovery is fontconfig-first for normal Linux desktop apps, WSLg, and RHEL/Alma 8. Do not add `xset +fp` startup logic; X core font paths can fail when `$HOME` is not traversable by the X server. Windows Terminal reads fonts from Windows, not WSL fontconfig.
 
-**Pre-built binary behavior**: Linux installer selects `pre_built/<platform>/` based on OS family, architecture, and libc. Preferred platform names are exact and ABI-oriented, for example `el8.x86_64.glibc2p28`. Files under `bin/*.bz2` are decompressed to `~/.local/bin` and marked executable. Files under `lib64/*.bz2` are decompressed to `~/.local/lib64`. The installer uses vendored `patchelf` from that same `bin/` set to patch dynamic executables with `RPATH=$ORIGIN/../lib64:$ORIGIN/../lib`, so binaries can find vendored shared libraries without global `LD_LIBRARY_PATH`. If a running binary such as `tmux` cannot be replaced or patched, the installer continues and prints a final retry notice telling the user to exit running instances and re-run the installer. It then runs `ldd` on installed binaries and warns about missing `.so` dependencies. If no exact platform exists, the installer may use a compatible same-arch glibc build whose glibc version is not newer than the host. Run the Python 3.6-compatible `./strip_all_elf_binaries` after adding binaries, libraries, parser grammars, or tar archives. It strips raw ELF files in place, strips ELF payloads inside standalone `.bz2`, and rewrites tar archives as `.tar.bz2`; processed tarballs are skipped on later runs when size and modification time match the strip manifest.
+**Pre-built binary behavior**: Linux installer selects `pre_built/<platform>/` based on OS family, architecture, and libc. Preferred platform names are exact and ABI-oriented, for example `el8.x86_64.glibc2p28`. Files under `bin/*.bz2` are decompressed to `~/.local/bin` and marked executable. Files under `lib64/*.bz2` are decompressed to `~/.local/lib64`. All bz2 decompression uses `write_bz2_atomic` (temp file in same dir + `os.rename`) — this prevents SIGBUS when the running Python process has memory-mapped a shared library that is being overwritten. The installer uses vendored `patchelf` from that same `bin/` set to patch dynamic executables with `RPATH=$ORIGIN/../lib64:$ORIGIN/../lib`, so binaries can find vendored shared libraries without global `LD_LIBRARY_PATH`. If a running binary such as `tmux` cannot be replaced or patched, the installer continues and prints a final retry notice telling the user to exit running instances and re-run the installer. It then runs `ldd` on installed binaries and warns about missing `.so` dependencies. If no exact platform exists, the installer may use a compatible same-arch glibc build whose glibc version is not newer than the host. The installer shebang is `#!/usr/bin/python3` and all subprocess calls use absolute paths (`_LDD`, `_UNAME`, `_GETCONF` resolved at startup via `_find_tool()`) to prevent accidentally picking up binaries currently being installed. Run the Python 3.6-compatible `./strip_all_elf_binaries` after adding binaries, libraries, parser grammars, or tar archives. It strips raw ELF files in place, strips ELF payloads inside standalone `.bz2`, and rewrites tar archives as `.tar.bz2`; processed tarballs are skipped on later runs when size and modification time match the strip manifest. Non-ELF `.bz2` payloads (e.g. `vim.bz2` which is a shell wrapper) are also recorded in `.strip-manifest` after first check so they are skipped as manifest hits on subsequent runs. Archives whose names match `NOSTRIP_ARCHIVE_PREFIXES` (currently `portable-python-*`) are completely skipped and never stripped — LLVM BOLT-optimized binaries must not be touched.
 
 **Tree-sitter parser behavior**: Offline support targets Neovim v0.12+ only. The installer copies vendored `nvim-treesitter` and `treesitter-parser-registry` into `~/.local/share/nvim/dotfiles/vendor/`, then looks for prebuilt artifacts under `treesitter/prebuilt/$(uname -s lower)-$(uname -m)-<glibc|musl>/`, decompresses `parser/*.so.bz2` to installed `parser/*.so`, and copies `parser-info/`, `queries/`, `registry/`, and `build-info/` into `~/.local/share/nvim/tree-sitter-parsers/`. Neovim appends that parser directory to `runtimepath` and starts native Tree-sitter on filetype buffers. Build all supported parsers with `./treesitter/build_parsers`; prebuilt `.so.bz2`, parser-info, queries, registry cache, and `build-info/*.env` are tracked.
 
 **tldr cache behavior**: `./update_tldr_cache` writes `tldr/tldr-pages.tar.bz2` for offline tealdeer installs. The installer accepts both `.tar.bz2` and legacy `.tar.gz`, replaces any existing `~/.cache/tealdeer/tldr-pages` unless `--no-tldr-cache` is passed, and `./strip_all_elf_binaries` normalizes tar archives to bzip2.
 
-**Helix runtime behavior**: If `helix/helix_runtime.tar.bz2` exists, the installer safely extracts it into `~/.config/helix/`, replacing any existing `~/.config/helix/runtime`. A correct install has `~/.config/helix/runtime/tutor`.
+**Helix runtime behavior**: The installer looks for `helix.tar.bz2` in `pre_built/<platform>/runtime/` first, then falls back to the legacy path `helix/helix_runtime.tar.bz2`. It safely extracts into `~/.config/helix/`, replacing any existing `~/.config/helix/runtime`. A correct install has `~/.config/helix/runtime/tutor`. The archive contains `./runtime/...` and extracts directly to `~/.config/helix/`.
+
+**Vim runtime behavior**: The installer looks for `vim92.tar.bz2` in `pre_built/<platform>/runtime/` first, then falls back to the legacy path `vim/runtime.tar.bz2`. It extracts to `~/.local/share/vim/`, renames the `runtime/` directory to `vim92/`, and verifies `filetype.vim` is present. A correct install has `~/.local/share/vim/vim92/filetype.vim`.
+
+**Portable Python behavior**: The installer looks for `portable-python-*.tar.bz2` in the platform dir. If found, it extracts to a temp dir under `/tmp` using `safe_extract_tar`, runs the bundled `install.sh --prefix ~/.local --force --no-test`, then removes `~/.local/bin/python3` and `~/.local/bin/pip3` so the system `/usr/bin/python3` wins for EDA tools. Use `python3.14` and `pip3.14` for this build. The archive must never be run through `strip_all_elf_binaries` (BOLT-optimized). To add or update a portable Python build, use `pre_built/build_scripts/import-portable-python <portable-dir>`.
 
 **Backup behavior**: Numbered backups in `dotfiles_backups/backup.N/`. Skips files already pointing to the repo. Never overwrites existing backups.
 Backups intentionally exclude font files (`*.ttf`, `*.otf`, `*.pcf`, `*.bdf`, `*.woff`, `*.woff2`, etc.) because vendored Nerd Fonts are large and reproducible.
@@ -158,7 +179,9 @@ Backups intentionally exclude font files (`*.ttf`, `*.otf`, `*.pcf`, `*.bdf`, `*
 - `~/.tmux` → `~/.config/tmux/tmux`
 - `~/.editorconfig` → `~/.config/editorconfig/editorconfig`
 - `~/.config/starship/starship.toml` ← `repo/starship/starship.toml`
-- `~/.config/helix/runtime/` ← `repo/helix/helix_runtime.tar.bz2`
+- `~/.config/helix/runtime/` ← `repo/pre_built/<platform>/runtime/helix.tar.bz2`
+- `~/.local/share/vim/vim92/` ← `repo/pre_built/<platform>/runtime/vim92.tar.bz2`
+- `~/.local/bin/python3.14` etc. ← `repo/pre_built/<platform>/portable-python-*.tar.bz2` (via install.sh)
 
 **Windows copy destinations** (files are copied, not symlinked — re-run `.\install.ps1` after repo changes):
 - `%LOCALAPPDATA%\nvim` ← `repo/nvim`
@@ -368,6 +391,48 @@ bash/corp/global_hooks/5.sh  # hook injection at point 5
 1. Copy plugin directory into `vim/vim/pack/vendor/start/` or `tmux/vendor/plugins/`
 2. The pre-commit hook will strip `.git` dirs automatically on next commit
 3. Update `install` if new symlink logic is needed
+
+### Add a new pre-built binary
+
+```bash
+bzip2 -k mybinary
+cp mybinary.bz2 pre_built/el8.x86_64.glibc2p28/bin/
+./strip_all_elf_binaries          # strips, updates .strip-manifest
+git add pre_built/ .strip-manifest
+git commit                        # pre-commit hook re-strips and re-records
+```
+
+For shared libraries, put `.bz2` in `lib64/` instead.
+
+### Import or update portable Python
+
+```bash
+pre_built/build_scripts/import-portable-python /path/to/portable-python-X.Y.Z-tag/
+# Do NOT run strip_all_elf_binaries on the result — BOLT-optimized, already in NOSTRIP list
+git add pre_built/ .strip-manifest
+git commit
+```
+
+### Query installed binary versions
+
+```bash
+pre_built/build_scripts/farm-versions --format text    # aligned table
+pre_built/build_scripts/farm-versions --format tsv     # for spreadsheets / README tables
+pre_built/build_scripts/farm-versions --format json    # machine-readable
+pre_built/build_scripts/farm-versions --missing-only   # find gaps
+```
+
+When adding a new binary, add an entry to `TOOLS` in `farm-versions` with the right strategy.
+
+### Create a GitHub release
+
+```bash
+git tag v$(date +%Y.%m.%d)
+gh release create v$(date +%Y.%m.%d) --title "v$(date +%Y.%m.%d)" --notes "..."
+```
+
+GitHub auto-generates `Source code (tar.gz)` and `Source code (zip)` containing the full repo.
+Use `farm-versions --format tsv` to generate the binary version table for release notes.
 
 ### History
 
