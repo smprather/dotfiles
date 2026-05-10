@@ -204,6 +204,7 @@ def process_bzip2(repo_dir, manifest, strip_bin, bz2_path, tmp_dir, dry_run, sta
         print("skip non-ELF bzip2 payload: {}".format(bz2_path))
         stats["skipped_nonelf"] += 1
         os.unlink(payload)
+        manifest.record_sha(rel, bz2_path)
         return
 
     if dry_run:
