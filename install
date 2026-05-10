@@ -1,4 +1,4 @@
-#!/usr/bin/env python3
+#!/usr/bin/python3
 import os
 import sys
 
@@ -43,6 +43,38 @@ def eprint(*args):
 
 def warn(msg):
     eprint("  WARNING: {}".format(msg))
+
+
+def _find_tool(*candidates):
+    """Return the first candidate path that is an executable file, or None."""
+    for path in candidates:
+        if os.path.isfile(path) and os.access(path, os.X_OK):
+            return path
+    return None
+
+
+def write_bz2_atomic(bz2_file, dest_file, mode):
+    """Decompress bz2_file into dest_file via an atomic rename.
+
+    Writing through a temp file in the same directory means the rename is
+    always on the same filesystem (no EXDEV) and the running process keeps
+    its mmap to the old inode — preventing SIGBUS when overwriting in-use
+    shared libraries.
+    """
+    dest_dir = os.path.dirname(dest_file)
+    fd, tmp_path = tempfile.mkstemp(dir=dest_dir, prefix=".bz2tmp.")
+    try:
+        with os.fdopen(fd, "wb") as tmp_fh, bz2.open(bz2_file, "rb") as src_fh:
+            shutil.copyfileobj(src_fh, tmp_fh)
+        os.chmod(tmp_path, mode)
+        os.rename(tmp_path, dest_file)
+        tmp_path = None
+    finally:
+        if tmp_path is not None:
+            try:
+                os.unlink(tmp_path)
+            except OSError:
+                pass
 
 
 FINAL_NOTICES = []
@@ -222,12 +254,19 @@ def is_wsl():
         return False
 
 
+_UNAME = _find_tool("/usr/bin/uname", "/bin/uname")
+_LDD = _find_tool("/usr/bin/ldd", "/lib/x86_64-linux-gnu/ld-linux-x86-64.so.2")
+_GETCONF = _find_tool("/usr/bin/getconf", "/usr/local/bin/getconf")
+
+
 def uname(flag):
-    return output(["uname", flag]).strip()
+    return output([_UNAME, flag]).strip()
 
 
 def ldd_is_musl():
-    proc = subprocess.run(["ldd", "--version"], stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
+    if not _LDD:
+        return False
+    proc = subprocess.run([_LDD, "--version"], stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
     return b"musl" in proc.stdout.lower()
 
 
@@ -237,16 +276,20 @@ def treesitter_platform_id():
 
 
 def glibc_version_id():
-    try:
-        text = output(["getconf", "GNU_LIBC_VERSION"], check=False).strip()
-        parts = text.split()
-        if len(parts) >= 2:
-            return parts[1]
-    except OSError:
-        pass
-    proc = subprocess.run(["ldd", "--version"], stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
-    match = re.search(rb"[0-9]+\.[0-9]+", proc.stdout)
-    return match.group(0).decode("ascii") if match else ""
+    if _GETCONF:
+        try:
+            text = output([_GETCONF, "GNU_LIBC_VERSION"], check=False).strip()
+            parts = text.split()
+            if len(parts) >= 2:
+                return parts[1]
+        except OSError:
+            pass
+    if _LDD:
+        proc = subprocess.run([_LDD, "--version"], stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
+        match = re.search(rb"[0-9]+\.[0-9]+", proc.stdout)
+        if match:
+            return match.group(0).decode("ascii")
+    return ""
 
 
 def glibc_version_num(version):
@@ -366,9 +409,7 @@ def install_prebuilt_binaries(repo_dir, home):
             name = os.path.basename(dest_file)
             try:
                 require_writable_parent(dest_file, "pre-built binaries")
-                with bz2.open(bz2_file, "rb") as src, open(dest_file, "wb") as dest:
-                    shutil.copyfileobj(src, dest)
-                os.chmod(dest_file, 0o755)
+                write_bz2_atomic(bz2_file, dest_file, 0o755)
             except OSError as exc:
                 if exc.errno == errno.ETXTBSY:
                     blocked_binaries.add(name)
@@ -383,9 +424,7 @@ def install_prebuilt_binaries(repo_dir, home):
         for bz2_file in sorted(fnmatch.filter([os.path.join(lib64_dir, x) for x in os.listdir(lib64_dir)], "*.bz2")):
             dest_file = os.path.join(dest_lib64_dir, os.path.basename(bz2_file[:-4]))
             require_writable_parent(dest_file, "pre-built libraries")
-            with bz2.open(bz2_file, "rb") as src, open(dest_file, "wb") as dest:
-                shutil.copyfileobj(src, dest)
-            os.chmod(dest_file, 0o644)
+            write_bz2_atomic(bz2_file, dest_file, 0o644)
             print("  bzip2: {} -> {}".format(bz2_file, dest_file))
 
     blocked_binaries.update(patch_prebuilt_binary_rpaths(dest_bin_dir, blocked_binaries))
@@ -442,7 +481,7 @@ def install_portable_python(repo_dir, home):
             return
 
         prefix = os.path.join(home, ".local")
-        cmd = ["sh", installer, "--prefix", prefix, "--force", "--no-test"]
+        cmd = ["/bin/sh", installer, "--prefix", prefix, "--force", "--no-test"]
         print("  running: {}".format(" ".join(cmd)))
         proc = subprocess.run(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
         out = proc.stdout.decode("utf-8", "replace")
@@ -504,7 +543,7 @@ def patch_prebuilt_binary_rpaths(dest_bin_dir, skipped_names=None):
 
 
 def check_prebuilt_binary_dependencies(dest_bin_dir):
-    if not command_exists("ldd"):
+    if not _LDD:
         warn("ldd is not available — shared library dependency check skipped")
         return
 
@@ -513,7 +552,7 @@ def check_prebuilt_binary_dependencies(dest_bin_dir):
         binary = os.path.join(dest_bin_dir, name)
         if not os.path.isfile(binary) or not os.access(binary, os.X_OK):
             continue
-        proc = subprocess.run(["ldd", binary], stdout=subprocess.PIPE, stderr=subprocess.DEVNULL)
+        proc = subprocess.run([_LDD, binary], stdout=subprocess.PIPE, stderr=subprocess.DEVNULL)
         out = proc.stdout.decode("utf-8", "replace")
         if "not found" in out:
             missing = True
@@ -642,14 +681,16 @@ def install_fonts(repo_dir, home):
         if tmp_dir:
             shutil.rmtree(tmp_dir)
 
-    for tool in ("mkfontscale", "mkfontdir"):
-        if command_exists(tool):
+    for name, path in (("mkfontscale", "/usr/bin/mkfontscale"), ("mkfontdir", "/usr/bin/mkfontdir")):
+        tool = _find_tool(path)
+        if tool:
             proc = subprocess.run([tool, user_fonts_dir], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
             if proc.returncode != 0:
-                warn("{} failed for {} — font metrics may be incomplete".format(tool, user_fonts_dir))
+                warn("{} failed for {} — font metrics may be incomplete".format(name, user_fonts_dir))
 
-    if command_exists("fc-cache"):
-        proc = subprocess.run(["fc-cache", "-f", user_fonts_dir], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    fc_cache = _find_tool("/usr/bin/fc-cache", "/usr/local/bin/fc-cache")
+    if fc_cache:
+        proc = subprocess.run([fc_cache, "-f", user_fonts_dir], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
         if proc.returncode != 0:
             warn("fc-cache failed for {} — fontconfig cache may be stale".format(user_fonts_dir))
     else:
