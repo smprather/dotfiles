@@ -299,13 +299,13 @@ after repo updates.
 
 | Feature | Description |
 |---------|-------------|
-| `corp-logins` | Credential entry hotkeys using `CORP_UID` / `CORP_PASSWORD` |
+| `corp-logins` | Corp credential entry hotkeys |
 | `mouse-wiggle` | Idle mouse nudge to prevent lock screens |
-| `cisco-secure-client-vpn` | Cisco Secure Client reconnect + credential automation |
-| `password-manager` | `Ctrl+Alt+B` types `PWMANAGER_PASSWORD` + Enter |
+| `cisco-secure-client-vpn` | Cisco Secure Client auto-reconnect |
+| `password-manager` | Password manager quick-type hotkey |
 | `tmux-hotkeys` | `RAlt`/`RWin` zoom toggle, `Ctrl+;` last-pane toggle |
 | `f1f2f3-as-mouse-buttons` | F1/F2/F3 mouse remaps for mspaint/etxc/wezterm-gui |
-| `thinlinc-reconnect` | Auto-dismiss ThinLinc errors, reconnect, auto-fill credentials |
+| `thinlinc-reconnect` | Auto-dismiss ThinLinc errors and reconnect |
 
 ---
 
