@@ -396,6 +396,81 @@ def install_prebuilt_binaries(repo_dir, home):
     return blocked_binaries
 
 
+def install_portable_python(repo_dir, home):
+    root_dir = os.path.join(repo_dir, "pre_built")
+    print("Installing portable Python...")
+    if not os.path.isdir(root_dir):
+        skipped("portable Python (no pre_built/ directory in repo)", "")
+        record_result("portable Python", "SKIP", "no pre_built/ directory")
+        return
+
+    src_dir = select_prebuilt_platform_dir(root_dir)
+    if not src_dir:
+        skipped("portable Python (no matching platform)", "")
+        record_result("portable Python", "SKIP", "no matching platform")
+        return
+
+    archives = sorted(
+        f for f in os.listdir(src_dir)
+        if f.startswith("portable-python-") and f.endswith(".tar.bz2")
+    )
+    if not archives:
+        skipped("portable Python (no portable-python-*.tar.bz2 in {})".format(src_dir), "")
+        record_result("portable Python", "SKIP", "no archive found")
+        return
+
+    archive = os.path.join(src_dir, archives[-1])
+    tmp_dir = tempfile.mkdtemp(prefix="dotfiles-python-install.", dir="/tmp")
+    try:
+        print("  extracting {}...".format(archive))
+        with tarfile.open(archive, "r:bz2") as tf:
+            tf.extractall(tmp_dir)
+
+        extracted_dirs = [
+            os.path.join(tmp_dir, d) for d in os.listdir(tmp_dir)
+            if os.path.isdir(os.path.join(tmp_dir, d))
+        ]
+        if not extracted_dirs:
+            warn("portable Python archive extracted no directories")
+            record_result("portable Python", "FAIL", "empty archive")
+            return
+
+        installer = os.path.join(extracted_dirs[0], "install.sh")
+        if not os.path.isfile(installer):
+            warn("portable Python archive missing install.sh")
+            record_result("portable Python", "FAIL", "no install.sh")
+            return
+
+        prefix = os.path.join(home, ".local")
+        cmd = ["sh", installer, "--prefix", prefix, "--force", "--no-test"]
+        print("  running: {}".format(" ".join(cmd)))
+        proc = subprocess.run(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+        out = proc.stdout.decode("utf-8", "replace")
+        err = proc.stderr.decode("utf-8", "replace")
+        for line in out.splitlines():
+            print("  {}".format(line))
+        if proc.returncode != 0:
+            for line in err.splitlines():
+                eprint("  {}".format(line))
+            warn("portable Python install.sh exited with code {}".format(proc.returncode))
+            record_result("portable Python", "FAIL", "install.sh exit {}".format(proc.returncode))
+            return
+    finally:
+        shutil.rmtree(tmp_dir)
+
+    # Remove generic python3/pip3 so system /usr/bin/python3 wins for EDA tools
+    # that misbehave when they find a non-distro python3 on PATH.
+    dest_bin_dir = os.path.join(home, ".local", "bin")
+    for name in ("python3", "pip3"):
+        path = os.path.join(dest_bin_dir, name)
+        if os.path.lexists(path):
+            os.unlink(path)
+            print("  removed {} (system python3 takes precedence)".format(path))
+
+    record_result("portable Python", "yes", "")
+    print("  Installed portable Python -> {}/.local/".format(home))
+
+
 def patch_prebuilt_binary_rpaths(dest_bin_dir, skipped_names=None):
     skipped_names = skipped_names or set()
     blocked_binaries = set()
@@ -632,9 +707,18 @@ def safe_extract_tar(tf, dest_dir):
 
 def install_helix_runtime(repo_dir, home):
     print("Installing Helix runtime...")
-    archive = os.path.join(repo_dir, "helix", "helix_runtime.tar.bz2")
-    if not os.path.isfile(archive):
-        skipped("Helix runtime (helix/helix_runtime.tar.bz2 not found in repo)",
+    archive = None
+    platform_dir = select_prebuilt_platform_dir(os.path.join(repo_dir, "pre_built"))
+    if platform_dir:
+        candidate = os.path.join(platform_dir, "runtime", "helix.tar.bz2")
+        if os.path.isfile(candidate):
+            archive = candidate
+    if archive is None:
+        candidate = os.path.join(repo_dir, "helix", "helix_runtime.tar.bz2")
+        if os.path.isfile(candidate):
+            archive = candidate
+    if archive is None:
+        skipped("Helix runtime (no helix.tar.bz2 in pre_built/<platform>/runtime/ or helix/)",
                 "hx will NOT have the vendored runtime at ~/.config/helix/runtime")
         record_result("Helix runtime", "SKIP", "no bundled runtime archive")
         return
@@ -656,9 +740,18 @@ def install_helix_runtime(repo_dir, home):
 
 def install_vim_runtime(repo_dir, home):
     print("Installing Vim runtime...")
-    archive = os.path.join(repo_dir, "vim", "runtime.tar.bz2")
-    if not os.path.isfile(archive):
-        skipped("Vim runtime (vim/runtime.tar.bz2 not found in repo)",
+    archive = None
+    platform_dir = select_prebuilt_platform_dir(os.path.join(repo_dir, "pre_built"))
+    if platform_dir:
+        candidate = os.path.join(platform_dir, "runtime", "vim92.tar.bz2")
+        if os.path.isfile(candidate):
+            archive = candidate
+    if archive is None:
+        candidate = os.path.join(repo_dir, "vim", "runtime.tar.bz2")
+        if os.path.isfile(candidate):
+            archive = candidate
+    if archive is None:
+        skipped("Vim runtime (no vim92.tar.bz2 in pre_built/<platform>/runtime/ or vim/)",
                 "vim will NOT have the vendored runtime at ~/.local/share/vim/vim92")
         record_result("Vim runtime", "SKIP", "no bundled runtime archive")
         return
@@ -1101,6 +1194,7 @@ def main(argv):
 
     blocked_prebuilt_binaries = run_install_step("pre-built binaries", install_prebuilt_binaries, repo_dir, home) or set()
     add_prebuilt_binary_retry_notice(blocked_prebuilt_binaries)
+    run_install_step("portable Python", install_portable_python, repo_dir, home)
     run_install_step("Helix runtime", install_helix_runtime, repo_dir, home)
     run_install_step("Vim runtime", install_vim_runtime, repo_dir, home)
     run_install_step("nvim-treesitter vendor", install_nvim_treesitter_vendor, repo_dir, home)

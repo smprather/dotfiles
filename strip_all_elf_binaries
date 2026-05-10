@@ -24,6 +24,11 @@ ARCHIVE_SUFFIXES = (
     ".tar",
 )
 
+# Archives whose ELF payloads must not be stripped (e.g. LLVM BOLT-optimized binaries).
+NOSTRIP_ARCHIVE_PREFIXES = (
+    "portable-python-",
+)
+
 
 def eprint(*args):
     print(*args, file=sys.stderr)
@@ -63,6 +68,11 @@ def is_elf_file(path):
 
 def is_archive_name(path):
     return any(path.endswith(suffix) for suffix in ARCHIVE_SUFFIXES)
+
+
+def is_nostrip_archive(path):
+    name = os.path.basename(path)
+    return any(name.startswith(p) for p in NOSTRIP_ARCHIVE_PREFIXES)
 
 
 def is_tar_path(path):
@@ -331,6 +341,9 @@ def main(argv):
     try:
         for path in list(walk_files(repo_dir)):
             if is_tar_path(path):
+                if is_nostrip_archive(path):
+                    print("skip nostrip archive: {}".format(path))
+                    continue
                 process_tar(repo_dir, manifest, strip_bin, path, tmp_dir, args.dry_run, stats)
 
         for path in list(walk_files(repo_dir)):
