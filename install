@@ -1006,6 +1006,11 @@ def install_dev_mode(repo_dir, home):
     lns(".config/tmux/tmux.conf", os.path.join(home, ".tmux.conf"), verbose=True)
     lns(".config/tmux/tmux", os.path.join(home, ".tmux"), verbose=True)
     lns(".config/editorconfig/editorconfig", os.path.join(home, ".editorconfig"), verbose=True)
+    # helix: file-level symlink only (can't symlink whole dir — runtime/ lives alongside config.toml)
+    _helix_cfg = os.path.join(repo_dir, "helix", "config.toml")
+    if os.path.isfile(_helix_cfg):
+        ensure_dir(os.path.join(home, ".config", "helix"), "helix config")
+        lns(_helix_cfg, os.path.join(home, ".config", "helix", "config.toml"), verbose=True)
 
 
 def install_copy_mode(repo_dir, home):
@@ -1065,6 +1070,11 @@ def install_copy_mode(repo_dir, home):
     remove_if_exists(starship_dir)
     ensure_dir(starship_dir, "starship config")
     install_path(os.path.join(repo_dir, "starship", "starship.toml"), os.path.join(starship_dir, "starship.toml"), False)
+
+    _helix_cfg = os.path.join(repo_dir, "helix", "config.toml")
+    if os.path.isfile(_helix_cfg):
+        ensure_dir(os.path.join(home, ".config", "helix"), "helix config")
+        install_path(_helix_cfg, os.path.join(home, ".config", "helix", "config.toml"), False)
 
 
 def glob_paths(path):
