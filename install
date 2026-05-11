@@ -9,7 +9,10 @@ if sys.version_info < (3, 6):
 
 import argparse
 import bz2
+import contextlib
+import datetime
 import errno
+import fcntl
 import fnmatch
 import json
 import re
@@ -383,25 +386,55 @@ def install_mode(args):
 
 
 _PENDING_DIR = "/tmp/dotfiles-pending"
+_PENDING_TIMEOUT_SECS = 7 * 24 * 3600  # 1 week
 
 
 def _pending_json_path():
     return os.path.join(_PENDING_DIR, "pending.json")
 
 
-def _read_pending_ops():
+def _now_utc_iso():
+    return datetime.datetime.utcnow().strftime("%Y-%m-%dT%H:%M:%SZ")
+
+
+@contextlib.contextmanager
+def _pending_lock():
+    """Exclusive flock on pending.lock — serialises installer and daemon JSON writes."""
+    lock_path = os.path.join(_PENDING_DIR, "pending.lock")
+    try:
+        fh = open(lock_path, "w")
+    except (IOError, OSError):
+        yield  # Can't open lock file; proceed without lock (best-effort).
+        return
+    try:
+        fcntl.flock(fh, fcntl.LOCK_EX)
+        yield
+    finally:
+        fcntl.flock(fh, fcntl.LOCK_UN)
+        fh.close()
+
+
+def _read_pending_state():
+    """Return (ops_by_dest, last_activity_iso) without holding any lock."""
     try:
         with open(_pending_json_path(), "r") as f:
             data = json.load(f)
-        return data.get("ops", [])
+        ops = {op["dest"]: op for op in data.get("ops", []) if "dest" in op}
+        last_activity = data.get("last_activity", "")
+        return ops, last_activity
     except (IOError, OSError, ValueError):
-        return []
+        return {}, ""
 
 
-def _write_pending_ops(ops):
+def _write_pending_state(ops_by_dest, last_activity_iso):
+    """Atomically write pending.json. Caller must hold _pending_lock()."""
     tmp = _pending_json_path() + ".tmp"
     with open(tmp, "w") as f:
-        json.dump({"schema_version": 1, "ops": ops}, f, indent=2)
+        json.dump({
+            "schema_version": 1,
+            "last_activity": last_activity_iso,
+            "ops": list(ops_by_dest.values()),
+        }, f, indent=2)
         f.flush()
         os.fsync(f.fileno())
     os.rename(tmp, _pending_json_path())
@@ -422,31 +455,39 @@ def stage_pending_ops(blocked_binaries, bin_dir, dest_bin_dir, repo_dir):
         warn("could not create pending dir {}: {}".format(_PENDING_DIR, exc))
         return
 
-    # Load existing ops; deduplicate by dest path (new entry supersedes old).
-    existing = {op["dest"]: op for op in _read_pending_ops() if "dest" in op}
-
+    # Decompress staged files outside the lock (potentially slow I/O).
+    staged_map = {}  # name -> staged_path
     for name in sorted(blocked_binaries):
         bz2_path = os.path.join(bin_dir, name + ".bz2")
         if not os.path.isfile(bz2_path):
             continue
         staged = os.path.join(files_dir, name)
-        # Decompress to staging area atomically.
         try:
             write_bz2_atomic(bz2_path, staged, 0o755)
         except OSError as exc:
             warn("could not stage {}: {}".format(name, exc))
             continue
-        dest = os.path.join(dest_bin_dir, name)
-        existing[dest] = {
-            "type": "install_binary",
-            "dest": dest,
-            "staged": staged,
-            "mode": 0o755,
-            "block": {"type": "pgrep_absent", "name": name},
-        }
-        print("  staged pending op: {} -> {}".format(staged, dest))
+        staged_map[name] = staged
+        print("  staged pending op: {} -> {}".format(staged, os.path.join(dest_bin_dir, name)))
 
-    _write_pending_ops(list(existing.values()))
+    if not staged_map:
+        return
+
+    # Merge into pending.json under lock; new entry supersedes old by dest path.
+    # Always update last_activity so the daemon's 1-week timeout resets.
+    now = _now_utc_iso()
+    with _pending_lock():
+        existing, _ = _read_pending_state()
+        for name, staged in staged_map.items():
+            dest = os.path.join(dest_bin_dir, name)
+            existing[dest] = {
+                "type": "install_binary",
+                "dest": dest,
+                "staged": staged,
+                "mode": 0o755,
+                "block": {"type": "pgrep_absent", "name": name},
+            }
+        _write_pending_state(existing, now)
 
     # Copy daemon script to pending dir and spawn if not already running.
     daemon_src = os.path.join(repo_dir, "pre_built", "build_scripts", "dotfiles-pending-daemon")
