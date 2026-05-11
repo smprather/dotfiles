@@ -209,7 +209,7 @@ def mkdirn(base_dir):
 
 def rsync_dir(src, dest, delete=False, excludes=None):
     require_writable_dir(dest if os.path.isdir(dest) else os.path.dirname(dest), "rsync")
-    cmd = ["rsync", "-a"]
+    cmd = [_RSYNC, "-a"]
     if delete:
         cmd.append("--delete")
     for pattern in excludes or ():
@@ -243,7 +243,7 @@ def install_path(src, dest, links_mode):
 def backup_item(src, dest):
     require_writable_parent(dest, "backup")
     ensure_dir(os.path.dirname(dest))
-    cmd = ["rsync", "-a"]
+    cmd = [_RSYNC, "-a"]
     for pattern in FONT_EXCLUDES:
         cmd.append("--exclude={}".format(pattern))
     cmd.extend([src, dest])
@@ -258,10 +258,12 @@ def is_wsl():
         return False
 
 
-_UNAME = _find_tool("/usr/bin/uname", "/bin/uname")
-_LDD = _find_tool("/usr/bin/ldd", "/lib/x86_64-linux-gnu/ld-linux-x86-64.so.2")
-_GETCONF = _find_tool("/usr/bin/getconf", "/usr/local/bin/getconf")
-_PGREP = _find_tool("/usr/bin/pgrep", "/bin/pgrep")
+_UNAME = _find_tool("/usr/bin/uname")
+_LDD = _find_tool("/usr/bin/ldd")
+_GETCONF = _find_tool("/usr/bin/getconf")
+_PGREP = _find_tool("/usr/bin/pgrep")
+_RSYNC = _find_tool("/usr/bin/rsync")
+_CP = _find_tool("/usr/bin/cp")
 
 
 def uname(flag):
@@ -826,7 +828,7 @@ def install_fonts(repo_dir, home):
             if proc.returncode != 0:
                 warn("{} failed for {} — font metrics may be incomplete".format(name, user_fonts_dir))
 
-    fc_cache = _find_tool("/usr/bin/fc-cache", "/usr/local/bin/fc-cache")
+    fc_cache = _find_tool("/usr/bin/fc-cache")
     if fc_cache:
         proc = subprocess.run([fc_cache, "-f", user_fonts_dir], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
         if proc.returncode != 0:
@@ -1042,7 +1044,7 @@ def restore_backup(backup_dir, home):
     if not os.listdir(backup_dir):
         eprint("Error: Backup directory is empty")
         sys.exit(1)
-    run(["cp", "-rPp", ".", home], cwd=backup_dir)
+    run([_CP, "-rPp", ".", home], cwd=backup_dir)
     print("")
     print("Backup restored successfully!")
     print("")
@@ -1322,8 +1324,8 @@ Options:
 
 
 def main(argv):
-    if not command_exists("rsync"):
-        eprint("Error: This script requires rsync.")
+    if not _RSYNC:
+        eprint("Error: This script requires rsync (/usr/bin/rsync not found).")
         return 1
 
     args = parse_args(argv)

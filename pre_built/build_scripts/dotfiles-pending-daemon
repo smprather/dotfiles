@@ -122,10 +122,8 @@ def check_block(block):
 
 
 def _find_pgrep():
-    for p in ("/usr/bin/pgrep", "/bin/pgrep"):
-        if os.path.isfile(p) and os.access(p, os.X_OK):
-            return p
-    return None
+    p = "/usr/bin/pgrep"
+    return p if os.path.isfile(p) and os.access(p, os.X_OK) else None
 
 
 def apply_op(op):
