@@ -1259,7 +1259,7 @@ def run_layer_install_scripts(home):
         install_script = os.path.join(home, ".config", "bash", layer, "install.sh")
         if os.path.isfile(install_script) and os.access(install_script, os.R_OK):
             print("Sourcing '{}' ...".format(install_script))
-            run(["bash", "-c", 'source "$1"', "bash", install_script])
+            run(["/bin/bash", "-c", 'source "$1"', "/bin/bash", install_script])
 
 
 def parse_args(argv):
