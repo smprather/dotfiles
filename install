@@ -257,6 +257,7 @@ def is_wsl():
 _UNAME = _find_tool("/usr/bin/uname", "/bin/uname")
 _LDD = _find_tool("/usr/bin/ldd", "/lib/x86_64-linux-gnu/ld-linux-x86-64.so.2")
 _GETCONF = _find_tool("/usr/bin/getconf", "/usr/local/bin/getconf")
+_PGREP = _find_tool("/usr/bin/pgrep", "/bin/pgrep")
 
 
 def uname(flag):
@@ -404,9 +405,22 @@ def install_prebuilt_binaries(repo_dir, home):
     bin_dir = os.path.join(src_dir, "bin")
     if os.path.isdir(bin_dir):
         ensure_dir(dest_bin_dir, "pre-built binaries")
+        # Binaries whose server/client must be the same version: replacing while the server
+        # is running causes protocol mismatch even when the atomic rename succeeds (e.g. on NFS
+        # the old server keeps its inode; new clients exec the new binary and fail to connect).
+        _SERVER_BINARIES = {"tmux"}
+
         for bz2_file in sorted(fnmatch.filter([os.path.join(bin_dir, x) for x in os.listdir(bin_dir)], "*.bz2")):
             dest_file = os.path.join(dest_bin_dir, os.path.basename(bz2_file[:-4]))
             name = os.path.basename(dest_file)
+            if name in _SERVER_BINARIES and _PGREP:
+                proc = subprocess.run([_PGREP, "-x", name],
+                                      stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+                if proc.returncode == 0:
+                    blocked_binaries.add(name)
+                    warn("skipping {} update — {} server is running; exit all {} sessions "
+                         "and re-run the installer".format(name, name, name))
+                    continue
             try:
                 require_writable_parent(dest_file, "pre-built binaries")
                 write_bz2_atomic(bz2_file, dest_file, 0o755)
