@@ -11,6 +11,7 @@ import argparse
 import bz2
 import errno
 import fnmatch
+import json
 import re
 import shutil
 import stat
@@ -381,6 +382,111 @@ def install_mode(args):
     return "copy"
 
 
+_PENDING_DIR = "/tmp/dotfiles-pending"
+
+
+def _pending_json_path():
+    return os.path.join(_PENDING_DIR, "pending.json")
+
+
+def _read_pending_ops():
+    try:
+        with open(_pending_json_path(), "r") as f:
+            data = json.load(f)
+        return data.get("ops", [])
+    except (IOError, OSError, ValueError):
+        return []
+
+
+def _write_pending_ops(ops):
+    tmp = _pending_json_path() + ".tmp"
+    with open(tmp, "w") as f:
+        json.dump({"schema_version": 1, "ops": ops}, f, indent=2)
+        f.flush()
+        os.fsync(f.fileno())
+    os.rename(tmp, _pending_json_path())
+
+
+def stage_pending_ops(blocked_binaries, bin_dir, dest_bin_dir, repo_dir):
+    """Stage blocked binaries to /tmp and spawn the pending-ops daemon."""
+    if not blocked_binaries:
+        return
+
+    files_dir = os.path.join(_PENDING_DIR, "files")
+    try:
+        if not os.path.isdir(_PENDING_DIR):
+            os.makedirs(_PENDING_DIR)
+        if not os.path.isdir(files_dir):
+            os.makedirs(files_dir)
+    except OSError as exc:
+        warn("could not create pending dir {}: {}".format(_PENDING_DIR, exc))
+        return
+
+    # Load existing ops; deduplicate by dest path (new entry supersedes old).
+    existing = {op["dest"]: op for op in _read_pending_ops() if "dest" in op}
+
+    for name in sorted(blocked_binaries):
+        bz2_path = os.path.join(bin_dir, name + ".bz2")
+        if not os.path.isfile(bz2_path):
+            continue
+        staged = os.path.join(files_dir, name)
+        # Decompress to staging area atomically.
+        try:
+            write_bz2_atomic(bz2_path, staged, 0o755)
+        except OSError as exc:
+            warn("could not stage {}: {}".format(name, exc))
+            continue
+        dest = os.path.join(dest_bin_dir, name)
+        existing[dest] = {
+            "type": "install_binary",
+            "dest": dest,
+            "staged": staged,
+            "mode": 0o755,
+            "block": {"type": "pgrep_absent", "name": name},
+        }
+        print("  staged pending op: {} -> {}".format(staged, dest))
+
+    _write_pending_ops(list(existing.values()))
+
+    # Copy daemon script to pending dir and spawn if not already running.
+    daemon_src = os.path.join(repo_dir, "pre_built", "build_scripts", "dotfiles-pending-daemon")
+    daemon_dst = os.path.join(_PENDING_DIR, "daemon.py")
+    if os.path.isfile(daemon_src):
+        try:
+            shutil.copy2(daemon_src, daemon_dst)
+        except OSError as exc:
+            warn("could not copy daemon script: {}".format(exc))
+            return
+    elif not os.path.isfile(daemon_dst):
+        warn("daemon script not found at {} — pending ops will not auto-apply".format(daemon_src))
+        return
+
+    # Check if daemon already running via pidfile.
+    pid_file = os.path.join(_PENDING_DIR, "daemon.pid")
+    try:
+        with open(pid_file, "r") as f:
+            pid = int(f.read().strip())
+        os.kill(pid, 0)
+        print("  pending-ops daemon already running (pid {})".format(pid))
+        return
+    except (IOError, OSError, ValueError):
+        pass
+
+    log_file = os.path.join(_PENDING_DIR, "daemon.log")
+    try:
+        log_fh = open(log_file, "a")
+        proc = subprocess.Popen(
+            [sys.executable, daemon_dst],
+            stdout=log_fh,
+            stderr=log_fh,
+            close_fds=True,
+            start_new_session=True,
+        )
+        print("  pending-ops daemon spawned (pid {}), log: {}".format(proc.pid, log_file))
+    except OSError as exc:
+        warn("could not spawn pending-ops daemon: {}".format(exc))
+
+
 def install_prebuilt_binaries(repo_dir, home):
     root_dir = os.path.join(repo_dir, "pre_built")
     dest_bin_dir = os.path.join(home, ".local", "bin")
@@ -453,6 +559,7 @@ def install_prebuilt_binaries(repo_dir, home):
     check_prebuilt_binary_dependencies(dest_bin_dir)
     print("  Installed: {}/ -> {}/.local/".format(src_dir, home))
     if blocked_binaries:
+        stage_pending_ops(blocked_binaries, bin_dir, dest_bin_dir, repo_dir)
         record_result("pre-built binaries", "FAIL", "busy: {}".format(", ".join(sorted(blocked_binaries))))
     return blocked_binaries
 

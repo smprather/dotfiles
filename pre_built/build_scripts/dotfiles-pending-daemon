@@ -1,0 +1,201 @@
+#!/usr/bin/env python3
+"""
+dotfiles-pending-daemon: apply deferred dotfiles binary installs.
+
+Spawned automatically by the dotfiles installer when a binary cannot be
+replaced because a blocking process (e.g. tmux server) is running. Polls
+every 10 seconds; exits when all pending ops are done or staged files are gone.
+
+Pending state directory: /tmp/dotfiles-pending/
+  pending.json  - op list (written/updated by ./install on each run)
+  files/        - staged decompressed binaries ready to install
+  daemon.pid    - this process's PID
+  daemon.log    - activity log (appended)
+"""
+
+from __future__ import print_function
+
+import errno
+import json
+import os
+import shutil
+import subprocess
+import sys
+import tempfile
+import time
+
+PENDING_DIR = "/tmp/dotfiles-pending"
+PENDING_JSON = os.path.join(PENDING_DIR, "pending.json")
+PID_FILE = os.path.join(PENDING_DIR, "daemon.pid")
+LOG_FILE = os.path.join(PENDING_DIR, "daemon.log")
+POLL_INTERVAL = 10
+
+
+def log(msg):
+    line = "[dotfiles-pending-daemon] {}\n".format(msg)
+    sys.stdout.write(line)
+    sys.stdout.flush()
+
+
+def read_pending():
+    try:
+        with open(PENDING_JSON, "r") as f:
+            data = json.load(f)
+        return data.get("ops", [])
+    except (IOError, OSError, ValueError):
+        return []
+
+
+def write_pending(ops):
+    tmp = PENDING_JSON + ".tmp"
+    with open(tmp, "w") as f:
+        json.dump({"schema_version": 1, "ops": ops}, f, indent=2)
+        f.flush()
+        os.fsync(f.fileno())
+    os.rename(tmp, PENDING_JSON)
+
+
+def check_block(block):
+    """Return True if the block condition has cleared (safe to apply)."""
+    btype = block.get("type", "")
+    if btype == "pgrep_absent":
+        name = block.get("name", "")
+        if not name:
+            return True
+        pgrep = _find_pgrep()
+        if not pgrep:
+            return False
+        proc = subprocess.run([pgrep, "-x", name],
+                              stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+        return proc.returncode != 0
+    # Unknown block type: treat as still blocked (safe default).
+    log("WARNING: unknown block type {!r} — leaving op pending".format(btype))
+    return False
+
+
+def _find_pgrep():
+    for p in ("/usr/bin/pgrep", "/bin/pgrep"):
+        if os.path.isfile(p) and os.access(p, os.X_OK):
+            return p
+    return None
+
+
+def apply_op(op):
+    staged = op.get("staged", "")
+    dest = op.get("dest", "")
+    mode = op.get("mode", 0o755)
+
+    if not os.path.isfile(staged):
+        log("staged file gone for {}, dropping op".format(dest))
+        return "drop"
+
+    dest_dir = os.path.dirname(dest)
+    if not os.path.isdir(dest_dir):
+        log("dest dir missing for {}, dropping op".format(dest))
+        return "drop"
+
+    try:
+        fd, tmp_path = tempfile.mkstemp(dir=dest_dir)
+        os.close(fd)
+        shutil.copy2(staged, tmp_path)
+        os.chmod(tmp_path, mode)
+        os.rename(tmp_path, dest)
+        log("installed {} -> {}".format(staged, dest))
+        return "done"
+    except OSError as exc:
+        if exc.errno == errno.ETXTBSY:
+            log("{} still busy (ETXTBSY), will retry".format(dest))
+            return "retry"
+        log("ERROR applying {}: {}".format(dest, exc))
+        if os.path.exists(tmp_path):
+            try:
+                os.unlink(tmp_path)
+            except OSError:
+                pass
+        return "retry"
+
+
+def is_already_running():
+    try:
+        with open(PID_FILE, "r") as f:
+            pid = int(f.read().strip())
+        os.kill(pid, 0)
+        return pid != os.getpid()
+    except (IOError, OSError, ValueError):
+        return False
+
+
+def write_pidfile():
+    with open(PID_FILE, "w") as f:
+        f.write(str(os.getpid()))
+
+
+def cleanup():
+    for path in (PID_FILE,):
+        try:
+            os.unlink(path)
+        except OSError:
+            pass
+    # Remove staged files dir if empty.
+    files_dir = os.path.join(PENDING_DIR, "files")
+    try:
+        if os.path.isdir(files_dir) and not os.listdir(files_dir):
+            os.rmdir(files_dir)
+    except OSError:
+        pass
+
+
+def main():
+    if is_already_running():
+        log("another instance is running, exiting")
+        sys.exit(0)
+
+    write_pidfile()
+    log("started (pid {})".format(os.getpid()))
+
+    try:
+        while True:
+            ops = read_pending()
+            if not ops:
+                log("no pending ops, exiting")
+                break
+
+            remaining = []
+            made_progress = False
+
+            for op in ops:
+                block = op.get("block", {})
+                if not check_block(block):
+                    remaining.append(op)
+                    continue
+
+                result = apply_op(op)
+                if result == "done":
+                    made_progress = True
+                    # Remove staged file now that it's installed.
+                    staged = op.get("staged", "")
+                    if os.path.isfile(staged):
+                        try:
+                            os.unlink(staged)
+                        except OSError:
+                            pass
+                elif result == "drop":
+                    made_progress = True  # drop = progress (remove from list)
+                else:
+                    remaining.append(op)
+
+            write_pending(remaining)
+
+            if not remaining:
+                log("all ops applied, exiting")
+                break
+
+            if not made_progress:
+                time.sleep(POLL_INTERVAL)
+
+    finally:
+        cleanup()
+
+
+if __name__ == "__main__":
+    main()
