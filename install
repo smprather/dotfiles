@@ -421,6 +421,15 @@ def install_prebuilt_binaries(repo_dir, home):
     lib64_dir = os.path.join(src_dir, "lib64")
     if os.path.isdir(lib64_dir):
         ensure_dir(dest_lib64_dir, "pre-built libraries")
+        # Remove any previously deployed glibc libs — they must never be bundled because
+        # they must match the system ld-linux.so.2 exactly; a mismatch causes GLIBC_PRIVATE
+        # symbol lookup errors at runtime.
+        _GLIBC_LIBS = ("libc.so.6", "libm.so.6", "libpthread.so.0", "libdl.so.2", "librt.so.1")
+        for _glib in _GLIBC_LIBS:
+            _glib_path = os.path.join(dest_lib64_dir, _glib)
+            if os.path.isfile(_glib_path):
+                os.remove(_glib_path)
+                print("  removed stale glibc lib: {}".format(_glib_path))
         for bz2_file in sorted(fnmatch.filter([os.path.join(lib64_dir, x) for x in os.listdir(lib64_dir)], "*.bz2")):
             dest_file = os.path.join(dest_lib64_dir, os.path.basename(bz2_file[:-4]))
             require_writable_parent(dest_file, "pre-built libraries")
