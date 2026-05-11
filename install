@@ -436,7 +436,6 @@ def install_prebuilt_binaries(repo_dir, home):
             write_bz2_atomic(bz2_file, dest_file, 0o644)
             print("  bzip2: {} -> {}".format(bz2_file, dest_file))
 
-    blocked_binaries.update(patch_prebuilt_binary_rpaths(dest_bin_dir, blocked_binaries))
     check_prebuilt_binary_dependencies(dest_bin_dir)
     print("  Installed: {}/ -> {}/.local/".format(src_dir, home))
     if blocked_binaries:
@@ -519,38 +518,6 @@ def install_portable_python(repo_dir, home):
     print("  Installed portable Python -> {}/.local/".format(home))
 
 
-def patch_prebuilt_binary_rpaths(dest_bin_dir, skipped_names=None):
-    skipped_names = skipped_names or set()
-    blocked_binaries = set()
-    patchelf = os.path.join(dest_bin_dir, "patchelf")
-    rpath = "$ORIGIN/../lib64:$ORIGIN/../lib"
-    if not os.path.isfile(patchelf) or not os.access(patchelf, os.X_OK):
-        warn("vendored patchelf not installed — RPATH patching skipped; binaries may fail to find vendored libs")
-        return blocked_binaries
-
-    for name in sorted(os.listdir(dest_bin_dir)) if os.path.isdir(dest_bin_dir) else []:
-        binary = os.path.join(dest_bin_dir, name)
-        if name in skipped_names:
-            continue
-        if binary == patchelf or not os.path.isfile(binary) or not os.access(binary, os.X_OK):
-            continue
-        proc = subprocess.run([patchelf, "--print-interpreter", binary], stdout=subprocess.PIPE, stderr=subprocess.PIPE)
-        if proc.returncode != 0:
-            continue
-        require_writable_parent(binary, "pre-built binary RPATH")
-        proc = subprocess.run([patchelf, "--set-rpath", rpath, binary], stdout=subprocess.PIPE, stderr=subprocess.PIPE)
-        if proc.returncode != 0:
-            err = proc.stderr.decode("utf-8", "replace")
-            if "Text file busy" in err:
-                blocked_binaries.add(name)
-                warn("could not patch RPATH for {} because it is currently running".format(binary))
-                continue
-            warn("failed to patch RPATH for {} — it may fail to find vendored libs".format(binary))
-            continue
-        print("  patchelf: set RPATH on {} to {}".format(binary, rpath))
-    return blocked_binaries
-
-
 def check_prebuilt_binary_dependencies(dest_bin_dir):
     if not _LDD:
         warn("ldd is not available — shared library dependency check skipped")
@@ -578,7 +545,7 @@ def add_prebuilt_binary_retry_notice(blocked_binaries):
         return
     names = sorted(blocked_binaries)
     FINAL_NOTICES.append(
-        "Pre-built binary install incomplete: could not replace or patch {} because {} currently running. "
+        "Pre-built binary install incomplete: could not replace {} because {} currently running. "
         "Exit all running instances of {} and re-run the installer to get the dotfiles version.".format(
             ", ".join(names),
             "it is" if len(names) == 1 else "they are",

@@ -1,0 +1,154 @@
+#!/usr/bin/env python3
+"""
+repatch-binaries: pre-bake RPATH=$ORIGIN/../lib64:$ORIGIN/../lib into every ELF
+binary stored as .bz2 in pre_built/<platform>/bin/.
+
+Run once when migrating from post-install patchelf to pre-patched bundles.
+After this script completes, run ./strip_all_elf_binaries to update .strip-manifest
+(manifest checksums change because the binaries change).
+
+Usage:
+    pre_built/build_scripts/repatch-binaries [--dry-run]
+"""
+
+from __future__ import print_function
+
+import argparse
+import bz2
+import os
+import shutil
+import subprocess
+import sys
+import tempfile
+
+RPATH = "$ORIGIN/../lib64:$ORIGIN/../lib"
+
+
+def find_patchelf(repo_dir):
+    candidates = [
+        os.path.expanduser("~/.local/bin/patchelf"),
+        shutil.which("patchelf"),
+    ]
+    for c in candidates:
+        if c and os.path.isfile(c) and os.access(c, os.X_OK):
+            return c
+    # Last resort: decompress bundled patchelf to /tmp
+    for platform in os.listdir(os.path.join(repo_dir, "pre_built")) if os.path.isdir(os.path.join(repo_dir, "pre_built")) else []:
+        bz2_path = os.path.join(repo_dir, "pre_built", platform, "bin", "patchelf.bz2")
+        if os.path.isfile(bz2_path):
+            tmp = tempfile.NamedTemporaryFile(delete=False, prefix="patchelf_", suffix="")
+            tmp.close()
+            with bz2.open(bz2_path, "rb") as fin, open(tmp.name, "wb") as fout:
+                shutil.copyfileobj(fin, fout)
+            os.chmod(tmp.name, 0o755)
+            print("Decompressed bundled patchelf to {}".format(tmp.name))
+            return tmp.name
+    return None
+
+
+def is_dynamic_elf(path, patchelf):
+    proc = subprocess.run(
+        [patchelf, "--print-interpreter", path],
+        stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+    )
+    return proc.returncode == 0
+
+
+def get_rpath(path, patchelf):
+    proc = subprocess.run(
+        [patchelf, "--print-rpath", path],
+        stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+    )
+    return proc.stdout.decode("utf-8", "replace").strip()
+
+
+def repatch_bz2(bz2_path, patchelf, dry_run):
+    tmp_elf = None
+    tmp_bz2 = None
+    try:
+        fd, tmp_elf = tempfile.mkstemp(suffix=".elf")
+        os.close(fd)
+
+        with bz2.open(bz2_path, "rb") as fin, open(tmp_elf, "wb") as fout:
+            shutil.copyfileobj(fin, fout)
+        os.chmod(tmp_elf, 0o755)
+
+        if not is_dynamic_elf(tmp_elf, patchelf):
+            print("  skip non-dynamic-ELF: {}".format(bz2_path))
+            return "skip"
+
+        current = get_rpath(tmp_elf, patchelf)
+        if current == RPATH:
+            print("  already patched: {}".format(bz2_path))
+            return "skip"
+
+        if dry_run:
+            print("  [dry-run] would patch: {} (current rpath: {!r})".format(bz2_path, current or "(none)"))
+            return "would-patch"
+
+        proc = subprocess.run(
+            [patchelf, "--set-rpath", RPATH, tmp_elf],
+            stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+        )
+        if proc.returncode != 0:
+            print("  ERROR: patchelf failed on {}: {}".format(
+                bz2_path, proc.stderr.decode("utf-8", "replace").strip()))
+            return "error"
+
+        fd, tmp_bz2 = tempfile.mkstemp(suffix=".bz2", dir=os.path.dirname(bz2_path))
+        os.close(fd)
+        with open(tmp_elf, "rb") as fin, bz2.open(tmp_bz2, "wb", compresslevel=9) as fout:
+            shutil.copyfileobj(fin, fout)
+
+        os.rename(tmp_bz2, bz2_path)
+        tmp_bz2 = None
+        print("  patched: {} (was: {!r})".format(bz2_path, current or "(none)"))
+        return "patched"
+
+    finally:
+        if tmp_elf and os.path.exists(tmp_elf):
+            os.unlink(tmp_elf)
+        if tmp_bz2 and os.path.exists(tmp_bz2):
+            os.unlink(tmp_bz2)
+
+
+def main():
+    p = argparse.ArgumentParser(description=__doc__,
+                                formatter_class=argparse.RawDescriptionHelpFormatter)
+    p.add_argument("--dry-run", action="store_true",
+                   help="show what would change without modifying files")
+    args = p.parse_args()
+
+    script_dir = os.path.dirname(os.path.abspath(__file__))
+    repo_dir = os.path.dirname(os.path.dirname(script_dir))
+    pre_built_dir = os.path.join(repo_dir, "pre_built")
+
+    patchelf = find_patchelf(repo_dir)
+    if not patchelf:
+        print("ERROR: patchelf not found. Run ./install first (patchelf is bundled).")
+        sys.exit(1)
+    print("Using patchelf: {}".format(patchelf))
+
+    counts = {"patched": 0, "would-patch": 0, "skip": 0, "error": 0}
+
+    for platform in sorted(os.listdir(pre_built_dir)):
+        bin_dir = os.path.join(pre_built_dir, platform, "bin")
+        if not os.path.isdir(bin_dir):
+            continue
+        print("\nPlatform: {}".format(platform))
+        for fname in sorted(os.listdir(bin_dir)):
+            if not fname.endswith(".bz2"):
+                continue
+            result = repatch_bz2(os.path.join(bin_dir, fname), patchelf, args.dry_run)
+            counts[result] = counts.get(result, 0) + 1
+
+    total_changed = counts["patched"] + counts["would-patch"]
+    print("\nDone: {} patched, {} skipped, {} errors".format(
+        counts["patched"] if not args.dry_run else counts["would-patch"],
+        counts["skip"], counts["error"]))
+    if total_changed and not args.dry_run:
+        print("Next: run ./strip_all_elf_binaries to update .strip-manifest")
+
+
+if __name__ == "__main__":
+    main()

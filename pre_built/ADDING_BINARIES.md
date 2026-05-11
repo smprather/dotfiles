@@ -91,19 +91,24 @@ REPO=/path/to/dotfiles
 BIN_DIR="$REPO/pre_built/el8.x86_64.glibc2p28/bin"
 LIB_DIR="$REPO/pre_built/el8.x86_64.glibc2p28/lib64"
 
-# Binary
+# Binary — patchelf first, then compress. $ORIGIN is a runtime-relative token
+# resolved by ld.so at load time, so baking it in here is identical to setting
+# it post-install. Pre-patching means the installer is pure decompress + chmod;
+# no patchelf needed on the destination (avoids NFS lock issues on running binaries).
 cp /path/to/binary /tmp/mytool_tmp
+~/.local/bin/patchelf --set-rpath '$ORIGIN/../lib64:$ORIGIN/../lib' /tmp/mytool_tmp
 bzip2 -k /tmp/mytool_tmp
 cp /tmp/mytool_tmp.bz2 "$BIN_DIR/mytool.bz2"
 
 # Shared lib — filename must be the SONAME (ldd shows "libfoo.so.3 => ...")
+# Libs don't need patchelf.
 cp /lib64/libfoo.so.3.x.y /tmp/libfoo_tmp
 bzip2 -k /tmp/libfoo_tmp
 cp /tmp/libfoo_tmp.bz2 "$LIB_DIR/libfoo.so.3.bz2"
 ```
 
-The installer decompresses `bin/*.bz2` → `~/.local/bin` and `lib64/*.bz2` → `~/.local/lib64`,
-then uses the bundled `patchelf` to set `RPATH=$ORIGIN/../lib64:$ORIGIN/../lib` on each binary.
+The installer decompresses `bin/*.bz2` → `~/.local/bin` and `lib64/*.bz2` → `~/.local/lib64`.
+RPATH is pre-baked into each binary in the repo (see above), so no post-install patchelf is needed.
 
 ### 5. Strip
 
