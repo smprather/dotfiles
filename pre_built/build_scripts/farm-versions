@@ -238,6 +238,10 @@ TOOLS = [
          os.path.join(os.path.dirname(binary), "xterm")
      )),
 
+    ("gnuplot",     "gnuplot",     "http://www.gnuplot.info",
+     lambda binary: (lambda m: re.sub(r" patchlevel ", ".", m.group(1)) if m else None)(
+         re.search(r"gnuplot ([0-9]+\.[0-9]+ patchlevel [0-9]+)", _run([binary, "--version"])))),
+
     ("yq",          "yq",          "https://github.com/mikefarah/yq",
      strategy_flag(["--version"], r"version v([0-9]+\.[0-9]+\.[0-9]+)")),
 

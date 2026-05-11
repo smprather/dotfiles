@@ -12,6 +12,7 @@ sha256  11eaa61adf00456ff6aa98690afd9dc1d8e775dacd5699f2db5126a2f2e7e129  pre_bu
 sha256  a7a23c1386086f87a5f10d43724161c2aa30b1482f3b14cc5900cc497a796ef8  pre_built/el8.x86_64.glibc2p28/bin/eza.bz2
 sha256  f6666c158a2cf0fdcbb6b7d0486eda21c962a457abc335f1ac81a965b70474ef  pre_built/el8.x86_64.glibc2p28/bin/fd.bz2
 sha256  1fef3da1b93579acb30b658b6e1534c366a8f7fdf4edf149c0115d6ebe51a2a4  pre_built/el8.x86_64.glibc2p28/bin/fzf.bz2
+sha256  afa121dda4a09bcde988e48e01437424c1025df02c6e660e3c80b0e00326ebb8  pre_built/el8.x86_64.glibc2p28/bin/gnuplot.bz2
 sha256  0dfd9fa6ac2e6b59c07e7a86f6f32d59233550540622c0d53112288459bcf815  pre_built/el8.x86_64.glibc2p28/bin/gping.bz2
 sha256  88d03741ef814621adccf5e0f0ce915d6893ecc26fff7e6d9577b9347dcd630e  pre_built/el8.x86_64.glibc2p28/bin/htop.bz2
 sha256  e35fc0202b43940daf2c51f6215bd9b06ca04eed21745cd4fb503c7fb74c8ae7  pre_built/el8.x86_64.glibc2p28/bin/hx.bz2
@@ -51,8 +52,6 @@ sha256  92284dcf23e225184ab03de69b887c6d64c6c3799b916bf8b9991fbfb7bbbb99  pre_bu
 sha256  d1104dba7715ef0336d9a307a2bce7f608b6710baf625eb76d088d08d8aac1a4  pre_built/el8.x86_64.glibc2p28/lib64/libXrender.so.1.bz2
 sha256  4008d80be12877256b6131a45d69186ad0ee7d4a8b57547d7f506f8a6ae4a951  pre_built/el8.x86_64.glibc2p28/lib64/libXt.so.6.bz2
 sha256  ebdeba094120b550bd976e54b6f3da70cba03eb87c6327414c02d627d781820f  pre_built/el8.x86_64.glibc2p28/lib64/libbz2.so.1.bz2
-sha256  0ef0931ac4261dde855c0afd2d531e667315880ab35457985f6e0c2fb5300716  pre_built/el8.x86_64.glibc2p28/lib64/libc.so.6.bz2
-sha256  96b75d45e19851155946c4f34a5973f23165b98218a2c3df99fb96115ae9d622  pre_built/el8.x86_64.glibc2p28/lib64/libdl.so.2.bz2
 sha256  c0a7179cfbadd1796dee9afb069f784a678a4b1cc407886310ca836c546e21b1  pre_built/el8.x86_64.glibc2p28/lib64/libevent_core-2.1.so.6.bz2
 sha256  586cc3e55274bb2a43e8905fbf36ebd78d72b278f30f9241367ddc22ebfcbe5e  pre_built/el8.x86_64.glibc2p28/lib64/libexpat.so.1.bz2
 sha256  c74081e53b9dd5ca77118b69f0618d7ee404c8a26feffd89b2e3d5ae8e00eeed  pre_built/el8.x86_64.glibc2p28/lib64/libfontconfig.so.1.bz2
@@ -60,10 +59,10 @@ sha256  e86d527ac253b0ed9d972326cb1b85c1077134498f73889fe6945a9846e030f0  pre_bu
 sha256  b019d5a39952a2d0e1e14e861e76e5c48cd91bfcde77eb00d2943d5ecfc09d37  pre_built/el8.x86_64.glibc2p28/lib64/libjq.so.1.0.4.bz2
 sha256  b019d5a39952a2d0e1e14e861e76e5c48cd91bfcde77eb00d2943d5ecfc09d37  pre_built/el8.x86_64.glibc2p28/lib64/libjq.so.1.bz2
 sha256  b019d5a39952a2d0e1e14e861e76e5c48cd91bfcde77eb00d2943d5ecfc09d37  pre_built/el8.x86_64.glibc2p28/lib64/libjq.so.bz2
-sha256  5d7518dcb99cd53417d84a9005044f125b355b5d49be6300600c4a292e5d7019  pre_built/el8.x86_64.glibc2p28/lib64/libm.so.6.bz2
+sha256  18049d34d4322ddeee3f76ec571248601e8806d2f4d37de348da2f9d2bcf69ad  pre_built/el8.x86_64.glibc2p28/lib64/libncurses.so.6.bz2
 sha256  f7368c7c919bdad61d0fea3f865dd5404f9961a14914b51ab46253202132c22e  pre_built/el8.x86_64.glibc2p28/lib64/libonig.so.5.bz2
 sha256  6986b61db9683089da53add7b18e2f535ed5693589c8092b780e6065424fe663  pre_built/el8.x86_64.glibc2p28/lib64/libpng16.so.16.bz2
-sha256  2a372a5fa792a0b54737b4c388309bf688438eae77906886564dd30f20fb9fb1  pre_built/el8.x86_64.glibc2p28/lib64/libpthread.so.0.bz2
+sha256  08b32218e03fc6b2079e226639ce3454e0ec5c76e6c48a55697f15f7577520a1  pre_built/el8.x86_64.glibc2p28/lib64/libreadline.so.7.bz2
 sha256  69f08bca4e473c90774ea233699877bf60a6519bb9230d58421ae6ef3cfb5130  pre_built/el8.x86_64.glibc2p28/lib64/libtinfo.so.6.bz2
 sha256  d9101237e66c99e169a5562fa02094be79b8003e386ffa8fa3e47e981b2c08ff  pre_built/el8.x86_64.glibc2p28/lib64/libuuid.so.1.bz2
 sha256  639bbcc2349280e26f2fa2d5ff6763c6f16cd926457c0fec0c04833d77d8c25c  pre_built/el8.x86_64.glibc2p28/lib64/libxcb.so.1.bz2
