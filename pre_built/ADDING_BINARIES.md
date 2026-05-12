@@ -91,11 +91,15 @@ REPO=/path/to/dotfiles
 BIN_DIR="$REPO/pre_built/el8.x86_64.glibc2p28/bin"
 LIB_DIR="$REPO/pre_built/el8.x86_64.glibc2p28/lib64"
 
-# Binary — patchelf first, then compress. $ORIGIN is a runtime-relative token
-# resolved by ld.so at load time, so baking it in here is identical to setting
-# it post-install. Pre-patching means the installer is pure decompress + chmod;
+# Binary — order: strip → patchelf → compress. CRITICAL: always strip BEFORE patchelf.
+# patchelf reorganizes ELF segments to fit the new RPATH string; strip after patchelf
+# sees .dynstr outside a PT_LOAD segment and corrupts the binary (symptom: "no version
+# information available" or symbol lookup errors at runtime).
+# $ORIGIN is resolved by ld.so at load time, so baking it in the repo is identical to
+# post-install patchelf. Pre-patching means the installer is pure decompress + chmod;
 # no patchelf needed on the destination (avoids NFS lock issues on running binaries).
 cp /path/to/binary /tmp/mytool_tmp
+/usr/bin/strip /tmp/mytool_tmp
 ~/.local/bin/patchelf --set-rpath '$ORIGIN/../lib64:$ORIGIN/../lib' /tmp/mytool_tmp
 bzip2 -k /tmp/mytool_tmp
 cp /tmp/mytool_tmp.bz2 "$BIN_DIR/mytool.bz2"
