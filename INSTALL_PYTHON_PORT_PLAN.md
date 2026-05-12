@@ -1,5 +1,8 @@
 # Python Installer Port Plan
 
+> **Status: COMPLETED.** `install` is now the Python 3.6-compatible executable directly
+> (shebang `#!/usr/bin/python3`). No separate Bash shim was needed.
+
 ## Goal
 
 Replace the growing Bash installer implementation with a Python 3.6-compatible
@@ -38,8 +41,8 @@ installer while keeping `./install` as the stable command entrypoint.
    - Absolute `DOTFILES_BACKUP_DIR` for hooks.
    - Multiple post-install hooks in argument order.
    - Optional font install from top-level `fonts/`.
-   - Pre-built binary install from `pre_built/<platform>/`, with RPATH patch
-     and `ldd` warnings.
+   - Pre-built binary install from `pre_built/<platform>/`, RPATH is pre-baked
+     in repo binaries (no runtime patchelf step), `ldd` warnings on install.
    - Vendored Tree-sitter plugin/parser install.
    - `--dev` git hook install only.
    - Automatic layer `install.sh` sourcing/execution behavior after explicit

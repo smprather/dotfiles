@@ -427,12 +427,16 @@ When adding a new binary, add an entry to `TOOLS` in `farm-versions` with the ri
 ### Create a GitHub release
 
 ```bash
-git tag v$(date +%Y.%m.%d)
-gh release create v$(date +%Y.%m.%d) --title "v$(date +%Y.%m.%d)" --notes "..."
+./release              # smoke-tests all binaries, then tags + publishes
+./release --dry-run    # smoke-test only, no tag or GitHub release
+./release --tag v2026.05.12   # explicit tag instead of today's date
 ```
 
+`./release` runs `pre_built/build_scripts/test-prebuilt-binaries` (full temp install + probe
+of every binary) before creating the tag. Blocked if any binary fails.
+It also generates the binary version table from `farm-versions --format tsv` for the release notes.
+
 GitHub auto-generates `Source code (tar.gz)` and `Source code (zip)` containing the full repo.
-Use `farm-versions --format tsv` to generate the binary version table for release notes.
 
 ### History
 

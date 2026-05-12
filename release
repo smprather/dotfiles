@@ -1,0 +1,105 @@
+#!/usr/bin/env python3
+"""
+release: smoke-test all pre-built binaries, then create a GitHub release.
+
+Usage:
+    ./release                  # tag today's date, create release
+    ./release --tag v2026.05.12
+    ./release --dry-run        # smoke-test only, no tag or GitHub release
+
+Requires: gh (GitHub CLI) authenticated, git repo with remote set.
+"""
+
+from __future__ import print_function
+
+import argparse
+import datetime
+import os
+import subprocess
+import sys
+
+
+def run(cmd, **kwargs):
+    return subprocess.run(cmd, **kwargs)
+
+
+def main():
+    p = argparse.ArgumentParser(description=__doc__,
+                                formatter_class=argparse.RawDescriptionHelpFormatter)
+    p.add_argument("--tag", default=None,
+                   help="release tag (default: v<today YYYY.MM.DD>)")
+    p.add_argument("--dry-run", action="store_true",
+                   help="smoke-test only; skip tagging and GitHub release")
+    args = p.parse_args()
+
+    script_dir = os.path.dirname(os.path.abspath(__file__))
+    smoke_test = os.path.join(script_dir, "pre_built", "build_scripts", "test-prebuilt-binaries")
+    farm_versions = os.path.join(script_dir, "pre_built", "build_scripts", "farm-versions")
+
+    print("=" * 60)
+    print("Step 1: Smoke-testing pre-built binaries")
+    print("=" * 60)
+    result = run([smoke_test])
+    if result.returncode != 0:
+        print("\nRelease blocked: binary smoke test failed.", file=sys.stderr)
+        print("Fix failing binaries before releasing.", file=sys.stderr)
+        return 1
+
+    if args.dry_run:
+        print("\nDry run — smoke test passed. Skipping tag and GitHub release.")
+        return 0
+
+    tag = args.tag or "v{}".format(datetime.date.today().strftime("%Y.%m.%d"))
+
+    print("\n" + "=" * 60)
+    print("Step 2: Generating version table")
+    print("=" * 60)
+    versions_proc = run([farm_versions, "--format", "tsv"],
+                        stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+    versions_tsv = versions_proc.stdout.decode("utf-8", "replace") if versions_proc.returncode == 0 else ""
+
+    # Build markdown table from TSV
+    lines = [l for l in versions_tsv.splitlines() if l.strip()]
+    md_rows = []
+    for line in lines[1:]:   # skip header
+        parts = line.split("\t")
+        if len(parts) >= 5 and parts[2]:  # skip missing
+            binary, name, version, status, homepage = parts[0], parts[1], parts[2], parts[3], parts[4]
+            md_rows.append("| [{}]({}) | `{}` | {} |".format(name, homepage, binary, version))
+
+    version_table = ""
+    if md_rows:
+        version_table = "\n## Pre-built binary versions\n\n"
+        version_table += "| Tool | Binary | Version |\n"
+        version_table += "|------|--------|--------|\n"
+        version_table += "\n".join(md_rows)
+
+    notes = "All pre-built binaries passed smoke test.\n" + version_table
+
+    print("\n" + "=" * 60)
+    print("Step 3: Creating tag and GitHub release: {}".format(tag))
+    print("=" * 60)
+
+    result = run(["git", "tag", tag])
+    if result.returncode != 0:
+        print("git tag failed (tag already exists?)", file=sys.stderr)
+        return 1
+
+    result = run(["git", "push", "origin", tag])
+    if result.returncode != 0:
+        print("git push tag failed.", file=sys.stderr)
+        return 1
+
+    result = run(["gh", "release", "create", tag,
+                  "--title", tag,
+                  "--notes", notes])
+    if result.returncode != 0:
+        print("gh release create failed.", file=sys.stderr)
+        return 1
+
+    print("\nRelease {} created.".format(tag))
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())

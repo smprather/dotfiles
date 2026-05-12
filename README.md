@@ -23,7 +23,7 @@ Linux box in under two minutes and gets out of your way.
 | **[WezTerm](https://wezfurlong.org/wezterm/)** | Terminal emulator config |
 | **[AutoHotKey](https://www.autohotkey.com)** | AHK v2 flat script, optional features via `dotkeys_config.toml` |
 | **[EditorConfig](https://editorconfig.org)** | Consistent formatting across all editors |
-| **Pre-built binaries** | 35 modern CLI tools, zero internet required — see table below |
+| **Pre-built binaries** | 40 modern CLI tools, zero internet required — see table below |
 | **Nerd Fonts** | 6 font families, split-archive support for GitHub's 50 MB limit |
 
 ---
@@ -63,10 +63,9 @@ cfg_attach_to_tmux=1        # auto-attach tmux on login
 
 ## Pre-Built Binaries — `el8.x86_64.glibc2p28`
 
-All binaries are stripped, bzip2-compressed, and verified clean before commit. The installer
-decompresses them to `~/.local/bin` and patches `RPATH` with `patchelf` so each binary finds
-its vendored shared libraries at `$ORIGIN/../lib64` — no `LD_LIBRARY_PATH` hacks, no global
-linker state.
+All binaries are stripped, bzip2-compressed, and verified clean before release. `RPATH` is
+pre-baked into each binary in the repo (`$ORIGIN/../lib64:$ORIGIN/../lib`) so the installer
+is pure decompress + chmod — no runtime `patchelf`, no `LD_LIBRARY_PATH` hacks.
 
 ### Tools
 
@@ -82,16 +81,19 @@ linker state.
 | [dust](https://github.com/bootandy/dust) | 1.2.4 | Intuitive `du` — shows disk usage by size, at a glance |
 | [eza](https://github.com/eza-community/eza) | 0.23.4 | Modern `ls` with color, icons, Git status, and tree view |
 | [fd](https://github.com/sharkdp/fd) | 10.4.2 | Fast, ergonomic `find` replacement |
-| [fzf](https://github.com/junegunn/fzf) | 0.72.0 | Blazing-fast fuzzy finder for files, history, anything |
+| [fzf](https://github.com/junegunn/fzf) | 0.62.0 | Blazing-fast fuzzy finder for files, history, anything |
+| [bzip2](https://sourceware.org/bzip2/) | 1.0.8 | High-quality block-sorting file compressor |
+| [gnuplot](http://www.gnuplot.info) | 6.0.2 | Portable command-line graphing utility |
 | [gping](https://github.com/orf/gping) | 1.20.1 | `ping` with a real-time ASCII graph |
 | [htop](https://htop.dev) | 3.6.0 | Interactive process viewer — the original `top` upgrade |
 | [hx](https://helix-editor.com) | 25.07.1 | Helix modal editor — Kakoune-inspired, batteries included |
 | [hyperfine](https://github.com/sharkdp/hyperfine) | 1.20.0 | Command-line benchmarking tool with statistical output |
 | [jq](https://jqlang.github.io/jq/) | 1.8.1 | Lightweight and flexible command-line JSON processor |
 | [just](https://github.com/casey/just) | 1.50.0 | Command runner — sane `make` replacement for project tasks |
-| [kak](https://kakoune.org) | local | Kakoune — selection-first modal editor |
+| [kak](https://kakoune.org) | 2026.04.12 | Kakoune — selection-first modal editor |
 | [micro](https://micro-editor.github.io) | 2.0.16 | Modern, intuitive terminal text editor — Ctrl+S just works |
 | [patchelf](https://github.com/NixOS/patchelf) | 0.12 | Modify ELF binary RPATHs and interpreters at install time |
+| [pigz](https://zlib.net/pigz/) | 2.8 | Parallel gzip — multi-core `gzip`/`gunzip` replacement |
 | [resize](https://invisible-island.net/xterm/) | 371 | XTerm terminal resize utility — fixes `$COLUMNS`/`$LINES` |
 | [rg](https://github.com/BurntSushi/ripgrep) | 15.1.0 | ripgrep — recursive search that respects `.gitignore` |
 | [rsync](https://rsync.samba.org) | 3.4.2 | Fast, incremental file transfer |
@@ -104,6 +106,7 @@ linker state.
 | [tmux](https://github.com/tmux/tmux) | 3.6a | Terminal multiplexer |
 | [tree-sitter](https://tree-sitter.github.io/tree-sitter/) | 0.26.8 | Parser generator tool and incremental parsing library |
 | [ty](https://github.com/astral-sh/ty) | 0.0.34 | Extremely fast Python type checker by Astral |
+| [uv](https://github.com/astral-sh/uv) | 0.11.13 | Extremely fast Python package installer and resolver |
 | [vim](https://www.vim.org) | 9.2 | Vim 9.2 pre-built binary + shell wrapper |
 | [xterm](https://invisible-island.net/xterm/) | 371 | X Window System terminal emulator |
 | [yq](https://github.com/mikefarah/yq) | 4.53.2 | `jq` for YAML, JSON, XML, CSV, TOML, and properties files |
@@ -122,18 +125,16 @@ Runtime dependencies vendored alongside binaries — no system library assumptio
 | Library | Provides |
 |---------|---------|
 | `libbz2.so.1` | bzip2 compression (bat, tmux, and others) |
-| `libc.so.6` | glibc baseline |
-| `libdl.so.2` | Dynamic linking |
 | `libevent_core-2.1.so.6` | Event loop (tmux) |
 | `libexpat.so.1` | XML parsing |
 | `libfontconfig.so.1` | Font discovery (xterm) |
 | `libfreetype.so.6` | Font rendering (xterm) |
 | `libICE.so.6` | Inter-Client Exchange (X11) |
 | `libjq.so` | jq shared library |
-| `libm.so.6` | Math library |
+| `libncurses.so.6` | Terminal UI (gnuplot, htop) |
 | `libonig.so.5` | Oniguruma regex (jq) |
 | `libpng16.so.16` | PNG image support (xterm) |
-| `libpthread.so.0` | POSIX threads |
+| `libreadline.so.7` | GNU readline (gnuplot, bash) |
 | `libSM.so.6` | Session Management (X11) |
 | `libtinfo.so.6` | Terminal info (ncurses) |
 | `libuuid.so.1` | UUID generation |
@@ -402,18 +403,27 @@ tmux-continuum auto-saves every 60 minutes.
 
 ### Adding a new pre-built binary
 
-```bash
-# 1. Compress and place
-bzip2 -k mybinary
-cp mybinary.bz2 pre_built/el8.x86_64.glibc2p28/bin/
+Order matters: always **strip → patchelf → bzip2**. Stripping after patchelf corrupts `.dynstr`.
 
-# 2. Strip and update manifest
+```bash
+# 1. Strip, set RPATH, compress
+cp /path/to/binary /tmp/mybinary_tmp
+/usr/bin/strip /tmp/mybinary_tmp
+/usr/bin/patchelf --set-rpath '$ORIGIN/../lib64:$ORIGIN/../lib' /tmp/mybinary_tmp
+bzip2 -k /tmp/mybinary_tmp
+cp /tmp/mybinary_tmp.bz2 pre_built/el8.x86_64.glibc2p28/bin/mybinary.bz2
+
+# 2. Update strip manifest
 ./strip_all_elf_binaries
 
-# 3. Commit — the pre-commit hook runs strip again and updates .strip-manifest
+# 3. Smoke-test and commit
+pre_built/build_scripts/test-prebuilt-binaries --keep  # or just ./release --dry-run
 git add pre_built/ .strip-manifest
 git commit
 ```
+
+See `pre_built/ADDING_BINARIES.md` for the full workflow including dependency auditing,
+go binary flags, and `farm-versions` registration.
 
 ### Importing a new portable Python build
 
@@ -460,9 +470,10 @@ Directory-level symlinks for `nvim/`, `vim/`, `tmux/`, `starship/`, `editorconfi
 For bash, symlinks individual managed files (`global/`, `functions.sh`, `bashrc`)
 while leaving user layer dirs as real directories. Installs repo git hooks:
 
-- **pre-commit** — strips ELF payloads from newly added binaries and archives,
+- **pre-commit** — strips ELF payloads from newly staged binaries and archives,
   normalizes tarballs to `.tar.bz2`, updates `.strip-manifest`. Removes any
-  embedded `.git` dirs from vendored plugins.
+  embedded `.git` dirs from vendored plugins. Run `./release --dry-run` before
+  creating a release to smoke-test all binaries via a temp install.
 
 ---
 

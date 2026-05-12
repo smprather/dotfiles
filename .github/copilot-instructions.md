@@ -92,14 +92,18 @@ Before each install area writes files, the installer verifies that the target
 directory is writable. Unwritable areas are refused with warnings, later areas
 continue when possible, and the run ends with an install results table.
 Pre-built Linux binaries live under `pre_built/<platform>/`, using names like
-`el8.x86_64.glibc2p28`. The installer decompresses `bin/*.bz2` to
-`~/.local/bin` and `lib64/*.bz2` to `~/.local/lib64`, then uses vendored
-`patchelf` to set `$ORIGIN/../lib64:$ORIGIN/../lib` RPATHs on dynamic binaries
-and runs `ldd` to warn about missing `.so` dependencies. If a running binary
-cannot be replaced or patched, installer continues and prints a final retry
-notice naming the binaries to exit before re-running.
-If `helix/helix_runtime.tar.bz2` exists, the installer extracts it to
-`~/.config/helix/runtime`; `runtime/tutor` is the expected sentinel file.
+`el8.x86_64.glibc2p28`. `RPATH=$ORIGIN/../lib64:$ORIGIN/../lib` is pre-baked
+into each binary in the repo before bzip2 compression — the installer is pure
+decompress + chmod, no runtime patchelf step. Installer runs `ldd` to warn
+about missing `.so` dependencies. If a running binary cannot be replaced,
+installer continues and prints a retry notice.
+**Binary bundling order: strip → patchelf → bzip2.** Never strip after patchelf;
+it corrupts `.dynstr` and causes segfaults or "undefined symbol" at runtime.
+**Go binaries: build with `go build -ldflags="-w -s"`**, not post-build strip.
+**Release gate: `./release --dry-run`** runs `pre_built/build_scripts/test-prebuilt-binaries`,
+which does a full temp install and probes every binary before any tag is created.
+The Helix runtime lives at `pre_built/<platform>/runtime/helix.tar.bz2`; the installer
+extracts it to `~/.config/helix/runtime`; `runtime/tutor` is the sentinel file.
 Use the Python 3.6-compatible `./strip_all_elf_binaries` after adding vendored
 binaries, libraries, parser grammars, or tar archives. It walks the repo
 outside `.git`, strips raw ELF files in place, strips ELF payloads inside
@@ -138,7 +142,7 @@ and copies metadata directories to `~/.local/share/nvim/tree-sitter-parsers/`.
 
 ### Pre-commit Hook
 
-`hooks/pre-commit` scans for nested `.git` directories (from bundled plugins), removes them, and re-stages. It also runs `./strip_all_elf_binaries` when staged binary/archive candidates change. Install this hook when developing this repo or working with bundled plugins. Normal end-user installs do not need repo git hooks. The embedded `.git` cleanup may broadly re-stage affected files; the binary stripping path restages only tracked updates, staged candidates, converted `.tar.bz2` archives, and strip manifests. Review staged files after it runs.
+`hooks/pre-commit` scans for nested `.git` directories (from bundled plugins), removes them, and re-stages. It also runs `./strip_all_elf_binaries` when staged binary/archive candidates change. Install this hook when developing this repo or working with bundled plugins. Normal end-user installs do not need repo git hooks. The embedded `.git` cleanup may broadly re-stage affected files; the binary stripping path restages only tracked updates, staged candidates, converted `.tar.bz2` archives, and strip manifests. Review staged files after it runs. For full binary smoke-testing use `./release --dry-run`, not the pre-commit hook.
 
 ### Adding a Bundled Plugin
 
