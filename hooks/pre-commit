@@ -65,4 +65,22 @@ if [[ -n "$staged_strip_candidates" ]]; then
     fi
 fi
 
+# --- 3. Smoke-test pre-built binaries when bin/*.bz2 files are staged ---
+
+staged_binaries=$(
+    git diff --cached --name-only --diff-filter=ACM |
+        grep -E '(^|/)pre_built/[^/]+/bin/[^/]+\.bz2$' || true
+)
+
+if [[ -n "$staged_binaries" ]]; then
+    echo "Pre-commit: Smoke-testing pre-built binaries via temp install..."
+    if ! "$script_dir/pre_built/build_scripts/test-prebuilt-binaries"; then
+        echo ""
+        echo "ERROR: One or more pre-built binaries failed smoke test. Commit blocked." >&2
+        echo "Fix the broken binaries before committing." >&2
+        exit 1
+    fi
+    echo "✓ All pre-built binaries passed smoke test"
+fi
+
 exit 0
