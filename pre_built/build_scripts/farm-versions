@@ -246,6 +246,12 @@ TOOLS = [
      lambda binary: (lambda m: re.sub(r" patchlevel ", ".", m.group(1)) if m else None)(
          re.search(r"gnuplot ([0-9]+\.[0-9]+ patchlevel [0-9]+)", _run([binary, "--version"])))),
 
+    ("xsel",        "xsel",        "https://github.com/kfish/xsel",
+     strategy_flag(["--version"], r"xsel version ([0-9]+\.[0-9]+\.[0-9]+)")),
+
+    ("yank",        "yank",        "https://github.com/mptre/yank",
+     strategy_flag(["-v"], r"yank ([0-9]+\.[0-9]+\.[0-9]+)")),
+
     ("yq",          "yq",          "https://github.com/mikefarah/yq",
      strategy_flag(["--version"], r"version v([0-9]+\.[0-9]+\.[0-9]+)")),
 
