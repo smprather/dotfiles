@@ -1303,6 +1303,14 @@ def install_dev_mode(repo_dir, home):
         ensure_dir(os.path.join(home, ".config", "helix"), "helix config")
         lns(_helix_cfg, os.path.join(home, ".config", "helix", "config.toml"), verbose=True)
 
+    # kak: copy default kakrc only if the user doesn't already have one
+    _kak_src = os.path.join(repo_dir, "kak", "kakrc")
+    _kak_dest = os.path.join(home, ".config", "kak", "kakrc")
+    if os.path.isfile(_kak_src) and not os.path.exists(_kak_dest):
+        ensure_dir(os.path.join(home, ".config", "kak"), "kakoune config")
+        shutil.copy2(_kak_src, _kak_dest)
+        print("  Installed default kakrc: {}".format(_kak_dest))
+
 
 def install_copy_mode(repo_dir, home):
     for entrypoint in BASH_ENTRYPOINTS:
@@ -1369,6 +1377,14 @@ def install_copy_mode(repo_dir, home):
     if os.path.isfile(_helix_cfg):
         ensure_dir(os.path.join(home, ".config", "helix"), "helix config")
         install_path(_helix_cfg, os.path.join(home, ".config", "helix", "config.toml"), False)
+
+    # kak: copy default kakrc only if the user doesn't already have one
+    _kak_src = os.path.join(repo_dir, "kak", "kakrc")
+    _kak_dest = os.path.join(home, ".config", "kak", "kakrc")
+    if os.path.isfile(_kak_src) and not os.path.exists(_kak_dest):
+        ensure_dir(os.path.join(home, ".config", "kak"), "kakoune config")
+        shutil.copy2(_kak_src, _kak_dest)
+        print("  Installed default kakrc: {}".format(_kak_dest))
 
 
 def glob_paths(path):

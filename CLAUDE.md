@@ -112,6 +112,9 @@ pre_built/
     reproduce-llvm-build.sh - LLVM build reproduction script
   .strip-manifest           - sha256/tar-meta cache for strip_all_elf_binaries
 
+kak/
+  kakrc                     - Default kakoune config (copy of share/kak/kakrc from build); copied to ~/.config/kak/kakrc only if not already present
+
 helix/                      - (empty; runtime archive moved to pre_built/<platform>/runtime/)
 
 editorconfig/
