@@ -7,6 +7,15 @@ set -euo pipefail
 
 script_dir=$(git rev-parse --show-toplevel)
 
+# Capture staged bin/*.bz2 list BEFORE strip step mutates the index.
+# strip_all_elf_binaries runs "git add -u" which can restage files at their
+# post-strip on-disk state; if that content equals HEAD the file disappears
+# from "git diff --cached", making the step-3 check miss it.
+staged_bin_bz2=$(
+    git diff --cached --name-only --diff-filter=ACM |
+        grep -E '(^|/)pre_built/[^/]+/bin/[^/]+\.bz2$' || true
+)
+
 # --- 1. Embedded git repository cleanup ---
 
 echo "Pre-commit: Checking for embedded git repositories..."
@@ -67,12 +76,7 @@ fi
 
 # --- 3. Smoke-test pre-built binaries when bin/*.bz2 files are staged ---
 
-staged_binaries=$(
-    git diff --cached --name-only --diff-filter=ACM |
-        grep -E '(^|/)pre_built/[^/]+/bin/[^/]+\.bz2$' || true
-)
-
-if [[ -n "$staged_binaries" ]]; then
+if [[ -n "$staged_bin_bz2" ]]; then
     echo "Pre-commit: Smoke-testing pre-built binaries via temp install..."
     if ! "$script_dir/pre_built/build_scripts/test-prebuilt-binaries"; then
         echo ""
