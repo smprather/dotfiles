@@ -163,6 +163,27 @@ git add pre_built/el8.x86_64.glibc2p28/bin/mytool.bz2 \
 git commit
 ```
 
+## Neovim build notes (0.13.0-dev nightly, added 2026-05-12)
+
+Built from source at `~/neovim` (commit `7ed5609439`, nightly tag). CMake flags:
+```bash
+cmake -B build \
+  -DCMAKE_BUILD_TYPE=Release \
+  -DCMAKE_INSTALL_PREFIX=/usr/local \
+  -DENABLE_TRANSLATIONS=OFF \
+  -G Ninja
+ninja -C build -j$(nproc)
+sudo ninja -C build install
+```
+
+All deps (libuv, tree-sitter, luajit, libvterm, etc.) are bundled statically by the build
+system. The resulting binary links only against glibc components — no libs to bundle.
+
+Binary: 33 MB unstripped (RelWithDebInfo) → 5.9 MB stripped → 2.6 MB compressed.
+Runtime archive (`nvim.tar.bz2`): 27 MB uncompressed → 4.8 MB compressed.
+Installer extracts runtime to `~/.local/share/nvim/runtime/`.
+See `pre_built/build_scripts/build-nvim.sh` for the full rebuild recipe.
+
 ## Gnuplot build notes (6.0.2, added 2026-05-10)
 
 Built from source to avoid Qt5 dep chain. Configure flags used:

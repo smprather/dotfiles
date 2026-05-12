@@ -186,6 +186,9 @@ TOOLS = [
     ("micro",       "micro",       "https://micro-editor.github.io",
      strategy_flag(["--version"], r"Version:\s*([0-9]+\.[0-9]+\.[0-9a-z.\-]+)")),
 
+    ("nvim",        "neovim",      "https://neovim.io",
+     strategy_flag(["--version"], r"NVIM v([0-9]+\.[0-9]+\.[0-9]+[^\n]*)")),
+
     ("patchelf",    "patchelf",    "https://github.com/NixOS/patchelf",
      strategy_flag(["--version"], r"patchelf ([0-9]+\.[0-9]+)")),
 

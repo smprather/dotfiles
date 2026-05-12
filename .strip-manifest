@@ -22,6 +22,7 @@ sha256  adb774eca668d2abbc24d2281861ce0a4f5bc0d8ffc64bae4618074b44682d1a  pre_bu
 sha256  c2a48210651d17f2a0b0199b1b79be437352281d485bed86b19ebcdaf6391960  pre_built/el8.x86_64.glibc2p28/bin/just.bz2
 sha256  d0c8d6dfa510955b3672b3dde155b8c3b3b22e581320c7f853efcce60406fa5c  pre_built/el8.x86_64.glibc2p28/bin/kak.bz2
 sha256  fad89737361c58bfca5cd98d24c7eb1bbc3be472d0c0bf6438a2f0c792234ecc  pre_built/el8.x86_64.glibc2p28/bin/micro.bz2
+sha256  dbaa6876ed2d09b6b6dd5fc0ff2fb86e96e13454c8ed872330a38c30e90e2acf  pre_built/el8.x86_64.glibc2p28/bin/nvim.bz2
 sha256  32fefa25d1f8378cfd840f49ca2b9a16a8b7c44a4f7ecbd0a13d6fc1496308a5  pre_built/el8.x86_64.glibc2p28/bin/patchelf.bz2
 sha256  9f067987f751cef72283d71f05c319153098ffe27443072d6689dd2032d1a2d1  pre_built/el8.x86_64.glibc2p28/bin/pigz.bz2
 sha256  370a8103dba02819ff13b56dd3457a4e26332228fccdff1fdd3e49f456460204  pre_built/el8.x86_64.glibc2p28/bin/resize.bz2
@@ -72,6 +73,7 @@ sha256  639bbcc2349280e26f2fa2d5ff6763c6f16cd926457c0fec0c04833d77d8c25c  pre_bu
 sha256  fcf47e453dd59a265b921a1f73b523343383fa654110cc8dde2c1def45c70cbe  pre_built/el8.x86_64.glibc2p28/lib64/libxxhash.so.0.bz2
 sha256  08ace58677105a879ee6c45dccfa797c169cc027752e023bb826db78f5f66c0a  pre_built/el8.x86_64.glibc2p28/lib64/libz.so.1.bz2
 tar-meta  20459993  1778430059  pre_built/el8.x86_64.glibc2p28/runtime/helix.tar.bz2
+tar-meta  4891079  1778568585  pre_built/el8.x86_64.glibc2p28/runtime/nvim.tar.bz2
 tar-meta  8483290  1778430063  pre_built/el8.x86_64.glibc2p28/runtime/vim92.tar.bz2
 tar-meta  939973  1778105745  tldr/tldr-pages.tar.bz2
 sha256  b4c80182d31ad43e135cc7d29564901a7c5f262025d3a7b6e4552933d09b445a  treesitter/prebuilt/linux-x86_64-glibc/parser/ada.so.bz2

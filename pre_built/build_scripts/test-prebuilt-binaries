@@ -1,12 +1,14 @@
 #!/usr/bin/env python3
 """
-test-prebuilt-binaries: smoke-test every installed binary via a temp-root install.
+test-prebuilt-binaries: smoke-test installed binary and runtime payloads.
 
 Runs ./install --dest-dir /tmp/... --no-backup --no-fonts --no-tldr-cache to get
 a real deployment layout, then probes each executable in <dest>/.local/bin/ for:
   - exit 127  (loader failure / broken ELF)
   - exit 139  (SIGSEGV)
   - "symbol lookup error" / "undefined symbol" in output
+It also checks runtime sentinels for shipped editor payloads and runs Neovim
+headless against the installed runtime.
 
 Any other outcome (including "bad option" exit 1/2, or timeout on an interactive
 binary) counts as OK — the binary loaded and ran.
@@ -46,6 +48,7 @@ PROBE_FLAGS = {
     "kak":     [["-version"]],
     "resize":  [["--help"]],
     "bzip2":   [["--help"]],
+    "nvim":    [["--version"]],
 }
 DEFAULT_PROBE = [["--version"], ["-V"], ["-version"], ["--help"]]
 
@@ -74,6 +77,35 @@ def ldd_check(path):
         ]
     except (OSError, subprocess.TimeoutExpired):
         return []
+
+
+def output_excerpt(data, limit=400):
+    if isinstance(data, bytes):
+        text = data.decode("utf-8", "replace")
+    else:
+        text = str(data)
+    text = text.strip().replace("\n", "\\n")
+    if len(text) > limit:
+        return text[:limit] + "..."
+    return text
+
+
+def require_path(path, label, failures):
+    if os.path.exists(path):
+        print("  OK   (path):         {}".format(label))
+        return True
+    print("  FAIL (path):         {}  missing {}".format(label, path))
+    failures.append((label, "missing {}".format(path)))
+    return False
+
+
+def require_absent_path(path, label, failures):
+    if not os.path.lexists(path):
+        print("  OK   (absent):       {}".format(label))
+        return True
+    print("  FAIL (absent):       {}  unexpected {}".format(label, path))
+    failures.append((label, "unexpected {}".format(path)))
+    return False
 
 
 def probe_binary(binary_path):
@@ -117,6 +149,86 @@ def probe_binary(binary_path):
             return False, last_out[:200].strip()
     code_str = "signal {}".format(-last_code) if last_code is not None and last_code < 0 else "exit {}".format(last_code)
     return False, "{} — {}".format(code_str, last_out[:200].strip())
+
+
+def smoke_runtime_layout(tmpdir):
+    failures = []
+    bin_dir = os.path.join(tmpdir, ".local", "bin")
+
+    def has_bin(name):
+        return os.path.exists(os.path.join(bin_dir, name))
+
+    print("Smoke-testing installed runtimes...\n")
+
+    if has_bin("nvim"):
+        nvim = os.path.join(bin_dir, "nvim")
+        runtime = os.path.join(tmpdir, ".local", "share", "nvim", "runtime")
+        if require_path(os.path.join(runtime, "filetype.lua"), "nvim runtime", failures):
+            env = os.environ.copy()
+            env.update({
+                "HOME": tmpdir,
+                "XDG_CACHE_HOME": os.path.join(tmpdir, ".cache", "nvim-smoke"),
+                "XDG_STATE_HOME": os.path.join(tmpdir, ".local", "state", "nvim-smoke"),
+            })
+            lua_check = (
+                "local expected = vim.env.HOME .. '/.local/share/nvim/runtime'; "
+                "local rtp = vim.o.runtimepath; "
+                "if not rtp:find(expected, 1, true) then "
+                "vim.api.nvim_err_writeln(rtp); vim.cmd('cquit 1'); end; "
+                "if vim.fn.filereadable(expected .. '/filetype.lua') ~= 1 then "
+                "vim.api.nvim_err_writeln(expected); vim.cmd('cquit 1'); end"
+            )
+            try:
+                proc = subprocess.run(
+                    [nvim, "--clean", "--headless", "-n", "+lua " + lua_check, "+qa"],
+                    cwd=tmpdir,
+                    env=env,
+                    stdout=subprocess.PIPE,
+                    stderr=subprocess.STDOUT,
+                    timeout=10,
+                )
+            except subprocess.TimeoutExpired:
+                print("  FAIL (headless):     nvim runtime  timeout")
+                failures.append(("nvim runtime", "headless timeout"))
+            except Exception as exc:
+                print("  FAIL (headless):     nvim runtime  {}".format(exc))
+                failures.append(("nvim runtime", str(exc)))
+            else:
+                if proc.returncode == 0:
+                    print("  OK   (headless):     nvim runtime")
+                else:
+                    detail = output_excerpt(proc.stdout)
+                    print("  FAIL (headless):     nvim runtime  {}".format(detail))
+                    failures.append(("nvim runtime", detail))
+
+    if has_bin("vim") or has_bin("vim.bin"):
+        require_path(
+            os.path.join(tmpdir, ".local", "share", "vim", "vim92", "filetype.vim"),
+            "vim runtime",
+            failures,
+        )
+
+    if has_bin("hx"):
+        require_path(
+            os.path.join(tmpdir, ".config", "helix", "runtime", "tutor"),
+            "helix runtime",
+            failures,
+        )
+
+    parsers = os.path.join(tmpdir, ".local", "share", "nvim", "tree-sitter-parsers")
+    if os.path.isdir(parsers):
+        require_path(os.path.join(parsers, "parser", "python.so"), "tree-sitter python parser", failures)
+        require_path(os.path.join(parsers, "queries", "python", "highlights.scm"), "tree-sitter python query", failures)
+        require_path(os.path.join(parsers, "parser-info", "python.lua"), "tree-sitter python parser-info", failures)
+
+    if has_bin("python3.14"):
+        require_absent_path(os.path.join(bin_dir, "python3"), "portable python does not shadow python3", failures)
+        require_absent_path(os.path.join(bin_dir, "pip3"), "portable python does not shadow pip3", failures)
+
+    if not failures:
+        print("Runtime payloads OK")
+    print()
+    return failures
 
 
 def main():
@@ -190,13 +302,16 @@ def main():
                 failures.append((fname, detail))
 
         print()
+        runtime_failures = smoke_runtime_layout(tmpdir)
+        failures.extend(runtime_failures)
+
         if failures:
-            print("FAILED: {}/{} binaries:".format(len(failures), tested + len(failures)))
+            print("FAILED: {} smoke checks:".format(len(failures)))
             for name, msg in failures:
                 print("  {}: {}".format(name, msg))
             return 1
 
-        print("All {} binaries OK ({} non-ELF skipped)".format(tested, skipped))
+        print("All {} binaries OK ({} non-ELF skipped); runtimes OK".format(tested, skipped))
         return 0
 
     except subprocess.TimeoutExpired:

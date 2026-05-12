@@ -222,6 +222,7 @@ from any working directory — it resolves the repo from the script path.
 | `~/.config/starship/starship.toml` | `starship/starship.toml` |
 | `~/.config/helix/runtime/` | `pre_built/<platform>/runtime/helix.tar.bz2` |
 | `~/.local/share/vim/vim92/` | `pre_built/<platform>/runtime/vim92.tar.bz2` |
+| `~/.local/share/nvim/runtime/` | `pre_built/<platform>/runtime/nvim.tar.bz2` |
 | `~/.local/bin/` | `pre_built/<platform>/bin/*.bz2` (decompressed) |
 | `~/.local/lib64/` | `pre_built/<platform>/lib64/*.bz2` (decompressed) |
 | `~/.local/bin/python3.14` | `pre_built/<platform>/portable-python-*.tar.bz2` |

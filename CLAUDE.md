@@ -93,6 +93,7 @@ pre_built/
     runtime/                - Runtime archives (platform-matched)
       helix.tar.bz2         - Helix runtime → ~/.config/helix/runtime/
       vim92.tar.bz2         - Vim 9.2 runtime → ~/.local/share/vim/vim92/
+      nvim.tar.bz2          - Neovim runtime → ~/.local/share/nvim/runtime/
       runtime_config.toml   - Runtime install metadata
     portable-python-*.tar.bz2 - BOLT-optimized Python archive (NOSTRIP — never run strip on it)
   build_scripts/            - Helper scripts (not installed)
@@ -162,6 +163,8 @@ The Linux installer resolves the repo from the `install` script path, so it can 
 
 **Vim runtime behavior**: The installer looks for `vim92.tar.bz2` in `pre_built/<platform>/runtime/` first, then falls back to the legacy path `vim/runtime.tar.bz2`. It extracts to `~/.local/share/vim/`, renames the `runtime/` directory to `vim92/`, and verifies `filetype.vim` is present. A correct install has `~/.local/share/vim/vim92/filetype.vim`.
 
+**Neovim runtime behavior**: The installer looks for `nvim.tar.bz2` in `pre_built/<platform>/runtime/`. It extracts to `~/.local/share/nvim/`, replaces any existing `~/.local/share/nvim/runtime`, and verifies `runtime/filetype.lua` is present. The release smoke gate runs the installed `nvim` headless with `--clean` and asserts that this runtime is on `runtimepath`. The Neovim config bootstraps `lazy.nvim` when available; if `lazy.nvim` is missing and `git` cannot clone it, the plugin layer is disabled cleanly so the core editor config still starts on locked-down machines.
+
 **Portable Python behavior**: The installer looks for `portable-python-*.tar.bz2` in the platform dir. If found, it extracts to a temp dir under `/tmp` using `safe_extract_tar`, runs the bundled `install.sh --prefix ~/.local --force --no-test`, then removes `~/.local/bin/python3` and `~/.local/bin/pip3` so the system `/usr/bin/python3` wins for EDA tools. Use `python3.14` and `pip3.14` for this build. The archive must never be run through `strip_all_elf_binaries` (BOLT-optimized). To add or update a portable Python build, use `pre_built/build_scripts/import-portable-python <portable-dir>`.
 
 **Backup behavior**: Numbered backups in `dotfiles_backups/backup.N/`. Skips files already pointing to the repo. Never overwrites existing backups.
@@ -181,6 +184,7 @@ Backups intentionally exclude font files (`*.ttf`, `*.otf`, `*.pcf`, `*.bdf`, `*
 - `~/.config/starship/starship.toml` ← `repo/starship/starship.toml`
 - `~/.config/helix/runtime/` ← `repo/pre_built/<platform>/runtime/helix.tar.bz2`
 - `~/.local/share/vim/vim92/` ← `repo/pre_built/<platform>/runtime/vim92.tar.bz2`
+- `~/.local/share/nvim/runtime/` ← `repo/pre_built/<platform>/runtime/nvim.tar.bz2`
 - `~/.local/bin/python3.14` etc. ← `repo/pre_built/<platform>/portable-python-*.tar.bz2` (via install.sh)
 
 **Windows copy destinations** (files are copied, not symlinked — re-run `.\install.ps1` after repo changes):

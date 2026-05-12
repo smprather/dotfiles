@@ -256,11 +256,22 @@ vim.api.nvim_create_autocmd("TextYankPost", {
 -- [[ Install `lazy.nvim` plugin manager ]]
 --    See `:help lazy.nvim.txt` or https://github.com/folke/lazy.nvim for more info
 local lazypath = vim.fn.stdpath("data") .. "/lazy/lazy.nvim"
+local dotfiles_plugins_enabled = true
 if not (vim.uv or vim.loop).fs_stat(lazypath) then
     local lazyrepo = "https://github.com/folke/lazy.nvim.git"
     local out = vim.fn.system({ "git", "clone", "--filter=blob:none", "--branch=stable", lazyrepo, lazypath })
-    if vim.v.shell_error ~= 0 then error("Error cloning lazy.nvim:\n" .. out) end
+    if vim.v.shell_error ~= 0 then
+        dotfiles_plugins_enabled = false
+        vim.g.dotfiles_lazy_bootstrap_error = out
+        vim.api.nvim_create_autocmd("VimEnter", {
+            once = true,
+            callback = function()
+                vim.notify("lazy.nvim unavailable; plugin setup skipped", vim.log.levels.WARN)
+            end,
+        })
+    end
 end
+vim.g.dotfiles_plugins_enabled = dotfiles_plugins_enabled
 
 local function buf_smaller_than(threshold_mb)
     local filename = vim.api.nvim_buf_get_name(0)
@@ -279,7 +290,8 @@ end
 
 ---@type vim.Option
 local rtp = vim.opt.rtp
-rtp:prepend(lazypath)
+if dotfiles_plugins_enabled then
+    rtp:prepend(lazypath)
 
 -- [[ Configure and install plugins ]]
 --
@@ -292,7 +304,7 @@ rtp:prepend(lazypath)
 --    :Lazy update
 --
 -- NOTE: Here is where you install your plugins.
-require("lazy").setup({
+    require("lazy").setup({
     checker = {
         enabled = not dpc, -- Disable periodic update checks
         notify = not dpc, -- Disable update notifications
@@ -1335,7 +1347,12 @@ require("lazy").setup({
     {
         "mfussenegger/nvim-lint",
     },
-})
+    })
+else
+    vim.api.nvim_create_user_command("Lazy", function()
+        vim.notify("lazy.nvim unavailable; plugin setup skipped", vim.log.levels.WARN)
+    end, {})
+end
 
 -- Options are automatically loaded before lazy.nvim startup
 -- Default options that are always set: https://github.com/LazyVim/LazyVim/blob/main/lua/lazyvim/config/options.lua
@@ -1441,11 +1458,13 @@ vim.api.nvim_create_autocmd("BufReadPost", {
         if valid_line and not_commit then vim.cmd([[normal! g`"zz]]) end
     end,
 })
-vim.api.nvim_create_autocmd({ "BufWritePre", "FileChangedShell", "InsertLeave" }, {
-    group = my_augroup1,
-    pattern = "*",
-    callback = function(args) require("conform").format({ bufnr = args.buf }) end,
-})
+if dotfiles_plugins_enabled then
+    vim.api.nvim_create_autocmd({ "BufWritePre", "FileChangedShell", "InsertLeave" }, {
+        group = my_augroup1,
+        pattern = "*",
+        callback = function(args) require("conform").format({ bufnr = args.buf }) end,
+    })
+end
 
 -- Python debug parentheses
 vim.cmd([[
@@ -1485,7 +1504,10 @@ vim.cmd([[
     command! ZoomToggle call s:ZoomToggle()
 ]])
 
-vim.notify = require("notify")
+if dotfiles_plugins_enabled then
+    local ok_notify, notify = pcall(require, "notify")
+    if ok_notify then vim.notify = notify end
+end
 
 -- You can find the lsp configs in ~/.config/nvim/lsp/*
 vim.lsp.enable({ "lua_ls", "ruff", "ty", "yamlls", "marksman" })

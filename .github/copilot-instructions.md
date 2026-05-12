@@ -101,9 +101,17 @@ installer continues and prints a retry notice.
 it corrupts `.dynstr` and causes segfaults or "undefined symbol" at runtime.
 **Go binaries: build with `go build -ldflags="-w -s"`**, not post-build strip.
 **Release gate: `./release --dry-run`** runs `pre_built/build_scripts/test-prebuilt-binaries`,
-which does a full temp install and probes every binary before any tag is created.
+which does a full temp install, probes every binary, checks editor runtime sentinels,
+runs installed `nvim` headless against its installed runtime, and asserts portable
+Python does not shadow system `python3`/`pip3` before any tag is created.
 The Helix runtime lives at `pre_built/<platform>/runtime/helix.tar.bz2`; the installer
 extracts it to `~/.config/helix/runtime`; `runtime/tutor` is the sentinel file.
+The Vim runtime lives at `pre_built/<platform>/runtime/vim92.tar.bz2`; the installer
+extracts it to `~/.local/share/vim/vim92`; `filetype.vim` is the sentinel file.
+The Neovim runtime lives at `pre_built/<platform>/runtime/nvim.tar.bz2`; the installer
+extracts it to `~/.local/share/nvim/runtime`; `filetype.lua` is the sentinel file.
+Fresh Neovim config must start without network: if `lazy.nvim` is absent and `git`
+cannot clone it, `nvim/init.lua` disables the plugin layer cleanly instead of erroring.
 Use the Python 3.6-compatible `./strip_all_elf_binaries` after adding vendored
 binaries, libraries, parser grammars, or tar archives. It walks the repo
 outside `.git`, strips raw ELF files in place, strips ELF payloads inside

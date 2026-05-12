@@ -957,6 +957,35 @@ def install_vim_runtime(repo_dir, home):
         warn("Vim runtime archive did not install {} as expected".format(sentinel))
 
 
+def install_nvim_runtime(repo_dir, home):
+    print("Installing Neovim runtime...")
+    archive = None
+    platform_dir = select_prebuilt_platform_dir(os.path.join(repo_dir, "pre_built"))
+    if platform_dir:
+        candidate = os.path.join(platform_dir, "runtime", "nvim.tar.bz2")
+        if os.path.isfile(candidate):
+            archive = candidate
+    if archive is None:
+        skipped("Neovim runtime (no nvim.tar.bz2 in pre_built/<platform>/runtime/)",
+                "nvim will NOT have the vendored runtime at ~/.local/share/nvim/runtime")
+        record_result("Neovim runtime", "SKIP", "no bundled runtime archive")
+        return
+
+    nvim_share_dir = os.path.join(home, ".local", "share", "nvim")
+    runtime_dir = os.path.join(nvim_share_dir, "runtime")
+    ensure_dir(nvim_share_dir, "Neovim runtime")
+    remove_if_exists(runtime_dir)
+
+    with tarfile.open(archive, "r:bz2") as tf:
+        safe_extract_tar(tf, nvim_share_dir)
+
+    sentinel = os.path.join(runtime_dir, "filetype.lua")
+    if os.path.isfile(sentinel):
+        print("  Installed: {} -> {}/".format(archive, runtime_dir))
+    else:
+        warn("Neovim runtime archive did not install {} as expected".format(sentinel))
+
+
 def install_treesitter_parsers(repo_dir, home):
     platform = treesitter_platform_id()
     src_dir = os.path.join(repo_dir, "treesitter", "prebuilt", platform)
@@ -1388,6 +1417,7 @@ def main(argv):
     run_install_step("portable Python", install_portable_python, repo_dir, home)
     run_install_step("Helix runtime", install_helix_runtime, repo_dir, home)
     run_install_step("Vim runtime", install_vim_runtime, repo_dir, home)
+    run_install_step("Neovim runtime", install_nvim_runtime, repo_dir, home)
     run_install_step("nvim-treesitter vendor", install_nvim_treesitter_vendor, repo_dir, home)
     run_install_step("Tree-sitter parsers", install_treesitter_parsers, repo_dir, home)
     run_install_step("git hooks", install_git_hooks, repo_dir, args.dev)
