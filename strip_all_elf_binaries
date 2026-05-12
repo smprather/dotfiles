@@ -182,6 +182,19 @@ def strip_file(strip_bin, path):
     subprocess.check_call([strip_bin, "--strip-all", path])
 
 
+def elf_has_rpath(path):
+    """Return True if ELF has DT_RPATH or DT_RUNPATH (patchelf already ran)."""
+    try:
+        proc = subprocess.run(
+            ["/usr/bin/readelf", "-d", path],
+            stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+        )
+        out = proc.stdout.decode("utf-8", "replace")
+        return "(RPATH)" in out or "(RUNPATH)" in out
+    except OSError:
+        return False
+
+
 def bzip2_write(src_path, dest_path):
     with open(src_path, "rb") as src:
         with bz2.open(dest_path, "wb", compresslevel=9) as dest:
@@ -202,6 +215,16 @@ def process_bzip2(repo_dir, manifest, strip_bin, bz2_path, tmp_dir, dry_run, sta
 
     if not is_elf_file(payload):
         print("skip non-ELF bzip2 payload: {}".format(bz2_path))
+        stats["skipped_nonelf"] += 1
+        os.unlink(payload)
+        manifest.record_sha(rel, bz2_path)
+        return
+
+    if elf_has_rpath(payload):
+        # RPATH present means patchelf already ran; strip must precede patchelf
+        # (strip after patchelf corrupts .dynstr placement). Binary was already
+        # stripped as part of the bundle workflow — do not strip again.
+        print("skip patchelf'd payload (RPATH set): {}".format(bz2_path))
         stats["skipped_nonelf"] += 1
         os.unlink(payload)
         manifest.record_sha(rel, bz2_path)
