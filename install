@@ -7,6 +7,57 @@ if sys.version_info < (3, 6):
     print("Error: This installer requires python3 >= 3.6; found {}.".format(version), file=sys.stderr)
     raise SystemExit(1)
 
+# Vendor path: installer_vendor/ next to this script
+_VENDOR_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "installer_vendor")
+if os.path.isdir(_VENDOR_DIR):
+    sys.path.insert(0, _VENDOR_DIR)
+    if sys.version_info < (3, 7):
+        sys.path.insert(0, os.path.join(_VENDOR_DIR, "py36"))
+
+try:
+    from rich.console import Console as _RichConsole
+    from rich.table import Table as _RichTable
+    from rich.progress import (
+        Progress as _RichProgress,
+        BarColumn, TextColumn, TimeElapsedColumn, MofNCompleteColumn,
+    )
+    _RICH = True
+    _console = _RichConsole(highlight=False)
+except Exception:
+    _RICH = False
+    _console = None
+
+
+def _vprint(msg):
+    """Print only when rich is unavailable (suppresses per-file noise when rich shows progress)."""
+    if not _RICH:
+        print(msg)
+
+
+def _progress(description, total):
+    """Return a started rich Progress context for `total` items, or None when rich unavailable."""
+    if not _RICH:
+        return None, None
+    p = _RichProgress(
+        TextColumn("[cyan]{task.description}"),
+        BarColumn(),
+        MofNCompleteColumn(),
+        TimeElapsedColumn(),
+        console=_console,
+        transient=True,
+    )
+    p.start()
+    task = p.add_task(description, total=total)
+    return p, task
+
+
+def _section(title):
+    """Print a section heading. Rich: styled bold; plain: plain print."""
+    if _RICH:
+        _console.print("[bold]{}[/bold]".format(title))
+    else:
+        print(title)
+
 import argparse
 import bz2
 import contextlib
@@ -135,6 +186,7 @@ def record_result(thing, status, detail=""):
 
 
 def run_install_step(thing, func, *args, **kwargs):
+    _section("Installing {}...".format(thing))
     try:
         result = func(*args, **kwargs)
         if not any(row[0] == thing for row in INSTALL_RESULTS):
@@ -186,14 +238,14 @@ def lns(target, link_name, unsafe=False, verbose=False):
             if not unsafe:
                 eprint("Error: '{}' exists as a directory and cannot be removed (use --unsafe to override)".format(link_name))
                 sys.exit(1)
-            if verbose:
+            if verbose and not _RICH:
                 eprint("rm -rf '{}'".format(link_name))
             shutil.rmtree(link_name)
         else:
-            if verbose:
+            if verbose and not _RICH:
                 eprint("rm -f '{}'".format(link_name))
             os.unlink(link_name)
-    if verbose:
+    if verbose and not _RICH:
         eprint("ln -s {} {}".format(target, link_name))
     os.symlink(target, link_name)
 
@@ -231,7 +283,7 @@ def install_path(src, dest, links_mode):
             remove_path(dest)
         os.makedirs(dest)
         rsync_dir(src, dest)
-        print("  rsync: {}/ -> {}/".format(src, dest))
+        _vprint("  rsync: {}/ -> {}/".format(src, dest))
     else:
         if os.path.lexists(dest):
             remove_path(dest)
@@ -239,7 +291,7 @@ def install_path(src, dest, links_mode):
         if parent:
             ensure_dir(parent)
         shutil.copy2(src, dest)
-        print("  cp: {} -> {}".format(src, dest))
+        _vprint("  cp: {} -> {}".format(src, dest))
 
 
 def backup_item(src, dest):
@@ -556,7 +608,6 @@ def install_prebuilt_binaries(repo_dir, home):
     dest_bin_dir = os.path.join(home, ".local", "bin")
     dest_lib64_dir = os.path.join(home, ".local", "lib64")
 
-    print("Installing pre-built binaries...")
     if not os.path.isdir(root_dir):
         skipped("pre-built binaries (no pre_built/ directory in repo)",
                 "eza, fd, rg, tmux and other bundled tools will NOT be installed")
@@ -586,9 +637,30 @@ def install_prebuilt_binaries(repo_dir, home):
         #       always raised for scripts, so proactive path detection is essential.
         _DEFERRED_BINARIES = {"bash", "tmux"}
 
-        for bz2_file in sorted(fnmatch.filter([os.path.join(bin_dir, x) for x in os.listdir(bin_dir)], "*.bz2")):
+        _bin_bz2_files = sorted(fnmatch.filter(
+            [os.path.join(bin_dir, x) for x in os.listdir(bin_dir)], "*.bz2"))
+        _progress_ctx = (
+            _RichProgress(
+                TextColumn("[cyan]{task.description}"),
+                BarColumn(),
+                MofNCompleteColumn(),
+                TimeElapsedColumn(),
+                console=_console,
+                transient=True,
+            ) if _RICH else None
+        )
+        _progress_task = None
+        if _progress_ctx is not None:
+            _progress_ctx.start()
+            _progress_task = _progress_ctx.add_task(
+                "Installing binaries", total=len(_bin_bz2_files))
+
+        for bz2_file in _bin_bz2_files:
             dest_file = os.path.join(dest_bin_dir, os.path.basename(bz2_file[:-4]))
             name = os.path.basename(dest_file)
+
+            if _progress_ctx is not None:
+                _progress_ctx.update(_progress_task, description="  {}".format(name))
 
             if name in _DEFERRED_BINARIES:
                 pids = _exes_by_path(dest_file)
@@ -596,6 +668,8 @@ def install_prebuilt_binaries(repo_dir, home):
                     blocked_deferred.add(name)
                     warn("skipping {} — running at {} (PIDs: {})".format(
                         name, dest_file, ", ".join(str(p) for p in pids)))
+                    if _progress_ctx is not None:
+                        _progress_ctx.advance(_progress_task)
                     continue
                 # Not running from this path; attempt install normally and fall through.
 
@@ -604,11 +678,15 @@ def install_prebuilt_binaries(repo_dir, home):
                 write_bz2_atomic(bz2_file, dest_file, 0o755)
             except OSError as exc:
                 if exc.errno != errno.ETXTBSY:
+                    if _progress_ctx is not None:
+                        _progress_ctx.stop()
                     raise
                 if name in _DEFERRED_BINARIES:
                     # Proactive check passed but rename raced with a new exec; defer anyway.
                     blocked_deferred.add(name)
                     warn("could not replace {} (ETXTBSY race) — deferring".format(dest_file))
+                    if _progress_ctx is not None:
+                        _progress_ctx.advance(_progress_task)
                     continue
                 # Non-deferred binary: retry once/second for up to 10 seconds.
                 replaced = False
@@ -620,14 +698,24 @@ def install_prebuilt_binaries(repo_dir, home):
                         break
                     except OSError as retry_exc:
                         if retry_exc.errno != errno.ETXTBSY:
+                            if _progress_ctx is not None:
+                                _progress_ctx.stop()
                             raise
                 if not replaced:
                     pids = _exes_by_path(dest_file)
                     pid_str = ", ".join(str(p) for p in pids) if pids else "unknown"
                     blocked_failed[name] = pid_str
                     warn("could not replace {} after 10s (PIDs: {})".format(dest_file, pid_str))
+                    if _progress_ctx is not None:
+                        _progress_ctx.advance(_progress_task)
                     continue
-            print("  bzip2: {} -> {}".format(bz2_file, dest_file))
+            if _progress_ctx is None:
+                print("  bzip2: {} -> {}".format(bz2_file, dest_file))
+            if _progress_ctx is not None:
+                _progress_ctx.advance(_progress_task)
+
+        if _progress_ctx is not None:
+            _progress_ctx.stop()
 
     lib64_dir = os.path.join(src_dir, "lib64")
     if os.path.isdir(lib64_dir):
@@ -641,11 +729,20 @@ def install_prebuilt_binaries(repo_dir, home):
             if os.path.isfile(_glib_path):
                 os.remove(_glib_path)
                 print("  removed stale glibc lib: {}".format(_glib_path))
-        for bz2_file in sorted(fnmatch.filter([os.path.join(lib64_dir, x) for x in os.listdir(lib64_dir)], "*.bz2")):
+        _lib64_bz2_files = sorted(fnmatch.filter(
+            [os.path.join(lib64_dir, x) for x in os.listdir(lib64_dir)], "*.bz2"))
+        _lp, _lpt = _progress("Installing libraries", len(_lib64_bz2_files))
+        for bz2_file in _lib64_bz2_files:
             dest_file = os.path.join(dest_lib64_dir, os.path.basename(bz2_file[:-4]))
+            if _lp:
+                _lp.update(_lpt, description="  {}".format(os.path.basename(dest_file)))
             require_writable_parent(dest_file, "pre-built libraries")
             write_bz2_atomic(bz2_file, dest_file, 0o644)
-            print("  bzip2: {} -> {}".format(bz2_file, dest_file))
+            _vprint("  bzip2: {} -> {}".format(bz2_file, dest_file))
+            if _lp:
+                _lp.advance(_lpt)
+        if _lp:
+            _lp.stop()
 
     check_prebuilt_binary_dependencies(dest_bin_dir)
     print("  Installed: {}/ -> {}/.local/".format(src_dir, home))
@@ -659,7 +756,6 @@ def install_prebuilt_binaries(repo_dir, home):
 
 def install_portable_python(repo_dir, home):
     root_dir = os.path.join(repo_dir, "pre_built")
-    print("Installing portable Python...")
     if not os.path.isdir(root_dir):
         skipped("portable Python (no pre_built/ directory in repo)", "")
         record_result("portable Python", "SKIP", "no pre_built/ directory")
@@ -797,6 +893,20 @@ def print_install_results():
     for thing, status, detail in INSTALL_RESULTS:
         success = {"OK": "yes", "FAIL": "no", "SKIP": "skip"}.get(status, status.lower())
         rows.append((thing, success, detail or ""))
+
+    if _RICH:
+        t = _RichTable(title="Install Results", show_lines=False, highlight=False)
+        t.add_column("Area", style="cyan", no_wrap=True)
+        t.add_column("OK?", justify="center")
+        t.add_column("Detail", style="dim")
+        _status_style = {"yes": "green", "no": "bold red", "skip": "yellow"}
+        for thing, success, detail in rows:
+            style = _status_style.get(success, "")
+            t.add_row(thing, "[{}]{}[/{}]".format(style, success, style), detail)
+        _console.print()
+        _console.print(t)
+        return
+
     widths = [
         max(len("Thing"), *(len(row[0]) for row in rows)),
         max(len("Success"), *(len(row[1]) for row in rows)),
@@ -840,7 +950,6 @@ def install_fonts(repo_dir, home):
         record_result("fonts", "SKIP", "no fonts/ directory")
         return
 
-    print("Installing fonts...")
     if os.path.islink(user_fonts_dir):
         require_writable_parent(user_fonts_dir, "fonts")
         print("  Removing symlink: {}".format(user_fonts_dir))
@@ -905,7 +1014,6 @@ def install_fonts(repo_dir, home):
 
 
 def install_tldr_cache(repo_dir, home):
-    print("Installing tldr page cache...")
     archive = None
     for candidate in ("tldr-pages.tar.bz2", "tldr-pages.tar.gz"):
         path = os.path.join(repo_dir, "tldr", candidate)
@@ -950,7 +1058,6 @@ def safe_extract_tar(tf, dest_dir):
 
 
 def install_helix_runtime(repo_dir, home):
-    print("Installing Helix runtime...")
     archive = None
     platform_dir = select_prebuilt_platform_dir(os.path.join(repo_dir, "pre_built"))
     if platform_dir:
@@ -983,7 +1090,6 @@ def install_helix_runtime(repo_dir, home):
 
 
 def install_vim_runtime(repo_dir, home):
-    print("Installing Vim runtime...")
     archive = None
     platform_dir = select_prebuilt_platform_dir(os.path.join(repo_dir, "pre_built"))
     if platform_dir:
@@ -1021,7 +1127,6 @@ def install_vim_runtime(repo_dir, home):
 
 
 def install_nvim_runtime(repo_dir, home):
-    print("Installing Neovim runtime...")
     archive = None
     platform_dir = select_prebuilt_platform_dir(os.path.join(repo_dir, "pre_built"))
     if platform_dir:
@@ -1054,7 +1159,6 @@ def install_treesitter_parsers(repo_dir, home):
     src_dir = os.path.join(repo_dir, "treesitter", "prebuilt", platform)
     dest_dir = os.path.join(home, ".local", "share", "nvim", "tree-sitter-parsers")
 
-    print("Installing Tree-sitter parsers...")
     if not os.path.isdir(os.path.join(src_dir, "parser")):
         skipped("Tree-sitter parsers (no prebuilt parsers for {})".format(platform),
                 "Neovim Tree-sitter highlighting will NOT work offline")
@@ -1071,30 +1175,37 @@ def install_treesitter_parsers(repo_dir, home):
     parser_src = os.path.join(src_dir, "parser")
     parser_dest = os.path.join(dest_dir, "parser")
     ensure_dir(parser_dest, "Tree-sitter parsers")
-    for name in sorted(os.listdir(parser_src)):
+    parser_files = [n for n in sorted(os.listdir(parser_src))
+                    if os.path.isfile(os.path.join(parser_src, n))
+                    and (n.endswith(".so.bz2") or n.endswith(".so"))]
+    _p, _pt = _progress("Tree-sitter parsers", len(parser_files))
+    for name in parser_files:
         src = os.path.join(parser_src, name)
-        if not os.path.isfile(src):
-            continue
+        if _p:
+            _p.update(_pt, description="  {}".format(name.replace(".so.bz2", "").replace(".so", "")))
         if name.endswith(".so.bz2"):
             dest = os.path.join(parser_dest, name[:-4])
             require_writable_parent(dest, "Tree-sitter parsers")
             with bz2.open(src, "rb") as src_fh, open(dest, "wb") as dest_fh:
                 shutil.copyfileobj(src_fh, dest_fh)
             os.chmod(dest, 0o644)
-            print("  bzip2: {} -> {}".format(src, dest))
+            _vprint("  bzip2: {} -> {}".format(src, dest))
         elif name.endswith(".so"):
             dest = os.path.join(parser_dest, name)
             require_writable_parent(dest, "Tree-sitter parsers")
             shutil.copy2(src, dest)
             os.chmod(dest, 0o644)
-            print("  cp: {} -> {}".format(src, dest))
-    print("  Installed: {}/ -> {}/".format(src_dir, dest_dir))
+            _vprint("  cp: {} -> {}".format(src, dest))
+        if _p:
+            _p.advance(_pt)
+    if _p:
+        _p.stop()
+    print("  Installed {} parsers -> {}/".format(len(parser_files), parser_dest))
 
 
 def install_nvim_treesitter_vendor(repo_dir, home):
     src_root = os.path.join(repo_dir, "treesitter", "vendor")
     dest_root = os.path.join(home, ".local", "share", "nvim", "dotfiles", "vendor")
-    print("Installing vendored nvim-treesitter...")
     if not (os.path.isdir(os.path.join(src_root, "nvim-treesitter")) and os.path.isdir(os.path.join(src_root, "treesitter-parser-registry"))):
         skipped("vendored nvim-treesitter (missing from treesitter/vendor/)",
                 "Neovim Tree-sitter plugin will NOT be available offline")
@@ -1394,7 +1505,6 @@ def glob_paths(path):
 
 
 def install_git_hooks(repo_dir, dev_mode):
-    print("Installing git hooks...")
     if not dev_mode:
         print("  Skipped (not in --dev mode; run ./install --dev to install repo development hooks)")
         record_result("git hooks", "SKIP", "not in --dev mode")
