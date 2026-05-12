@@ -64,11 +64,18 @@ bash/
   user/                     - Personal overrides (user-created)
 
 nvim/
-  init.lua                  - Neovim config (Kickstart.nvim based, ~64KB)
+  init.lua                  - Thin layer dispatcher (loads global→corp→site→project→user)
   lazy-lock.json            - Locked plugin versions
   lsp/                      - LSP server configs
-  lua/kickstart/plugins/    - Kickstart plugin configs
-  lua/custom/plugins/init.lua  - User plugin customizations
+  lua/global/               - Global layer (bundled, repo-managed)
+    config.lua              - vim.g.cfg_* defaults (colorscheme, feature toggles, dpc, swap_dir)
+    init.lua                - Options, keymaps, autocmds, LSP setup
+    plugins/                - One .lua file per plugin (lazy.nvim specs)
+    utils.lua               - Shared helpers (buf_smaller_than)
+  lua/corp/                 - Corporation-level overrides (user-created, not bundled)
+  lua/site/                 - Site-level overrides (user-created)
+  lua/project/              - Project-level overrides (user-created)
+  lua/user/                 - Personal overrides (user-created)
   after/ftplugin/           - Filetype overrides (tcl, yaml)
 
 treesitter/
@@ -139,7 +146,7 @@ tests/install_linux_tmp_home - Runs Linux installer against a temp HOME for fres
 **Production mode** (default, no flags): Copies files from repo — no symlinks to the repo remain. Re-run `./install` after repo changes to update.
 The Linux installer resolves the repo from the `install` script path, so it can be run from any current working directory. `./install` is the Python 3.6-compatible installer and checks the Python version before running.
 
-**Dev mode** (`--dev`): Directory-level symlinks for nvim/vim/tmux/starship/editorconfig (e.g. `~/.config/nvim` → `repo/nvim`). For bash, symlinks the individual repo-managed files (`global/`, `functions.sh`, `bashrc`) while leaving user layer dirs (`corp/`, `site/`, etc.) in place as real directories. Skips backups.
+**Dev mode** (`--dev`): File-level symlinks for nvim global layer and whole-dir symlinks for vim/tmux/starship/editorconfig. Nvim: `~/.config/nvim/` is a real directory containing `init.lua → repo/nvim/init.lua`, `lazy-lock.json → repo/nvim/lazy-lock.json`, `lsp/ → repo/nvim/lsp/`, `after/ → repo/nvim/after/`, and `lua/global/ → repo/nvim/lua/global/`; user layer dirs (`lua/corp/`, etc.) are preserved as real directories. For bash, symlinks the individual repo-managed files (`global/`, `functions.sh`, `bashrc`) while leaving user layer dirs in place. Skips backups.
 
 **Destination mode** (`--dest-dir <dir>`): Installs into an alternate root instead of `$HOME`. Used by tests and useful for staging installs.
 
@@ -361,7 +368,7 @@ Existing `%USERPROFILE%\dotkeys_config.toml` files that still use legacy plugin 
 
 
 
-Kickstart.nvim base. Plugin manager: Lazy.nvim (versions locked in `lazy-lock.json`). Key plugins: blink.cmp, snacks.nvim, gitsigns.nvim, conform.nvim, nvim-lint, nvim-treesitter, lualine.nvim, tokyonight.nvim.
+**Layer architecture** (analogous to bash `global→corp→site→project→user`): `nvim/init.lua` is a thin dispatcher that sources `config.lua` per layer (Phase 1), bootstraps lazy.nvim (Phase 2), collects plugin specs from each layer's `plugins/` dir via `{ import = "LAYER.plugins" }` (Phase 3), then sources `init.lua` per layer (Phase 4). `vim.g.cfg_*` variables set in `global/config.lua` are the defaults; later layers override them. Plugin manager: Lazy.nvim (versions locked in `lazy-lock.json`). Key plugins: blink.cmp, snacks.nvim, gitsigns.nvim, conform.nvim, nvim-lint, nvim-treesitter, tokyonight.nvim. `vim.g.cfg_dpc` guards update-checker and notifications on offline machines. `vim.g.dotfiles_plugins_enabled` is false when lazy.nvim bootstrap fails offline — core editor still starts cleanly.
 
 Snacks dashboard provides the no-argument `nvim` startup screen (`filetype=snacks_dashboard`). `mini.trailspace` highlights trailing whitespace with window-local matches, so dashboard cleanup must disable `vim.b.minitrailspace_disable`, turn off local `list`, and delete existing `MiniTrailspace` matches on dashboard open/update.
 

@@ -40,6 +40,7 @@ FONT_EXCLUDES = (
 
 BASH_LAYERS = ("corp", "site", "project", "user")
 BASH_ENTRYPOINTS = (".bashrc", ".bash_profile", ".bash_login", ".profile")
+NVIM_LAYERS = ("corp", "site", "project", "user")
 
 
 def eprint(*args):
@@ -1215,10 +1216,78 @@ def backup_existing(home, repo_dir):
     return backup_dir
 
 
+def _nvim_save_user_layers(nvim_config):
+    """Move user layer dirs out of nvim_config to tmp dirs for safe reinstall. Returns {layer: (tmpdir, layer_path)}."""
+    saved = {}
+    if not os.path.isdir(nvim_config) or os.path.islink(nvim_config):
+        return saved
+    lua_dir = os.path.join(nvim_config, "lua")
+    for layer in NVIM_LAYERS:
+        layer_path = os.path.join(lua_dir, layer)
+        if os.path.isdir(layer_path) and not os.path.islink(layer_path):
+            tmp = tempfile.mkdtemp(prefix="dotfiles-nvim-layer-")
+            tmp_layer = os.path.join(tmp, layer)
+            shutil.move(layer_path, tmp_layer)
+            saved[layer] = (tmp, tmp_layer)
+    return saved
+
+
+def _nvim_restore_user_layers(saved, nvim_config):
+    """Restore user layer dirs saved by _nvim_save_user_layers; create empty dirs for any not saved."""
+    lua_dir = os.path.join(nvim_config, "lua")
+    for layer in NVIM_LAYERS:
+        layer_dest = os.path.join(lua_dir, layer)
+        if layer in saved:
+            tmp_dir, tmp_layer = saved[layer]
+            if os.path.isdir(tmp_layer):
+                shutil.move(tmp_layer, layer_dest)
+            try:
+                os.rmdir(tmp_dir)
+            except OSError:
+                pass
+        else:
+            ensure_dir(layer_dest, "Neovim {} layer".format(layer))
+
+
+def _nvim_migration_notice(nvim_config):
+    """Warn if old lua/custom/plugins/init.lua has non-trivial content; otherwise remove it."""
+    custom = os.path.join(nvim_config, "lua", "custom")
+    if not os.path.isdir(custom):
+        return
+    custom_init = os.path.join(custom, "plugins", "init.lua")
+    if os.path.isfile(custom_init):
+        try:
+            with open(custom_init, "r") as f:
+                content = f.read().strip()
+            if content and content != "return {}":
+                warn("lua/custom/plugins/init.lua has user content — migrate it to "
+                     "~/.config/nvim/lua/user/plugins/ (the new user layer). "
+                     "Old path preserved: {}".format(custom_init))
+                return
+        except (IOError, OSError):
+            pass
+    shutil.rmtree(custom, ignore_errors=True)
+
+
 def install_dev_mode(repo_dir, home):
     config_dir = os.path.join(home, ".config")
     ensure_dir(config_dir, "dotfiles")
-    for name in ("nvim", "vim", "tmux", "starship", "editorconfig"):
+
+    # nvim: file-level symlinks for global layer; user layer dirs are real dirs preserved across installs
+    nvim_src    = os.path.join(repo_dir, "nvim")
+    nvim_config = os.path.join(config_dir, "nvim")
+    saved_layers = _nvim_save_user_layers(nvim_config)
+    remove_if_exists(nvim_config)
+    ensure_dir(os.path.join(nvim_config, "lua"), "Neovim config")
+    lns(os.path.join(nvim_src, "init.lua"),         os.path.join(nvim_config, "init.lua"),         verbose=True)
+    lns(os.path.join(nvim_src, "lazy-lock.json"),   os.path.join(nvim_config, "lazy-lock.json"),   verbose=True)
+    for name in ("lsp", "after"):
+        lns(os.path.join(nvim_src, name), os.path.join(nvim_config, name), verbose=True)
+    lns(os.path.join(nvim_src, "lua", "global"), os.path.join(nvim_config, "lua", "global"), verbose=True)
+    _nvim_restore_user_layers(saved_layers, nvim_config)
+    _nvim_migration_notice(nvim_config)
+
+    for name in ("vim", "tmux", "starship", "editorconfig"):
         remove_if_exists(os.path.join(config_dir, name))
         lns(os.path.join(repo_dir, name), os.path.join(config_dir, name), verbose=True)
 
@@ -1240,21 +1309,24 @@ def install_copy_mode(repo_dir, home):
         remove_if_exists(os.path.join(home, entrypoint))
     install_bash(repo_dir, home, links_mode=False)
 
+    nvim_src    = os.path.join(repo_dir, "nvim")
     nvim_config = os.path.join(home, ".config", "nvim")
+    saved_layers = _nvim_save_user_layers(nvim_config)
     remove_if_exists(nvim_config)
-    for sub in ("after/lsp", "after/ftplugin", "lsp", "lua/custom/plugins"):
-        ensure_dir(os.path.join(nvim_config, sub), "Neovim config")
-    for rel in ("lua/custom/plugins/init.lua", "lua/kickstart", "doc", "lazy-lock.json", "README.md", "LICENSE.md", "init.lua"):
-        install_path(os.path.join(repo_dir, "nvim", rel), os.path.join(nvim_config, rel), False)
-    for src in sorted(glob_paths(os.path.join(repo_dir, "nvim", "lsp"))):
+    ensure_dir(os.path.join(nvim_config, "after", "lsp"),      "Neovim config")
+    ensure_dir(os.path.join(nvim_config, "after", "ftplugin"), "Neovim config")
+    ensure_dir(os.path.join(nvim_config, "lsp"),               "Neovim config")
+    for rel in ("init.lua", "lazy-lock.json"):
+        install_path(os.path.join(nvim_src, rel), os.path.join(nvim_config, rel), False)
+    install_path(os.path.join(nvim_src, "lua", "global"), os.path.join(nvim_config, "lua", "global"), False)
+    for src in sorted(glob_paths(os.path.join(nvim_src, "lsp"))):
         install_path(src, os.path.join(nvim_config, "lsp", os.path.basename(src)), False)
-    for src in sorted(glob_paths(os.path.join(repo_dir, "nvim", "after", "ftplugin"))):
+    for src in sorted(glob_paths(os.path.join(nvim_src, "after", "ftplugin"))):
         install_path(src, os.path.join(nvim_config, "after", "ftplugin", os.path.basename(src)), False)
-    for src in sorted(glob_paths(os.path.join(repo_dir, "nvim", "after", "lsp"))):
+    for src in sorted(glob_paths(os.path.join(nvim_src, "after", "lsp"))):
         install_path(src, os.path.join(nvim_config, "after", "lsp", os.path.basename(src)), False)
-    plugins_dir = os.path.join(repo_dir, "nvim", "lua", "kickstart", "plugins")
-    for src in sorted(glob_paths(plugins_dir)):
-        install_path(src, os.path.join(nvim_config, "lua", "kickstart", "plugins", os.path.basename(src)), False)
+    _nvim_restore_user_layers(saved_layers, nvim_config)
+    _nvim_migration_notice(nvim_config)
 
     remove_if_exists(os.path.join(home, ".vimrc"))
     remove_if_exists(os.path.join(home, ".vim"))
