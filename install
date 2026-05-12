@@ -21,6 +21,7 @@ import stat
 import subprocess
 import tarfile
 import tempfile
+import time
 import warnings
 import zipfile
 
@@ -266,6 +267,25 @@ _RSYNC = _find_tool("/usr/bin/rsync")
 _CP = _find_tool("/usr/bin/cp")
 
 
+def _exes_by_path(path):
+    """Return list of PIDs whose /proc/<pid>/exe resolves to path."""
+    pids = []
+    try:
+        for entry in os.listdir("/proc"):
+            if not entry.isdigit():
+                continue
+            try:
+                exe = os.readlink("/proc/{}/exe".format(entry))
+            except OSError:
+                continue
+            # Kernel appends " (deleted)" when the inode was replaced after exec.
+            if exe == path or exe == path + " (deleted)":
+                pids.append(int(entry))
+    except OSError:
+        pass
+    return pids
+
+
 def uname(flag):
     return output([_UNAME, flag]).strip()
 
@@ -487,7 +507,7 @@ def stage_pending_ops(blocked_binaries, bin_dir, dest_bin_dir, repo_dir):
                 "dest": dest,
                 "staged": staged,
                 "mode": 0o755,
-                "block": {"type": "pgrep_absent", "name": name},
+                "block": {"type": "proc_exe_absent", "path": dest},
             }
         _write_pending_state(existing, now)
 
@@ -550,35 +570,62 @@ def install_prebuilt_binaries(repo_dir, home):
         record_result("pre-built binaries", "SKIP", "no matching platform")
         return set()
 
-    blocked_binaries = set()
+    # blocked_deferred: bash/tmux detected running by exe path → staged for daemon.
+    # blocked_failed: other binaries still busy after 10s retry → name → "PID,…" string.
+    blocked_deferred = set()
+    blocked_failed = {}
     bin_dir = os.path.join(src_dir, "bin")
     if os.path.isdir(bin_dir):
         ensure_dir(dest_bin_dir, "pre-built binaries")
-        # Binaries whose server/client must be the same version: replacing while the server
-        # is running causes protocol mismatch even when the atomic rename succeeds (e.g. on NFS
-        # the old server keeps its inode; new clients exec the new binary and fail to connect).
-        _SERVER_BINARIES = {"tmux"}
+        # Long-running session binaries: detected by exe path (not name), deferred via
+        # the pending-ops daemon so the user never has to manually re-run the installer.
+        # tmux: server/client must be same version; NFS atomic rename still leaves old
+        #       server running with the old inode while new clients exec the new binary.
+        # bash: the running shell itself holds the executable mapped; ETXTBSY is not
+        #       always raised for scripts, so proactive path detection is essential.
+        _DEFERRED_BINARIES = {"bash", "tmux"}
 
         for bz2_file in sorted(fnmatch.filter([os.path.join(bin_dir, x) for x in os.listdir(bin_dir)], "*.bz2")):
             dest_file = os.path.join(dest_bin_dir, os.path.basename(bz2_file[:-4]))
             name = os.path.basename(dest_file)
-            if name in _SERVER_BINARIES and _PGREP:
-                proc = subprocess.run([_PGREP, "-x", name],
-                                      stdout=subprocess.PIPE, stderr=subprocess.PIPE)
-                if proc.returncode == 0:
-                    blocked_binaries.add(name)
-                    warn("skipping {} update — {} server is running; exit all {} sessions "
-                         "and re-run the installer".format(name, name, name))
+
+            if name in _DEFERRED_BINARIES:
+                pids = _exes_by_path(dest_file)
+                if pids:
+                    blocked_deferred.add(name)
+                    warn("skipping {} — running at {} (PIDs: {})".format(
+                        name, dest_file, ", ".join(str(p) for p in pids)))
                     continue
+                # Not running from this path; attempt install normally and fall through.
+
             try:
                 require_writable_parent(dest_file, "pre-built binaries")
                 write_bz2_atomic(bz2_file, dest_file, 0o755)
             except OSError as exc:
-                if exc.errno == errno.ETXTBSY:
-                    blocked_binaries.add(name)
-                    warn("could not replace {} because it is currently running".format(dest_file))
+                if exc.errno != errno.ETXTBSY:
+                    raise
+                if name in _DEFERRED_BINARIES:
+                    # Proactive check passed but rename raced with a new exec; defer anyway.
+                    blocked_deferred.add(name)
+                    warn("could not replace {} (ETXTBSY race) — deferring".format(dest_file))
                     continue
-                raise
+                # Non-deferred binary: retry once/second for up to 10 seconds.
+                replaced = False
+                for _attempt in range(10):
+                    time.sleep(1)
+                    try:
+                        write_bz2_atomic(bz2_file, dest_file, 0o755)
+                        replaced = True
+                        break
+                    except OSError as retry_exc:
+                        if retry_exc.errno != errno.ETXTBSY:
+                            raise
+                if not replaced:
+                    pids = _exes_by_path(dest_file)
+                    pid_str = ", ".join(str(p) for p in pids) if pids else "unknown"
+                    blocked_failed[name] = pid_str
+                    warn("could not replace {} after 10s (PIDs: {})".format(dest_file, pid_str))
+                    continue
             print("  bzip2: {} -> {}".format(bz2_file, dest_file))
 
     lib64_dir = os.path.join(src_dir, "lib64")
@@ -601,10 +648,12 @@ def install_prebuilt_binaries(repo_dir, home):
 
     check_prebuilt_binary_dependencies(dest_bin_dir)
     print("  Installed: {}/ -> {}/.local/".format(src_dir, home))
-    if blocked_binaries:
-        stage_pending_ops(blocked_binaries, bin_dir, dest_bin_dir, repo_dir)
-        record_result("pre-built binaries", "FAIL", "busy: {}".format(", ".join(sorted(blocked_binaries))))
-    return blocked_binaries
+    blocked_all = blocked_deferred | set(blocked_failed.keys())
+    if blocked_deferred:
+        stage_pending_ops(blocked_deferred, bin_dir, dest_bin_dir, repo_dir)
+    if blocked_all:
+        record_result("pre-built binaries", "FAIL", "busy: {}".format(", ".join(sorted(blocked_all))))
+    return blocked_deferred, blocked_failed
 
 
 def install_portable_python(repo_dir, home):
@@ -704,18 +753,31 @@ def check_prebuilt_binary_dependencies(dest_bin_dir):
         print("  Shared library check OK")
 
 
-def add_prebuilt_binary_retry_notice(blocked_binaries):
-    if not blocked_binaries:
-        return
-    names = sorted(blocked_binaries)
-    FINAL_NOTICES.append(
-        "Pre-built binary install incomplete: could not replace {} because {} currently running. "
-        "Exit all running instances of {} and re-run the installer to get the dotfiles version.".format(
-            ", ".join(names),
-            "it is" if len(names) == 1 else "they are",
-            names[0] if len(names) == 1 else "these binaries",
+def add_prebuilt_binary_retry_notice(blocked_deferred, blocked_failed):
+    # Per-tool deferred messages — shown even when the daemon was already running,
+    # because the user needs to know what will happen and when.
+    if "bash" in blocked_deferred:
+        FINAL_NOTICES.append(
+            "bash: a newer version is staged and will install automatically the next time "
+            "you log out of all open login sessions."
         )
-    )
+    if "tmux" in blocked_deferred:
+        FINAL_NOTICES.append(
+            "tmux: a newer version is staged and will install automatically the next time "
+            "all running tmux servers shut down."
+        )
+    other_deferred = blocked_deferred - {"bash", "tmux"}
+    if other_deferred:
+        FINAL_NOTICES.append(
+            "Deferred (pending daemon): {}. Will install automatically when those processes exit.".format(
+                ", ".join(sorted(other_deferred)))
+        )
+    for name, pid_str in sorted(blocked_failed.items()):
+        FINAL_NOTICES.append(
+            "{} was not installed: binary held by running process(es) {} "
+            "— kill or wait for them to exit, then re-run the installer.".format(
+                name, pid_str)
+        )
 
 
 def print_final_notices():
@@ -1412,8 +1474,9 @@ def main(argv):
     else:
         run_install_step("tldr cache", install_tldr_cache, repo_dir, home)
 
-    blocked_prebuilt_binaries = run_install_step("pre-built binaries", install_prebuilt_binaries, repo_dir, home) or set()
-    add_prebuilt_binary_retry_notice(blocked_prebuilt_binaries)
+    _prebuilt_result = run_install_step("pre-built binaries", install_prebuilt_binaries, repo_dir, home)
+    blocked_deferred, blocked_failed = _prebuilt_result if isinstance(_prebuilt_result, tuple) else (set(), {})
+    add_prebuilt_binary_retry_notice(blocked_deferred, blocked_failed)
     run_install_step("portable Python", install_portable_python, repo_dir, home)
     run_install_step("Helix runtime", install_helix_runtime, repo_dir, home)
     run_install_step("Vim runtime", install_vim_runtime, repo_dir, home)
