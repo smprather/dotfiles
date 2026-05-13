@@ -29,6 +29,11 @@ Dotfiles for **Electrical Engineering work environments**: multi-platform (RedHa
 # Run an explicit corp/site/user installer after global install steps
 ./install --post-install-hook ~/corp-dotfiles/install.sh
 
+# Tool selection (tool names and groupings defined in pre_built/tools.json)
+./install --add-tools octave          # add optional tool(s) to defaults
+./install --skip-tools gnuplot,kak    # remove tool(s) from defaults
+./install --tools vim,nvim,rg,tmux    # install exactly this set
+
 # Restore from backup
 ./install --restore-backup dotfiles_backups/backup.1
 

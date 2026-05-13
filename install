@@ -93,6 +93,100 @@ BASH_LAYERS = ("corp", "site", "project", "user")
 BASH_ENTRYPOINTS = (".bashrc", ".bash_profile", ".bash_login", ".profile")
 NVIM_LAYERS = ("corp", "site", "project", "user")
 
+def _load_tool_registry(repo_dir):
+    """Load pre_built/tools.json.  Returns {} if missing or unreadable.
+
+    tools.json maps logical tool names to their owned files:
+      bins     — bin/*.bz2 stems (without .bz2) that belong to this tool.
+      libs     — lib64/*.bz2 stems exclusively owned by this tool; omit or
+                 leave empty for libs shared by multiple tools (those are
+                 always installed regardless of selection).
+      optional — if true the tool is not installed by default; user must
+                 opt in with --add-tools.
+    Files not claimed by any tool are unregistered and always installed.
+    """
+    path = os.path.join(repo_dir, "pre_built", "tools.json")
+    if not os.path.isfile(path):
+        return {}
+    try:
+        with open(path) as _f:
+            return json.load(_f)
+    except (ValueError, IOError) as _e:
+        warn("could not read pre_built/tools.json: {}; tool selection disabled".format(_e))
+        return {}
+
+
+def resolve_tool_selection(args, registry):
+    """Return a frozenset of tool names to install, based on CLI flags.
+
+    --tools t1,t2     Install exactly this set; ignores --add-tools/--skip-tools.
+    --add-tools t1    Add optional (or extra) tools to the default set.
+    --skip-tools t1   Remove tools from the default set.
+
+    When registry is empty all bin/lib files are unmanaged and always installed.
+    Unknown names produce a warning (lenient for forward-compatibility).
+    """
+    if not registry:
+        return None  # sentinel: no registry → install everything
+
+    known = set(registry)
+
+    def _parse_list(raw):
+        names = [t.strip() for t in raw.split(",") if t.strip()]
+        for n in names:
+            if n not in known:
+                warn("unknown tool name '{}' (ignored); known tools: {}".format(
+                    n, ", ".join(sorted(known))))
+        return set(names) & known
+
+    if args.tools:
+        if args.add_tools or args.skip_tools:
+            warn("--tools overrides --add-tools / --skip-tools; those flags are ignored")
+        return frozenset(_parse_list(args.tools))
+
+    selected = {n for n, t in registry.items() if not t.get("optional")}
+    if args.add_tools:
+        selected |= _parse_list(args.add_tools)
+    if args.skip_tools:
+        selected -= _parse_list(args.skip_tools)
+    return frozenset(selected)
+
+
+def _tool_bin_sets(selected_tools, registry):
+    """Return (allowed_bins, registered_bins) for install-time filtering.
+
+    allowed_bins    — bin stems that should be installed.
+    registered_bins — every bin stem claimed by any tool entry.
+
+    Bins that appear in no tool entry are unregistered and always installed.
+    When selected_tools is None the registry is not consulted (install all).
+    """
+    registered_bins = set()
+    allowed_bins = set()
+    for name, info in registry.items():
+        bins = info.get("bins", [])
+        registered_bins.update(bins)
+        if selected_tools is None or name in selected_tools:
+            allowed_bins.update(bins)
+    return allowed_bins, registered_bins
+
+
+def _tool_lib_sets(selected_tools, registry):
+    """Return (allowed_libs, registered_libs) for install-time filtering.
+
+    Only lib64 stems in a tool's "libs" entry are managed; everything else
+    is always installed (shared deps with no single declared owner).
+    When selected_tools is None the registry is not consulted (install all).
+    """
+    registered_libs = set()
+    allowed_libs = set()
+    for name, info in registry.items():
+        libs = info.get("libs", [])
+        registered_libs.update(libs)
+        if selected_tools is None or name in selected_tools:
+            allowed_libs.update(libs)
+    return allowed_libs, registered_libs
+
 
 def eprint(*args):
     print(*args, file=sys.stderr)
@@ -603,7 +697,7 @@ def stage_pending_ops(blocked_binaries, bin_dir, dest_bin_dir, repo_dir):
         warn("could not spawn pending-ops daemon: {}".format(exc))
 
 
-def install_prebuilt_binaries(repo_dir, home):
+def install_prebuilt_binaries(repo_dir, home, selected_tools=None):
     root_dir = os.path.join(repo_dir, "pre_built")
     dest_bin_dir = os.path.join(home, ".local", "bin")
     dest_lib64_dir = os.path.join(home, ".local", "lib64")
@@ -626,6 +720,18 @@ def install_prebuilt_binaries(repo_dir, home):
     # blocked_failed: other binaries still busy after 10s retry → name → "PID,…" string.
     blocked_deferred = set()
     blocked_failed = {}
+
+    _registry = _load_tool_registry(repo_dir)
+    _allowed_bins, _registered_bins = _tool_bin_sets(selected_tools, _registry)
+    _allowed_libs, _registered_libs = _tool_lib_sets(selected_tools, _registry)
+
+    def _bin_selected(stem):
+        # Unregistered stems (not claimed by any tool) are always installed.
+        return stem not in _registered_bins or stem in _allowed_bins
+
+    def _lib_selected(stem):
+        return stem not in _registered_libs or stem in _allowed_libs
+
     bin_dir = os.path.join(src_dir, "bin")
     if os.path.isdir(bin_dir):
         ensure_dir(dest_bin_dir, "pre-built binaries")
@@ -637,8 +743,10 @@ def install_prebuilt_binaries(repo_dir, home):
         #       always raised for scripts, so proactive path detection is essential.
         _DEFERRED_BINARIES = {"bash", "tmux"}
 
-        _bin_bz2_files = sorted(fnmatch.filter(
-            [os.path.join(bin_dir, x) for x in os.listdir(bin_dir)], "*.bz2"))
+        _bin_bz2_files = sorted(
+            f for f in fnmatch.filter(
+                [os.path.join(bin_dir, x) for x in os.listdir(bin_dir)], "*.bz2")
+            if _bin_selected(os.path.basename(f)[:-4]))
         _progress_ctx = (
             _RichProgress(
                 TextColumn("[cyan]{task.description}"),
@@ -729,8 +837,10 @@ def install_prebuilt_binaries(repo_dir, home):
             if os.path.isfile(_glib_path):
                 os.remove(_glib_path)
                 print("  removed stale glibc lib: {}".format(_glib_path))
-        _lib64_bz2_files = sorted(fnmatch.filter(
-            [os.path.join(lib64_dir, x) for x in os.listdir(lib64_dir)], "*.bz2"))
+        _lib64_bz2_files = sorted(
+            f for f in fnmatch.filter(
+                [os.path.join(lib64_dir, x) for x in os.listdir(lib64_dir)], "*.bz2")
+            if _lib_selected(os.path.basename(f)[:-4]))
         _lp, _lpt = _progress("Installing libraries", len(_lib64_bz2_files))
         for bz2_file in _lib64_bz2_files:
             dest_file = os.path.join(dest_lib64_dir, os.path.basename(bz2_file[:-4]))
@@ -1568,13 +1678,22 @@ def parse_args(argv):
     parser.add_argument("--restore-backup")
     parser.add_argument("--verbose", action="store_true")
     parser.add_argument("--help", "-h", action="store_true")
+    parser.add_argument("--tools", default=None, metavar="TOOL,…",
+                        help="Install exactly these tools (comma-separated); overrides defaults.")
+    parser.add_argument("--add-tools", default=None, dest="add_tools", metavar="TOOL,…",
+                        help="Add optional tools to the default install set.")
+    parser.add_argument("--skip-tools", default=None, dest="skip_tools", metavar="TOOL,…",
+                        help="Remove tools from the default install set.")
     args, unknown = parser.parse_known_args(argv)
     if args.help:
         print_help()
         sys.exit(0)
     if unknown:
         eprint("Unknown option: {}".format(unknown[0]))
-        eprint("Usage: ./install [--dev] [--dest-dir DIR] [--no-backup] [--no-fonts] [--no-tldr-cache] [--post-install-hook <script>] [--verbose] [--restore-backup <dir>]")
+        eprint("Usage: ./install [--dev] [--dest-dir DIR] [--no-backup] [--no-fonts] "
+               "[--no-tldr-cache] [--post-install-hook <script>] [--verbose] "
+               "[--tools TOOL,…] [--add-tools TOOL,…] [--skip-tools TOOL,…] "
+               "[--restore-backup <dir>]")
         eprint("Run './install --help' for details.")
         sys.exit(1)
     return args
@@ -1606,6 +1725,17 @@ Options:
                              Can be given multiple times; hooks run in argument order.
                              Hooks are executed directly and receive DOTFILES_* env vars.
 
+  --tools TOOL,…             Install exactly these pre-built tools (comma-separated).
+                             Overrides --add-tools and --skip-tools.
+                             Tool names and groupings are defined in pre_built/tools.json.
+                             Example: ./install --tools vim,nvim,rg,tmux
+
+  --add-tools TOOL,…         Add optional tools to the default install set.
+                             Example: ./install --add-tools octave
+
+  --skip-tools TOOL,…        Remove tools from the default install set.
+                             Example: ./install --skip-tools gnuplot,kak
+
   --restore-backup <dir>     Restore dotfiles from a previous backup directory.
                              Example: ./install --restore-backup dotfiles_backups/backup.1
 
@@ -1620,6 +1750,8 @@ def main(argv):
     args = parse_args(argv)
     repo_dir = os.path.dirname(os.path.abspath(__file__))
     home = os.path.abspath(args.dest_dir) if args.dest_dir else os.path.expanduser("~")
+    _tool_registry = _load_tool_registry(repo_dir)
+    selected_tools = resolve_tool_selection(args, _tool_registry)
 
     if args.restore_backup:
         restore_backup(args.restore_backup, home)
@@ -1672,7 +1804,7 @@ def main(argv):
     else:
         run_install_step("tldr cache", install_tldr_cache, repo_dir, home)
 
-    _prebuilt_result = run_install_step("pre-built binaries", install_prebuilt_binaries, repo_dir, home)
+    _prebuilt_result = run_install_step("pre-built binaries", install_prebuilt_binaries, repo_dir, home, selected_tools)
     blocked_deferred, blocked_failed = _prebuilt_result if isinstance(_prebuilt_result, tuple) else (set(), {})
     add_prebuilt_binary_retry_notice(blocked_deferred, blocked_failed)
     run_install_step("portable Python", install_portable_python, repo_dir, home)

@@ -145,7 +145,30 @@ lambda binary: (lambda m: re.sub(r" patchlevel ", ".", m.group(1)) if m else Non
     re.search(r"toolname ([0-9]+\.[0-9]+ patchlevel [0-9]+)", _run([binary, "--version"])))
 ```
 
-### 7. Verify and commit
+### 7. Register in tools.json
+
+Add an entry to `pre_built/tools.json`:
+
+```json
+"mytool": {
+  "bins": ["mytool"],
+  "libs": ["libnewdep.so.3"]
+}
+```
+
+Key rules:
+- `bins` — every `bin/*.bz2` stem this build produces (e.g. `"vim"` lists `["vim", "vim.bin"]`,
+  `"xterm"` lists `["xterm", "resize"]`).
+- `libs` — **only** lib64 stems that are *exclusively* owned by this tool (not needed by any
+  other bundled tool). Shared deps (libX11, libncurses, etc.) should be omitted — they are
+  always installed regardless of tool selection.
+- `"optional": true` — if the tool should NOT be installed by default (e.g. large optional tools
+  like `octave`). Users opt in with `./install --add-tools mytool`.
+
+If a tool produces no lib64 files and installs a single binary, the entry can be just:
+`"mytool": {"bins": ["mytool"]}`.
+
+### 8. Verify and commit
 
 ```bash
 # Smoke-test decompressed binary
@@ -159,6 +182,7 @@ pre_built/build_scripts/farm-versions --format text
 git add pre_built/el8.x86_64.glibc2p28/bin/mytool.bz2 \
         pre_built/el8.x86_64.glibc2p28/lib64/libnew*.bz2 \
         pre_built/build_scripts/farm-versions \
+        pre_built/tools.json \
         .strip-manifest
 git commit
 ```
