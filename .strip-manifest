@@ -23,6 +23,7 @@ sha256  c2a48210651d17f2a0b0199b1b79be437352281d485bed86b19ebcdaf6391960  pre_bu
 sha256  d0c8d6dfa510955b3672b3dde155b8c3b3b22e581320c7f853efcce60406fa5c  pre_built/el8.x86_64.glibc2p28/bin/kak.bz2
 sha256  fad89737361c58bfca5cd98d24c7eb1bbc3be472d0c0bf6438a2f0c792234ecc  pre_built/el8.x86_64.glibc2p28/bin/micro.bz2
 sha256  dbaa6876ed2d09b6b6dd5fc0ff2fb86e96e13454c8ed872330a38c30e90e2acf  pre_built/el8.x86_64.glibc2p28/bin/nvim.bz2
+sha256  eacb73a3e57af3b2d3399f3785aab8305fcd1fa743bc08d7500ac15f19f3577d  pre_built/el8.x86_64.glibc2p28/bin/octave.bz2
 sha256  32fefa25d1f8378cfd840f49ca2b9a16a8b7c44a4f7ecbd0a13d6fc1496308a5  pre_built/el8.x86_64.glibc2p28/bin/patchelf.bz2
 sha256  9f067987f751cef72283d71f05c319153098ffe27443072d6689dd2032d1a2d1  pre_built/el8.x86_64.glibc2p28/bin/pigz.bz2
 sha256  370a8103dba02819ff13b56dd3457a4e26332228fccdff1fdd3e49f456460204  pre_built/el8.x86_64.glibc2p28/bin/resize.bz2
@@ -66,6 +67,9 @@ sha256  b019d5a39952a2d0e1e14e861e76e5c48cd91bfcde77eb00d2943d5ecfc09d37  pre_bu
 sha256  b019d5a39952a2d0e1e14e861e76e5c48cd91bfcde77eb00d2943d5ecfc09d37  pre_built/el8.x86_64.glibc2p28/lib64/libjq.so.1.bz2
 sha256  b019d5a39952a2d0e1e14e861e76e5c48cd91bfcde77eb00d2943d5ecfc09d37  pre_built/el8.x86_64.glibc2p28/lib64/libjq.so.bz2
 sha256  18049d34d4322ddeee3f76ec571248601e8806d2f4d37de348da2f9d2bcf69ad  pre_built/el8.x86_64.glibc2p28/lib64/libncurses.so.6.bz2
+sha256  f9d6ea6d545ec44647f946ed24bba902fbf14e6524a00618662b44a63d4c89db  pre_built/el8.x86_64.glibc2p28/lib64/liboctave.so.13.bz2
+sha256  f9d6ea6d545ec44647f946ed24bba902fbf14e6524a00618662b44a63d4c89db  pre_built/el8.x86_64.glibc2p28/lib64/liboctinterp.so.15.bz2
+sha256  f9d6ea6d545ec44647f946ed24bba902fbf14e6524a00618662b44a63d4c89db  pre_built/el8.x86_64.glibc2p28/lib64/liboctmex.so.1.bz2
 sha256  f7368c7c919bdad61d0fea3f865dd5404f9961a14914b51ab46253202132c22e  pre_built/el8.x86_64.glibc2p28/lib64/libonig.so.5.bz2
 sha256  6986b61db9683089da53add7b18e2f535ed5693589c8092b780e6065424fe663  pre_built/el8.x86_64.glibc2p28/lib64/libpng16.so.16.bz2
 sha256  08b32218e03fc6b2079e226639ce3454e0ec5c76e6c48a55697f15f7577520a1  pre_built/el8.x86_64.glibc2p28/lib64/libreadline.so.7.bz2
