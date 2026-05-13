@@ -110,7 +110,9 @@ def _load_tool_registry(repo_dir):
         return {}
     try:
         with open(path) as _f:
-            return json.load(_f)
+            raw = json.load(_f)
+        # Strip non-tool metadata keys (e.g. _comment, _schema).
+        return {k: v for k, v in raw.items() if isinstance(v, dict)}
     except (ValueError, IOError) as _e:
         warn("could not read pre_built/tools.json: {}; tool selection disabled".format(_e))
         return {}
