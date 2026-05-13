@@ -106,6 +106,7 @@ pre_built/
       helix.tar.bz2         - Helix runtime → ~/.config/helix/runtime/
       vim92.tar.bz2         - Vim 9.2 runtime → ~/.local/share/vim/vim92/
       nvim.tar.bz2          - Neovim runtime → ~/.local/share/nvim/runtime/
+      octave.tar.bz2        - Octave m-files + .oct plugins → ~/.local/share/octave/11.1.0/ + ~/.local/lib/octave/11.1.0/oct/
       runtime_config.toml   - Runtime install metadata
     portable-python-*.tar.bz2 - BOLT-optimized Python archive (NOSTRIP — never run strip on it)
   build_scripts/            - Helper scripts (not installed)
@@ -114,6 +115,7 @@ pre_built/
     build-kakoune.sh        - Build kakoune from source
     build-jq.sh             - Build jq from source
     build-ncdu.sh           - Build ncdu from source
+    build-octave.sh         - Build GNU Octave from source (without Qt/Java/X11; gnuplot backend)
     reproduce-llvm-build.sh - LLVM build reproduction script
   .strip-manifest           - sha256/tar-meta cache for strip_all_elf_binaries
 
@@ -179,6 +181,8 @@ The Linux installer resolves the repo from the `install` script path, so it can 
 **Vim runtime behavior**: The installer looks for `vim92.tar.bz2` in `pre_built/<platform>/runtime/` first, then falls back to the legacy path `vim/runtime.tar.bz2`. It extracts to `~/.local/share/vim/`, renames the `runtime/` directory to `vim92/`, and verifies `filetype.vim` is present. A correct install has `~/.local/share/vim/vim92/filetype.vim`.
 
 **Neovim runtime behavior**: The installer looks for `nvim.tar.bz2` in `pre_built/<platform>/runtime/`. It extracts to `~/.local/share/nvim/`, replaces any existing `~/.local/share/nvim/runtime`, and verifies `runtime/filetype.lua` is present. The release smoke gate runs the installed `nvim` headless with `--clean` and asserts that this runtime is on `runtimepath`. The Neovim config bootstraps `lazy.nvim` when available; if `lazy.nvim` is missing and `git` cannot clone it, the plugin layer is disabled cleanly so the core editor config still starts on locked-down machines.
+
+**Octave runtime behavior**: The installer looks for `octave.tar.bz2` in `pre_built/<platform>/runtime/` only when `octave` is in the selected tools (it is `optional: true` in `tools.json` — opt in with `./install --add-tools octave`). The archive contains `./share/octave/11.1.0/` (m-files, fonts, data; doc excluded to save space) and `./lib/octave/11.1.0/oct/` (.oct compiled plugins, patchelf'd to RPATH `$ORIGIN/../../../../../lib64`). It extracts into `~/.local/`, verifying `~/.local/share/octave/11.1.0/m/` is present. The three octave core libs (`liboctave.so.13`, `liboctinterp.so.15`, `liboctmex.so.1`) are bundled separately as `lib64/*.bz2` with RPATH `$ORIGIN` so they find each other in `~/.local/lib64/`. The main binary `octave` is a thin 16K launcher with RPATH `$ORIGIN/../lib64`. Total uncompressed install size is ~163 MB, dominated by libopenblas + libopenblasp (~110 MB combined). Build with `pre_built/build_scripts/build-octave.sh` from an extracted source tarball.
 
 **Portable Python behavior**: The installer looks for `portable-python-*.tar.bz2` in the platform dir. If found, it extracts to a temp dir under `/tmp` using `safe_extract_tar`, runs the bundled `install.sh --prefix ~/.local --force --no-test`, then removes `~/.local/bin/python3` and `~/.local/bin/pip3` so the system `/usr/bin/python3` wins for EDA tools. Use `python3.14` and `pip3.14` for this build. The archive must never be run through `strip_all_elf_binaries` (BOLT-optimized). To add or update a portable Python build, use `pre_built/build_scripts/import-portable-python <portable-dir>`.
 

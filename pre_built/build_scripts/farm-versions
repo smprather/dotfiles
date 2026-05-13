@@ -269,6 +269,9 @@ TOOLS = [
 
     ("pigz",        "pigz",        "https://zlib.net/pigz/",
      strategy_flag(["--version"], r"pigz ([0-9]+\.[0-9]+)")),
+
+    ("octave",      "octave",      "https://www.gnu.org/software/octave/",
+     strategy_flag(["--version"], r"GNU Octave, version ([0-9]+\.[0-9]+\.[0-9]+)")),
 ]
 
 

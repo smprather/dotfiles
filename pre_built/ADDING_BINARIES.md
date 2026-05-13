@@ -229,6 +229,39 @@ Runtime data (`share/gnuplot/6.0/`) not bundled — binary works without it for 
 (svg, postscript, x11, dumb all tested OK). If help or color palettes are needed later,
 package `share/gnuplot/` as `gnuplot-runtime.tar.bz2` and add installer support.
 
+## Octave build notes (11.1.0, added 2026-05-13)
+
+Built without Qt, Java, OpenGL, FLTK, or X11. Plots work via gnuplot backend (already bundled).
+RapidJSON disabled to avoid a GCC 14 read-only-member compile error.
+
+```bash
+# Enable GCC 14 (required — GCC 8.5 from base is too old for Octave 11)
+. /opt/rh/gcc-toolset-14/enable
+
+./configure \
+  --prefix=/tmp/octave-install \
+  --without-qt \
+  --without-java \
+  --without-opengl \
+  --without-fltk \
+  --without-x \
+  --disable-rapidjson \
+  CFLAGS="-O2" CXXFLAGS="-O2" FFLAGS="-O2"
+make -j$(nproc) && make install
+```
+
+See `pre_built/build_scripts/build-octave.sh` for the full bundling recipe.
+
+**Binary layout:**
+- `bin/octave.bz2` — thin 16K launcher (stripped), RPATH = `$ORIGIN/../lib64`
+- `lib64/liboctave.so.13.bz2`, `liboctinterp.so.15.bz2`, `liboctmex.so.1.bz2` — core libs, RPATH = `$ORIGIN`
+- 35 exclusive dep libs in `lib64/` (FFTW, HDF5, BLAS, SuiteSparse, GFortran, audio, GLPK, QHull, ...)
+- `runtime/octave.tar.bz2` — m-files (`share/octave/11.1.0/`) + compiled plugins (`lib/octave/11.1.0/oct/`, patchelf'd RPATH = `$ORIGIN/../../../../../lib64`)
+
+**What is NOT bundled:** doc (saves ~5.6 MB), Qt/FLTK/X11 (no display on headless machines).
+
+**Total uncompressed install size:** ~163 MB. Dominated by libopenblas + libopenblasp (~110 MB combined). This is why octave is `optional: true` in `tools.json`.
+
 ## Disk quota considerations
 
 Home directory quotas on EE systems are typically small (~4–10 GB). Rough sizes after stripping:
@@ -242,6 +275,7 @@ Home directory quotas on EE systems are typically small (~4–10 GB). Rough size
 | ICU alone          | (pulled by Qt5)                  | ~75 MB      |
 | Portable Python    | python3.14                       | ~40 MB      |
 | Treesitter parsers | all platforms                    | ~20 MB      |
+| Octave (optional)  | octave 11.1.0                    | ~163 MB     |
 
 Future: consider splitting pre_built into lightweight (→ `~/.local`) and heavyweight
 (→ shared filesystem, symlinked from `~/.local`). See memory file `project_prebuilt_bifurcation.md`.
