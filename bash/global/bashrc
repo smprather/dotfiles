@@ -210,9 +210,7 @@ set_prompt() {
 unset PROMPT_COMMAND
 /bin/stty sane
 if is_truthy $cfg_enable_starship && command -v starship >/dev/null; then
-    echo 1
     export STARSHIP_CONFIG="$HOME/.cache/starship/starship.$(/bin/hostname -s).$$.toml"
-    echo $STARSHIP_CONFIG
     mkdir -p "$(/bin/dirname "$STARSHIP_CONFIG")"
     clean_starship_config_files
     "$BASH_CONFIG_ROOT_DIR/../starship/starship.toml.template" "$STARSHIP_CONFIG"
