@@ -172,6 +172,10 @@ if command -v fzf >&/dev/null && is_truthy $cfg_enable_fzf; then
     eval "$(fzf --bash)"
 fi
 
+### Prompt configuration ###
+/bin/stty sane
+# Disable ctrl-s terminal pausing
+/bin/stty -ixon
 set_prompt() {
     local include_host=$cfg_prompt_include_host
     local prompt_color=$cfg_prompt_color_normal
@@ -204,21 +208,22 @@ set_prompt() {
     export PROMPT_COMMAND="/bin/stty '$(stty -g)'"
 }
 unset PROMPT_COMMAND
+/bin/stty sane
 if is_truthy $cfg_enable_starship && command -v starship >/dev/null; then
-    # Default location is $HOME/.config/starship.toml
-    export STARSHIP_CONFIG="${BASH_CONFIG_ROOT_DIR%/bash}/starship/starship.toml"
+    echo 1
+    export STARSHIP_CONFIG="$HOME/.cache/starship/starship.$(/bin/hostname -s).$$.toml"
+    echo $STARSHIP_CONFIG
+    mkdir -p "$(/bin/dirname "$STARSHIP_CONFIG")"
+    clean_starship_config_files
+    "$BASH_CONFIG_ROOT_DIR/../starship/starship.toml.template" "$STARSHIP_CONFIG"
     eval "$(starship init bash)"
     # Sometimes, ctrl-c killing a process leaves the the -echo stty option enabled, which
     # makes it so that you can't see the text you're typeing (like when entering a pw).
     # Use every prompt print, to disable that state and make typing visible.
-    /bin/stty sane
     export PROMPT_COMMAND="/bin/stty '$(stty -g)';$PROMPT_COMMAND"
 else
     set_prompt
 fi
-
-# Disable ctrl-s terminal pausing
-stty -ixon
 
 #export MANPAGER="/bin/sh -c '/bin/sed -u -e \"s/\\x1B\[[0-9;]*m//g; s/.\\x08//g\" | $cfg_preferred_cat -p -l man'"
 export LESS_TERMCAP_mb=$'\e[1;32m'
