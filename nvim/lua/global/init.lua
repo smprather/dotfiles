@@ -230,10 +230,7 @@ if vim.g.cfg_enable_lsp then
                 })
             end
 
-            map("<leader>th",
-                function() vim.lsp.inlay_hint.enable(not vim.lsp.inlay_hint.is_enabled({ bufnr = event.buf })) end,
-                "[T]oggle Inlay [H]ints")
-        end,
+            end,
     })
 end
 
@@ -269,8 +266,6 @@ keymap("n", "<leader>s",  ":w<cr>",     { noremap = true, silent = true, desc = 
 keymap("n", "<leader>w",  ":set wrap<cr>",   { noremap = true, silent = true, desc = "Enable line wrap" })
 keymap("n", "<leader>nw", ":set nowrap<cr>", { noremap = true, silent = true, desc = "Disable line wrap" })
 keymap("n", "<leader>ti", ":IBLToggle<cr>",  { noremap = true, silent = true, desc = "Toggle indent lines" })
-keymap("n", "<leader>th", ":TSToggle highlight<cr>", { desc = "Toggle NVIM Treesitter Highlight" })
-keymap("n", "<leader>z",  ":ZoomToggle<cr>", { noremap = true, silent = true, desc = "Toggle Zen Mode" })
 keymap("n", "<leader>ts", ToggleStuff,  { noremap = true, silent = true, desc = "Toggle prepare for copy selection" })
 keymap("n", "<leader>wsq", 'ysiw"',    { desc = "Word Surround Quotes" })
 keymap("n", "<leader>F",  "zR",        { desc = "Open all folds" })
