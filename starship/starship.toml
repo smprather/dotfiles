@@ -16,3 +16,8 @@ style = "bold cyan"
 success_symbol = "[❯](bold green)"
 error_symbol = "[❯](bold red)"
 
+[python]
+symbol = "🐍"
+format = '[${symbol}${pyenv_prefix}(${version})(\($virtualenv\))](bold yellow)'
+pyenv_prefix = "venv "
+
