@@ -14,7 +14,7 @@ return {
     },
     config = function()
         require("tokyonight").setup({
-            style       = "moon",
+            style       = "night",
             transparent = true,
             styles      = {
                 sidebars = "transparent",

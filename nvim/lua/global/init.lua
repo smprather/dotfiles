@@ -14,7 +14,6 @@ vim.o.confirm     = true
 
 -- ── Basic keymaps ────────────────────────────────────────────────────────
 vim.keymap.set("n", "<Esc>", "<cmd>nohlsearch<CR>")
-vim.keymap.set("n", "<leader>q", vim.diagnostic.setloclist, { desc = "Open diagnostic [Q]uickfix list" })
 vim.keymap.set("t", "<Esc><Esc>", "<C-\\><C-n>", { desc = "Exit terminal mode" })
 vim.keymap.set("n", "<C-h>", "<C-w><C-h>", { desc = "Move focus to the left window" })
 vim.keymap.set("n", "<C-l>", "<C-w><C-l>", { desc = "Move focus to the right window" })
@@ -66,8 +65,8 @@ local options = {
     directory     = vim.g.cfg_swap_dir or "/tmp",
     wildmenu      = true,
     wildmode      = "longest:full,full",
-    timeoutlen    = 1000,
-    updatetime    = 300,
+    timeoutlen    = 300,
+    updatetime    = 250,
     number        = false,
     relativenumber = false,
     numberwidth   = 2,
@@ -157,11 +156,6 @@ vim.cmd([[
     endfunction
     command! ZoomToggle call s:ZoomToggle()
 ]])
-
-if vim.g.dotfiles_plugins_enabled then
-    local ok_notify, notify = pcall(require, "notify")
-    if ok_notify then vim.notify = notify end
-end
 
 -- ── LSP ──────────────────────────────────────────────────────────────────
 if vim.g.cfg_enable_lsp then
@@ -266,7 +260,6 @@ keymap("i", "kj",    "<Esc>",   { noremap = true, silent = true, desc = "Exit in
 keymap("i", "jk",    "<Esc>",   { noremap = true, silent = true, desc = "Exit insert mode" })
 keymap("i", "jj",    "<Esc>",   { noremap = true, silent = true, desc = "Exit insert mode" })
 keymap("i", "kk",    "<Esc>",   { noremap = true, silent = true, desc = "Exit insert mode" })
-keymap("n", "<c-l>", ":nohl<cr>", { noremap = true, silent = true, desc = "Clear search highlights" })
 keymap("n", "<c-n>", "<c-w><c-w>", { noremap = true, silent = true, desc = "Move to next window" })
 
 keymap("n", "v",          "V",          noremap_silent)
@@ -280,7 +273,7 @@ keymap("n", "<leader>th", ":TSToggle highlight<cr>", { desc = "Toggle NVIM Trees
 keymap("n", "<leader>z",  ":ZoomToggle<cr>", { noremap = true, silent = true, desc = "Toggle Zen Mode" })
 keymap("n", "<leader>ts", ToggleStuff,  { noremap = true, silent = true, desc = "Toggle prepare for copy selection" })
 keymap("n", "<leader>wsq", 'ysiw"',    { desc = "Word Surround Quotes" })
-keymap("n", "<leader>f",  "zR",        { desc = "Open all folds" })
+keymap("n", "<leader>F",  "zR",        { desc = "Open all folds" })
 
 keymap("v", "<",  "<gv", noremap_silent)
 keymap("v", ">",  ">gv", noremap_silent)
