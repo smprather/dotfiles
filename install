@@ -1546,8 +1546,8 @@ def install_dev_mode(repo_dir, home):
     starship_dir = os.path.join(config_dir, "starship")
     remove_if_exists(starship_dir)
     ensure_dir(starship_dir, "starship config")
-    install_path(os.path.join(repo_dir, "starship", "config-schema.json"), os.path.join(starship_dir, "config-schema.json"), links_mode)
-    install_path(os.path.join(repo_dir, "starship", "starship.linux.toml"), os.path.join(starship_dir, "starship.toml"), links_mode)
+    install_path(os.path.join(repo_dir, "starship", "config-schema.json"), os.path.join(starship_dir, "config-schema.json"), True)
+    install_path(os.path.join(repo_dir, "starship", "starship.linux.toml"), os.path.join(starship_dir, "starship.toml"), True)
 
     install_bash(repo_dir, home, links_mode=True)
     lns(".config/vim/vimrc", os.path.join(home, ".vimrc"), verbose=True)
@@ -1631,6 +1631,12 @@ def install_copy_mode(repo_dir, home):
         _pip_cfg_dir = os.path.join(home, ".config", "pip")
         ensure_dir(_pip_cfg_dir, "pip config")
         install_path(_pip_conf_src, os.path.join(_pip_cfg_dir, "pip.conf"), False)
+
+    starship_dir = os.path.join(home, ".config", "starship")
+    remove_if_exists(starship_dir)
+    ensure_dir(starship_dir, "starship config")
+    install_path(os.path.join(repo_dir, "starship", "config-schema.json"), os.path.join(starship_dir, "config-schema.json"), False)
+    install_path(os.path.join(repo_dir, "starship", "starship.linux.toml"), os.path.join(starship_dir, "starship.toml"), False)
 
     _helix_cfg = os.path.join(repo_dir, "helix", "config.toml")
     if os.path.isfile(_helix_cfg):
