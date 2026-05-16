@@ -929,15 +929,6 @@ def install_portable_python(repo_dir, home):
     finally:
         shutil.rmtree(tmp_dir)
 
-    # Remove generic python3/pip3 so system /usr/bin/python3 wins for EDA tools
-    # that misbehave when they find a non-distro python3 on PATH.
-    dest_bin_dir = os.path.join(home, ".local", "bin")
-    for name in ("python3", "pip3"):
-        path = os.path.join(dest_bin_dir, name)
-        if os.path.lexists(path):
-            os.unlink(path)
-            print("  removed {} (system python3 takes precedence)".format(path))
-
     record_result("portable Python", "yes", "")
     print("  Installed portable Python -> {}/.local/".format(home))
 

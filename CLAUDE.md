@@ -128,7 +128,9 @@ editorconfig/
   editorconfig              - → ~/.editorconfig
 
 starship/
-  starship.toml             - Starship prompt config → ~/.config/starship/starship.toml
+  config-schema.json        - Vendored schema for editor completions on Linux
+  starship.linux.toml       - Linux Starship config → ~/.config/starship/starship.toml
+  starship.windows.toml     - Windows Starship config → %USERPROFILE%\.config\starship\starship.toml
 
 powershell/
   Microsoft.PowerShell_profile.ps1  - PowerShell profile (aliases, coreutils wrappers, PSReadLine, Starship, zoxide, PSFzf, Invoke-PatchDOSStub)
@@ -156,7 +158,7 @@ tests/install_linux_tmp_home - Runs Linux installer against a temp HOME for fres
 **Production mode** (default, no flags): Copies files from repo — no symlinks to the repo remain. Re-run `./install` after repo changes to update.
 The Linux installer resolves the repo from the `install` script path, so it can be run from any current working directory. `./install` is the Python 3.6-compatible installer and checks the Python version before running.
 
-**Dev mode** (`--dev`): File-level symlinks for nvim global layer and whole-dir symlinks for vim/tmux/starship/editorconfig. Nvim: `~/.config/nvim/` is a real directory containing `init.lua → repo/nvim/init.lua`, `lazy-lock.json → repo/nvim/lazy-lock.json`, `lsp/ → repo/nvim/lsp/`, `after/ → repo/nvim/after/`, and `lua/global/ → repo/nvim/lua/global/`; user layer dirs (`lua/corp/`, etc.) are preserved as real directories. For bash, symlinks the individual repo-managed files (`global/`, `functions.sh`, `bashrc`) while leaving user layer dirs in place. Skips backups.
+**Dev mode** (`--dev`): File-level symlinks for nvim global layer and Starship's selected config/schema; whole-dir symlinks for vim/tmux/editorconfig. Nvim: `~/.config/nvim/` is a real directory containing `init.lua → repo/nvim/init.lua`, `lazy-lock.json → repo/nvim/lazy-lock.json`, `lsp/ → repo/nvim/lsp/`, `after/ → repo/nvim/after/`, and `lua/global/ → repo/nvim/lua/global/`; user layer dirs (`lua/corp/`, etc.) are preserved as real directories. For bash, symlinks the individual repo-managed files (`global/`, `functions.sh`, `bashrc`) while leaving user layer dirs in place. Skips backups.
 
 **Destination mode** (`--dest-dir <dir>`): Installs into an alternate root instead of `$HOME`. Used by tests and useful for staging installs.
 
@@ -184,7 +186,7 @@ The Linux installer resolves the repo from the `install` script path, so it can 
 
 **Octave runtime behavior**: The installer looks for `octave.tar.bz2` in `pre_built/<platform>/runtime/` only when `octave` is in the selected tools (it is `optional: true` in `tools.json` — opt in with `./install --add-tools octave`). The archive contains `./share/octave/11.1.0/` (m-files, fonts, data; doc excluded to save space) and `./lib/octave/11.1.0/oct/` (.oct compiled plugins, patchelf'd to RPATH `$ORIGIN/../../../../../lib64`). It extracts into `~/.local/`, verifying `~/.local/share/octave/11.1.0/m/` is present. The three octave core libs (`liboctave.so.13`, `liboctinterp.so.15`, `liboctmex.so.1`) are bundled separately as `lib64/*.bz2` with RPATH `$ORIGIN` so they find each other in `~/.local/lib64/`. The main binary `octave` is a thin 16K launcher with RPATH `$ORIGIN/../lib64`. Total uncompressed install size is ~163 MB, dominated by libopenblas + libopenblasp (~110 MB combined). Build with `pre_built/build_scripts/build-octave.sh` from an extracted source tarball.
 
-**Portable Python behavior**: The installer looks for `portable-python-*.tar.bz2` in the platform dir. If found, it extracts to a temp dir under `/tmp` using `safe_extract_tar`, runs the bundled `install.sh --prefix ~/.local --force --no-test`, then removes `~/.local/bin/python3` and `~/.local/bin/pip3` so the system `/usr/bin/python3` wins for EDA tools. Use `python3.14` and `pip3.14` for this build. The archive must never be run through `strip_all_elf_binaries` (BOLT-optimized). To add or update a portable Python build, use `pre_built/build_scripts/import-portable-python <portable-dir>`.
+**Portable Python behavior**: The installer looks for `portable-python-*.tar.bz2` in the platform dir. If found, it extracts to a temp dir under `/tmp` using `safe_extract_tar`, runs the bundled `install.sh --prefix ~/.local --force --no-test`. The generic `python3`/`pip3` links from the portable build are left in place, so `python3` on PATH resolves to 3.14. Use `python3.14` and `pip3.14` for this build. The archive must never be run through `strip_all_elf_binaries` (BOLT-optimized). To add or update a portable Python build, use `pre_built/build_scripts/import-portable-python <portable-dir>`.
 
 **Backup behavior**: Numbered backups in `dotfiles_backups/backup.N/`. Skips files already pointing to the repo. Never overwrites existing backups.
 Backups intentionally exclude font files (`*.ttf`, `*.otf`, `*.pcf`, `*.bdf`, `*.woff`, `*.woff2`, etc.) because vendored Nerd Fonts are large and reproducible.
@@ -200,7 +202,8 @@ Backups intentionally exclude font files (`*.ttf`, `*.otf`, `*.pcf`, `*.bdf`, `*
 - `~/.tmux.conf` → `~/.config/tmux/tmux.conf`
 - `~/.tmux` → `~/.config/tmux/tmux`
 - `~/.editorconfig` → `~/.config/editorconfig/editorconfig`
-- `~/.config/starship/starship.toml` ← `repo/starship/starship.toml`
+- `~/.config/starship/starship.toml` ← `repo/starship/starship.linux.toml`
+- `~/.config/starship/config-schema.json` ← `repo/starship/config-schema.json`
 - `~/.config/helix/runtime/` ← `repo/pre_built/<platform>/runtime/helix.tar.bz2`
 - `~/.local/share/vim/vim92/` ← `repo/pre_built/<platform>/runtime/vim92.tar.bz2`
 - `~/.local/share/nvim/runtime/` ← `repo/pre_built/<platform>/runtime/nvim.tar.bz2`
@@ -209,7 +212,7 @@ Backups intentionally exclude font files (`*.ttf`, `*.otf`, `*.pcf`, `*.bdf`, `*
 **Windows copy destinations** (files are copied, not symlinked — re-run `.\install.ps1` after repo changes):
 - `%LOCALAPPDATA%\nvim` ← `repo/nvim`
 - `%USERPROFILE%\.config\wezterm\wezterm.lua` ← `repo/wezterm/wezterm.lua`
-- `%USERPROFILE%\.config\starship\starship.toml` ← `repo/starship/starship.toml`
+- `%USERPROFILE%\.config\starship\starship.toml` ← `repo/starship/starship.windows.toml`
 - `%USERPROFILE%\.editorconfig` ← `repo/editorconfig/editorconfig`
 - `%USERPROFILE%\autohotkey\hotkeys.ahk` ← `repo/autohotkey/hotkeys.ahk`
 - `%USERPROFILE%\dotkeys_config.toml` — user-local AHK feature selection config (created if missing)
