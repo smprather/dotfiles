@@ -47,6 +47,7 @@
   "ty":          {"bins": ["ty"]},
   "uv":          {"bins": ["uv"]},
   "vim":         {"bins": ["vim", "vim.bin"]},
+  "gvim":        {"bins": ["gvim", "gvim.bin"], "optional": true},
   "xsel":        {"bins": ["xsel"]},
   "xterm":       {"bins": ["xterm", "resize"]},
   "yank":        {"bins": ["yank"]},

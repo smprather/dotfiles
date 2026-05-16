@@ -231,6 +231,9 @@ TOOLS = [
     ("vim.bin",     "vim",         "https://www.vim.org",
      strategy_flag(["--version"], r"Vi IMproved ([0-9]+\.[0-9]+)")),
 
+    ("gvim.bin",   "gvim",        "https://www.vim.org",
+     strategy_flag(["--version"], r"Vi IMproved ([0-9]+\.[0-9]+)")),
+
     ("xterm",       "xterm",       "https://invisible-island.net/xterm/",
      # xterm -version prints to stdout
      strategy_first(
