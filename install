@@ -414,6 +414,8 @@ _GETCONF = _find_tool("/usr/bin/getconf")
 _PGREP = _find_tool("/usr/bin/pgrep")
 _RSYNC = _find_tool("/usr/bin/rsync")
 _CP = _find_tool("/usr/bin/cp")
+_TAR = _find_tool("/usr/bin/tar")
+_PV = _find_tool(os.path.join(os.path.expanduser("~"), ".local", "bin", "pv"), "/usr/bin/pv")
 
 
 def _exes_by_path(path):
@@ -894,8 +896,7 @@ def install_portable_python(repo_dir, home):
     tmp_dir = tempfile.mkdtemp(prefix="dotfiles-python-install.", dir="/tmp")
     try:
         print("  extracting {}...".format(archive))
-        with tarfile.open(archive, "r:bz2") as tf:
-            safe_extract_tar(tf, tmp_dir)
+        pv_extract_tar(archive, tmp_dir)
 
         extracted_dirs = [
             os.path.join(tmp_dir, d) for d in os.listdir(tmp_dir)
@@ -1137,8 +1138,7 @@ def install_tldr_cache(repo_dir, home):
         else:
             os.unlink(dest_dir)
 
-    with tarfile.open(archive, "r:*") as tf:
-        safe_extract_tar(tf, os.path.join(cache_home, "tealdeer"))
+    pv_extract_tar(archive, os.path.join(cache_home, "tealdeer"))
     print("  tldr page cache installed to {}".format(dest_dir))
 
 
@@ -1155,6 +1155,44 @@ def safe_extract_tar(tf, dest_dir):
         with warnings.catch_warnings():
             warnings.filterwarnings("ignore", message="The default behavior of tarfile extraction has been changed.*")
             tf.extractall(dest_dir)
+
+
+def pv_extract_tar(archive_path, dest_dir):
+    """Extract a tar archive, piping through pv for a progress bar when available.
+
+    Falls back to safe_extract_tar (Python tarfile) when pv or tar are absent.
+    Path-traversal safety check always runs regardless of which path is taken.
+    """
+    decomp = {"bz2": "j", "gz": "z", "xz": "J"}
+    flag = None
+    for ext, f in decomp.items():
+        if archive_path.endswith(".tar." + ext) or archive_path.endswith("." + ext):
+            flag = f
+            break
+
+    # Always validate members first — open in read mode matching the extension.
+    open_mode = "r:" + (flag and {"j": "bz2", "z": "gz", "J": "xz"}.get(flag, "") or "*")
+    with tarfile.open(archive_path, open_mode) as tf:
+        if not (_PV and _TAR and flag):
+            safe_extract_tar(tf, dest_dir)
+            return
+        # Safety check only — actual extraction done via pv | tar subprocess below.
+        require_writable_dir(dest_dir, "archive extraction")
+        dest_real = os.path.realpath(dest_dir)
+        for member in tf.getmembers():
+            target_real = os.path.realpath(os.path.join(dest_dir, member.name))
+            if not (target_real == dest_real or target_real.startswith(dest_real + os.sep)):
+                raise RuntimeError("unsafe tar member path: {}".format(member.name))
+
+    pv_proc = subprocess.Popen([_PV, archive_path], stdout=subprocess.PIPE)
+    tar_proc = subprocess.Popen(
+        [_TAR, "x{}f".format(flag), "-", "-C", dest_dir],
+        stdin=pv_proc.stdout)
+    pv_proc.stdout.close()
+    tar_ret = tar_proc.wait()
+    pv_proc.wait()
+    if tar_ret != 0:
+        raise RuntimeError("tar extraction failed (exit {}): {}".format(tar_ret, archive_path))
 
 
 def install_helix_runtime(repo_dir, home):
@@ -1179,8 +1217,7 @@ def install_helix_runtime(repo_dir, home):
     ensure_dir(helix_config_dir, "Helix runtime")
     remove_if_exists(runtime_dir)
 
-    with tarfile.open(archive, "r:bz2") as tf:
-        safe_extract_tar(tf, helix_config_dir)
+    pv_extract_tar(archive, helix_config_dir)
 
     tutor = os.path.join(runtime_dir, "tutor")
     if os.path.isfile(tutor):
@@ -1213,8 +1250,7 @@ def install_vim_runtime(repo_dir, home):
     remove_if_exists(runtime_dir)
     remove_if_exists(vim92_dir)
 
-    with tarfile.open(archive, "r:bz2") as tf:
-        safe_extract_tar(tf, vim_share_dir)
+    pv_extract_tar(archive, vim_share_dir)
 
     if os.path.isdir(runtime_dir):
         os.rename(runtime_dir, vim92_dir)
@@ -1244,8 +1280,7 @@ def install_nvim_runtime(repo_dir, home):
     ensure_dir(nvim_share_dir, "Neovim runtime")
     remove_if_exists(runtime_dir)
 
-    with tarfile.open(archive, "r:bz2") as tf:
-        safe_extract_tar(tf, nvim_share_dir)
+    pv_extract_tar(archive, nvim_share_dir)
 
     sentinel = os.path.join(runtime_dir, "filetype.lua")
     if os.path.isfile(sentinel):
@@ -1282,8 +1317,7 @@ def install_octave_runtime(repo_dir, home, selected_tools):
     ):
         remove_if_exists(stale)
 
-    with tarfile.open(archive, "r:bz2") as tf:
-        safe_extract_tar(tf, local_dir)
+    pv_extract_tar(archive, local_dir)
 
     sentinel = os.path.join(local_dir, "share", "octave", "11.1.0", "m")
     if os.path.isdir(sentinel):
