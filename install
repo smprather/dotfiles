@@ -1316,11 +1316,14 @@ def install_treesitter_parsers(repo_dir, home):
     parser_files = [n for n in sorted(os.listdir(parser_src))
                     if os.path.isfile(os.path.join(parser_src, n))
                     and (n.endswith(".so.bz2") or n.endswith(".so"))]
+    _max_parser_name = max(
+        (len(n.replace(".so.bz2", "").replace(".so", "")) for n in parser_files), default=0)
     _p, _pt = _progress("Tree-sitter parsers", len(parser_files))
     for name in parser_files:
         src = os.path.join(parser_src, name)
         if _p:
-            _p.update(_pt, description="  {}".format(name.replace(".so.bz2", "").replace(".so", "")))
+            _stripped = name.replace(".so.bz2", "").replace(".so", "")
+            _p.update(_pt, description="  {}".format(_stripped.ljust(_max_parser_name)))
         if name.endswith(".so.bz2"):
             dest = os.path.join(parser_dest, name[:-4])
             require_writable_parent(dest, "Tree-sitter parsers")
