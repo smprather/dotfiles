@@ -1,5 +1,5 @@
 # Valid values for DOTFILES_CFG_PREFERRED_LS: eza, lsd, ls
-export DOTFILES_CFG_PREFERRED_BASH=""    # Full path to preferred bash binary; re-execs at startup if set
+export DOTFILES_CFG_PREFERRED_BASH="" # Full path to preferred bash binary; re-execs at startup if set
 export DOTFILES_CFG_PREFERRED_LS="eza"
 export DOTFILES_CFG_PREFERRED_VI="nvim"
 export DOTFILES_CFG_PREFERRED_CAT="bat"
@@ -13,3 +13,4 @@ export DOTFILES_CFG_ENABLE_FASTNVIM="0"
 export DOTFILES_CFG_ENABLE_FZF="0"
 export DOTFILES_CFG_ENABLE_GRC="1"
 export DOTFILES_CFG_ENABLE_STARSHIP="1"
+export DOTFILES_CFG_STARSHIP_USERIDS_TO_HIGHLIGHT=""
