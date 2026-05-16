@@ -597,39 +597,4 @@ fpcmp() {
     esac
 }
 
-clean_starship_config_files() {
-    local host
-    host="$(hostname -s)"
-    # 6 months ≈ 182 days
-    local max_age_days=182
-
-    shopt -s nullglob
-    for f in $(/bin/dirname $STARSHIP_CONFIG)/starship.*.*.toml; do
-        # Extract parts: foo.<host>.<pid>.bar
-        local base h pid
-        base="$(basename -- "$f")"
-
-        # Strip prefix/suffix safely
-        h="${base#foo.}"
-        h="${h%%.*}"
-
-        pid="${base#foo.$h.}"
-        pid="${pid%.bar}"
-
-        # Check file age (in days)
-        if [[ $(find "$f" -mtime +"$max_age_days" -print -quit) ]]; then
-            rm -f -- "$f"
-            continue
-        fi
-
-        # If hostname matches and PID is dead
-        if [[ "$h" == "$host" ]]; then
-            if ! kill -0 "$pid" 2>/dev/null; then
-                rm -f -- "$f"
-            fi
-        fi
-    done
-    shopt -u nullglob
-}
-
 # vim: ft=bash
