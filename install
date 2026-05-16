@@ -1623,6 +1623,12 @@ def install_copy_mode(repo_dir, home):
     install_path(os.path.join(repo_dir, "editorconfig", "editorconfig"), os.path.join(editorconfig_dir, "editorconfig"), False)
     lns(".config/editorconfig/editorconfig", os.path.join(home, ".editorconfig"), verbose=True)
 
+    _pip_conf_src = os.path.join(repo_dir, "python", "pip.conf")
+    if os.path.isfile(_pip_conf_src):
+        _pip_cfg_dir = os.path.join(home, ".config", "pip")
+        ensure_dir(_pip_cfg_dir, "pip config")
+        install_path(_pip_conf_src, os.path.join(_pip_cfg_dir, "pip.conf"), False)
+
     _helix_cfg = os.path.join(repo_dir, "helix", "config.toml")
     if os.path.isfile(_helix_cfg):
         ensure_dir(os.path.join(home, ".config", "helix"), "helix config")

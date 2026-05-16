@@ -127,6 +127,9 @@ helix/                      - (empty; runtime archive moved to pre_built/<platfo
 editorconfig/
   editorconfig              - → ~/.editorconfig
 
+python/
+  pip.conf                  - → ~/.config/pip/pip.conf (require-virtualenv = true)
+
 starship/
   config-schema.json        - Vendored schema for editor completions on Linux
   starship.linux.toml       - Linux Starship config → ~/.config/starship/starship.toml
@@ -186,7 +189,7 @@ The Linux installer resolves the repo from the `install` script path, so it can 
 
 **Octave runtime behavior**: The installer looks for `octave.tar.bz2` in `pre_built/<platform>/runtime/` only when `octave` is in the selected tools (it is `optional: true` in `tools.json` — opt in with `./install --add-tools octave`). The archive contains `./share/octave/11.1.0/` (m-files, fonts, data; doc excluded to save space) and `./lib/octave/11.1.0/oct/` (.oct compiled plugins, patchelf'd to RPATH `$ORIGIN/../../../../../lib64`). It extracts into `~/.local/`, verifying `~/.local/share/octave/11.1.0/m/` is present. The three octave core libs (`liboctave.so.13`, `liboctinterp.so.15`, `liboctmex.so.1`) are bundled separately as `lib64/*.bz2` with RPATH `$ORIGIN` so they find each other in `~/.local/lib64/`. The main binary `octave` is a thin 16K launcher with RPATH `$ORIGIN/../lib64`. Total uncompressed install size is ~163 MB, dominated by libopenblas + libopenblasp (~110 MB combined). Build with `pre_built/build_scripts/build-octave.sh` from an extracted source tarball.
 
-**Portable Python behavior**: The installer looks for `portable-python-*.tar.bz2` in the platform dir. If found, it extracts to a temp dir under `/tmp` using `safe_extract_tar`, runs the bundled `install.sh --prefix ~/.local --force --no-test`. The generic `python3`/`pip3` links from the portable build are left in place, so `python3` on PATH resolves to 3.14. Use `python3.14` and `pip3.14` for this build. The archive must never be run through `strip_all_elf_binaries` (BOLT-optimized). To add or update a portable Python build, use `pre_built/build_scripts/import-portable-python <portable-dir>`.
+**Portable Python behavior**: The installer looks for `portable-python-*.tar.bz2` in the platform dir. If found, it extracts to a temp dir under `/tmp` using `safe_extract_tar`, runs the bundled `install.sh --prefix ~/.local --force --no-test`. The generic `python3`/`pip3` links from the portable build are left in place, so `python3` on PATH resolves to 3.14. Base-install protection: `python/pip.conf` is installed to `~/.config/pip/pip.conf` with `require-virtualenv = true`, and `PIP_REQUIRE_VIRTUALENV=1` is exported from `bash/global/bashrc` — both guard against accidental `pip install` to the base environment. Use `python3.14` and `pip3.14` for this build. The archive must never be run through `strip_all_elf_binaries` (BOLT-optimized). To add or update a portable Python build, use `pre_built/build_scripts/import-portable-python <portable-dir>`.
 
 **Backup behavior**: Numbered backups in `dotfiles_backups/backup.N/`. Skips files already pointing to the repo. Never overwrites existing backups.
 Backups intentionally exclude font files (`*.ttf`, `*.otf`, `*.pcf`, `*.bdf`, `*.woff`, `*.woff2`, etc.) because vendored Nerd Fonts are large and reproducible.

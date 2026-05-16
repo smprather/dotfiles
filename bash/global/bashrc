@@ -149,6 +149,7 @@ export PAGER='less --incsearch --use-color --no-init --ignore-case --mouse'
 export EDITOR="${DOTFILES_CFG_PREFERRED_VI}"
 export VISUAL=$EDITOR
 export GIT_EDITOR=$EDITOR
+export PIP_REQUIRE_VIRTUALENV=1
 
 if command -v batcat >&/dev/null; then
     _bat_exec="batcat"
