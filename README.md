@@ -467,9 +467,17 @@ git commit
 ./install --dev
 ```
 
-Directory-level symlinks for `nvim/`, `vim/`, `tmux/`, `starship/`, `editorconfig/`.
-For bash, symlinks individual managed files (`global/`, `functions.sh`, `bashrc`)
-while leaving user layer dirs as real directories. Installs repo git hooks:
+For **nvim**: `~/.config/nvim/` is a real directory with file-level symlinks —
+`init.lua`, `lazy-lock.json`, `lsp/`, `after/` point into the repo; `lua/global/`
+symlinks to `repo/nvim/lua/global/`; user layer dirs (`lua/corp/`, `lua/site/`,
+`lua/project/`, `lua/user/`) are preserved as real directories and never touched.
+
+For **vim/tmux/starship/editorconfig**: whole-directory symlinks.
+
+For **bash**: symlinks individual managed files (`global/`, `functions.sh`, `bashrc`)
+while leaving user layer dirs as real directories.
+
+Installs repo git hooks:
 
 - **pre-commit** — strips ELF payloads from newly staged binaries and archives,
   normalizes tarballs to `.tar.bz2`, updates `.strip-manifest`. Removes any
