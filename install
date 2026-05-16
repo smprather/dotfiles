@@ -15,9 +15,9 @@ if os.path.isdir(_VENDOR_DIR):
         sys.path.insert(0, os.path.join(_VENDOR_DIR, "py36"))
 
 try:
-    from rich.console import Console as _RichConsole
-    from rich.table import Table as _RichTable
-    from rich.progress import (
+    from rich.console import Console as _RichConsole  # type: ignore
+    from rich.table import Table as _RichTable  # type: ignore
+    from rich.progress import (  # type: ignore
         Progress as _RichProgress,
         BarColumn, TextColumn, TimeElapsedColumn, MofNCompleteColumn,
     )
@@ -54,6 +54,7 @@ def _progress(description, total):
 def _section(title):
     """Print a section heading. Rich: styled bold; plain: plain print."""
     if _RICH:
+        assert _console is not None
         _console.print("[bold]{}[/bold]".format(title))
     else:
         print(title)
@@ -567,7 +568,7 @@ def _pending_json_path():
 
 
 def _now_utc_iso():
-    return datetime.datetime.utcnow().strftime("%Y-%m-%dT%H:%M:%SZ")
+    return datetime.datetime.now(datetime.timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
 
 
 @contextlib.contextmanager
@@ -1004,6 +1005,7 @@ def print_install_results():
         for thing, success, detail in rows:
             style = _status_style.get(success, "")
             t.add_row(thing, "[{}]{}[/{}]".format(style, success, style), detail)
+        assert _console is not None
         _console.print()
         _console.print(t)
         return
@@ -1170,9 +1172,8 @@ def pv_extract_tar(archive_path, dest_dir):
             flag = f
             break
 
-    # Always validate members first — open in read mode matching the extension.
-    open_mode = "r:" + (flag and {"j": "bz2", "z": "gz", "J": "xz"}.get(flag, "") or "*")
-    with tarfile.open(archive_path, open_mode) as tf:
+    # Always validate members first — "r:*" auto-detects compression for reading.
+    with tarfile.open(archive_path, "r:*") as tf:
         if not (_PV and _TAR and flag):
             safe_extract_tar(tf, dest_dir)
             return
@@ -1185,6 +1186,7 @@ def pv_extract_tar(archive_path, dest_dir):
                 raise RuntimeError("unsafe tar member path: {}".format(member.name))
 
     pv_proc = subprocess.Popen([_PV, archive_path], stdout=subprocess.PIPE)
+    assert pv_proc.stdout is not None
     tar_proc = subprocess.Popen(
         [_TAR, "x{}f".format(flag), "-", "-C", dest_dir],
         stdin=pv_proc.stdout)
