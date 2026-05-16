@@ -31,6 +31,7 @@
   "nvim":        {"bins": ["nvim"]},
   "patchelf":    {"bins": ["patchelf"]},
   "pigz":        {"bins": ["pigz"]},
+  "pv":          {"bins": ["pv"]},
   "rg":          {"bins": ["rg"]},
   "rsync":       {"bins": ["rsync"],
                   "libs": ["libxxhash.so.0"]},

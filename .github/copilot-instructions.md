@@ -74,7 +74,7 @@ Each layer can inject code into `global/bashrc` via numbered files in `<layer>/g
 ### Install Modes
 
 - **Production** (default): copies files; re-run `./install` to pick up repo changes
-- **`--dev`**: directory-level symlinks for nvim/vim/tmux/starship/editorconfig; for bash, symlinks individual repo-managed files (`global/`, `functions.sh`, `bashrc`) while preserving user layer dirs as real directories
+- **`--dev`**: directory-level symlinks for nvim/vim/tmux/editorconfig; for Starship, file-level symlinks to the selected OS config and Linux schema; for bash, symlinks individual repo-managed files (`global/`, `functions.sh`, `bashrc`) while preserving user layer dirs as real directories
 - **`--dest-dir <dir>`**: install into an alternate root instead of `$HOME`; used by installer tests and staging
 - **`--no-backup`**: skip backup creation (useful for clean reinstalls or automation)
 - **`--no-fonts`**: skip vendored font extraction and font cache refresh

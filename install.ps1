@@ -222,7 +222,7 @@ Write-Host "WezTerm..."
 Copy-Config "$repoDir\wezterm\wezterm.lua" "$env:USERPROFILE\.config\wezterm\wezterm.lua"
 
 Write-Host "Starship..."
-Copy-Config "$repoDir\starship\starship.toml" "$env:USERPROFILE\.config\starship\starship.toml"
+Copy-Config "$repoDir\starship\starship.windows.toml" "$env:USERPROFILE\.config\starship\starship.toml"
 
 Write-Host "PowerShell profile..."
 $psProfileSource = "$repoDir\powershell\Microsoft.PowerShell_profile.ps1"

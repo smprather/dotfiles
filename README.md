@@ -18,7 +18,7 @@ Linux box in under two minutes and gets out of your way.
 | **[Vim](https://www.vim.org)** | Bundled plugins (NERDTree, SimpylFold, vim-liberty), vendored runtime, pre-built binary |
 | **[Tmux](https://github.com/tmux/tmux)** | Bundled plugins (resurrect, continuum, better-mouse-mode), `Ctrl-\` prefix |
 | **[Helix](https://helix-editor.com)** | Vendored runtime archive, ready to run offline |
-| **[Starship](https://starship.rs)** | Cross-shell prompt, installed to `~/.config/starship/starship.toml` |
+| **[Starship](https://starship.rs)** | Cross-shell prompt, `starship/starship.linux.toml` and `starship/starship.windows.toml` |
 | **[PowerShell](https://github.com/PowerShell/PowerShell)** | Aliases, Unix coreutils wrappers, PSReadLine, Starship, zoxide, PSFzf |
 | **[WezTerm](https://wezfurlong.org/wezterm/)** | Terminal emulator config |
 | **[AutoHotKey](https://www.autohotkey.com)** | AHK v2 flat script, optional features via `dotkeys_config.toml` |
@@ -219,7 +219,7 @@ from any working directory — it resolves the repo from the script path.
 | `~/.tmux/` | `tmux/tmux/` |
 | `~/.editorconfig` | `editorconfig/editorconfig` |
 | `~/.config/nvim/` | `nvim/` |
-| `~/.config/starship/starship.toml` | `starship/starship.toml` |
+| `~/.config/starship/starship.toml` | `starship/starship.linux.toml` + `starship/config-schema.json` |
 | `~/.config/helix/runtime/` | `pre_built/<platform>/runtime/helix.tar.bz2` |
 | `~/.local/share/vim/vim92/` | `pre_built/<platform>/runtime/vim92.tar.bz2` |
 | `~/.local/share/nvim/runtime/` | `pre_built/<platform>/runtime/nvim.tar.bz2` |
@@ -291,7 +291,7 @@ after repo updates.
 |-------------|--------|
 | `%LOCALAPPDATA%\nvim\` | `nvim/` |
 | `%USERPROFILE%\.config\wezterm\wezterm.lua` | `wezterm/wezterm.lua` |
-| `%USERPROFILE%\.config\starship\starship.toml` | `starship/starship.toml` |
+| `%USERPROFILE%\.config\starship\starship.toml` | `starship/starship.windows.toml` |
 | `%USERPROFILE%\.editorconfig` | `editorconfig/editorconfig` |
 | `%USERPROFILE%\autohotkey\hotkeys.ahk` | `autohotkey/hotkeys.ahk` (feature-patched) |
 | `%USERPROFILE%\dotkeys_config.toml` | Created if missing — choose AHK features |
@@ -472,7 +472,7 @@ For **nvim**: `~/.config/nvim/` is a real directory with file-level symlinks —
 symlinks to `repo/nvim/lua/global/`; user layer dirs (`lua/corp/`, `lua/site/`,
 `lua/project/`, `lua/user/`) are preserved as real directories and never touched.
 
-For **vim/tmux/starship/editorconfig**: whole-directory symlinks.
+For **vim/tmux/editorconfig**: whole-directory symlinks. Starship uses file-level symlinks for the selected OS config and, on Linux, `config-schema.json`.
 
 For **bash**: symlinks individual managed files (`global/`, `functions.sh`, `bashrc`)
 while leaving user layer dirs as real directories.
