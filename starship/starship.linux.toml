@@ -3,8 +3,7 @@
 add_newline = false
 scan_timeout = 100
 format = """
-(${custom.username}${custom.lsf}\n)$hostname$git_branch$git_status$cmd_duration
-$directory
+(${custom.username}${custom.lsf}$hostname$git_branch$git_status$cmd_duration\n)$directory
 $character"""
 
 [custom.username]
