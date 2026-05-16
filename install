@@ -415,8 +415,6 @@ _GETCONF = _find_tool("/usr/bin/getconf")
 _PGREP = _find_tool("/usr/bin/pgrep")
 _RSYNC = _find_tool("/usr/bin/rsync")
 _CP = _find_tool("/usr/bin/cp")
-_TAR = _find_tool("/usr/bin/tar")
-_PV = _find_tool(os.path.join(os.path.expanduser("~"), ".local", "bin", "pv"), "/usr/bin/pv")
 
 
 def _exes_by_path(path):
@@ -1160,43 +1158,34 @@ def safe_extract_tar(tf, dest_dir):
 
 
 def pv_extract_tar(archive_path, dest_dir):
-    """Extract a tar archive, piping through pv for a progress bar when available.
+    """Extract tar archive with Rich member-count progress bar; falls back to plain extractall."""
+    require_writable_dir(dest_dir, "archive extraction")
+    dest_real = os.path.realpath(dest_dir)
 
-    Falls back to safe_extract_tar (Python tarfile) when pv or tar are absent.
-    Path-traversal safety check always runs regardless of which path is taken.
-    pv is resolved at call time so a freshly installed ~/.local/bin/pv is found.
-    """
-    pv = _find_tool(os.path.join(os.path.expanduser("~"), ".local", "bin", "pv"), "/usr/bin/pv")
-    decomp = {"bz2": "j", "gz": "z", "xz": "J"}
-    flag = None
-    for ext, f in decomp.items():
-        if archive_path.endswith(".tar." + ext) or archive_path.endswith("." + ext):
-            flag = f
-            break
-
-    # Always validate members first — "r:*" auto-detects compression for reading.
     with tarfile.open(archive_path, "r:*") as tf:
-        if not (pv and _TAR and flag):
-            safe_extract_tar(tf, dest_dir)
-            return
-        # Safety check only — actual extraction done via pv | tar subprocess below.
-        require_writable_dir(dest_dir, "archive extraction")
-        dest_real = os.path.realpath(dest_dir)
-        for member in tf.getmembers():
+        members = tf.getmembers()
+        for member in members:
             target_real = os.path.realpath(os.path.join(dest_dir, member.name))
             if not (target_real == dest_real or target_real.startswith(dest_real + os.sep)):
                 raise RuntimeError("unsafe tar member path: {}".format(member.name))
 
-    pv_proc = subprocess.Popen([pv, archive_path], stdout=subprocess.PIPE)
-    assert pv_proc.stdout is not None
-    tar_proc = subprocess.Popen(
-        [_TAR, "x{}f".format(flag), "-", "-C", dest_dir],
-        stdin=pv_proc.stdout)
-    pv_proc.stdout.close()
-    tar_ret = tar_proc.wait()
-    pv_proc.wait()
-    if tar_ret != 0:
-        raise RuntimeError("tar extraction failed (exit {}): {}".format(tar_ret, archive_path))
+        if not _RICH:
+            safe_extract_tar(tf, dest_dir)
+            return
+
+        p, task = _progress("  " + os.path.basename(archive_path), len(members))
+        assert p is not None
+        _use_filter = sys.version_info >= (3, 12)
+        for member in members:
+            if _use_filter:
+                tf.extract(member, dest_dir, filter="data")
+            else:
+                with warnings.catch_warnings():
+                    warnings.filterwarnings("ignore",
+                        message="The default behavior of tarfile extraction has changed.*")
+                    tf.extract(member, dest_dir)
+            p.advance(task)
+        p.stop()
 
 
 def install_helix_runtime(repo_dir, home):
