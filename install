@@ -1164,7 +1164,9 @@ def pv_extract_tar(archive_path, dest_dir):
 
     Falls back to safe_extract_tar (Python tarfile) when pv or tar are absent.
     Path-traversal safety check always runs regardless of which path is taken.
+    pv is resolved at call time so a freshly installed ~/.local/bin/pv is found.
     """
+    pv = _find_tool(os.path.join(os.path.expanduser("~"), ".local", "bin", "pv"), "/usr/bin/pv")
     decomp = {"bz2": "j", "gz": "z", "xz": "J"}
     flag = None
     for ext, f in decomp.items():
@@ -1174,7 +1176,7 @@ def pv_extract_tar(archive_path, dest_dir):
 
     # Always validate members first — "r:*" auto-detects compression for reading.
     with tarfile.open(archive_path, "r:*") as tf:
-        if not (_PV and _TAR and flag):
+        if not (pv and _TAR and flag):
             safe_extract_tar(tf, dest_dir)
             return
         # Safety check only — actual extraction done via pv | tar subprocess below.
@@ -1185,7 +1187,7 @@ def pv_extract_tar(archive_path, dest_dir):
             if not (target_real == dest_real or target_real.startswith(dest_real + os.sep)):
                 raise RuntimeError("unsafe tar member path: {}".format(member.name))
 
-    pv_proc = subprocess.Popen([_PV, archive_path], stdout=subprocess.PIPE)
+    pv_proc = subprocess.Popen([pv, archive_path], stdout=subprocess.PIPE)
     assert pv_proc.stdout is not None
     tar_proc = subprocess.Popen(
         [_TAR, "x{}f".format(flag), "-", "-C", dest_dir],
@@ -1863,6 +1865,10 @@ def main(argv):
     else:
         backup_dir = run_install_step("backup", backup_existing, home, repo_dir) or ""
 
+    _prebuilt_result = run_install_step("pre-built binaries", install_prebuilt_binaries, repo_dir, home, selected_tools)
+    blocked_deferred, blocked_failed = _prebuilt_result if isinstance(_prebuilt_result, tuple) else (set(), {})
+    add_prebuilt_binary_retry_notice(blocked_deferred, blocked_failed)
+
     if args.dev:
         run_install_step("dotfiles", install_dev_mode, repo_dir, home)
     else:
@@ -1884,9 +1890,6 @@ def main(argv):
     else:
         run_install_step("tldr cache", install_tldr_cache, repo_dir, home)
 
-    _prebuilt_result = run_install_step("pre-built binaries", install_prebuilt_binaries, repo_dir, home, selected_tools)
-    blocked_deferred, blocked_failed = _prebuilt_result if isinstance(_prebuilt_result, tuple) else (set(), {})
-    add_prebuilt_binary_retry_notice(blocked_deferred, blocked_failed)
     run_install_step("portable Python", install_portable_python, repo_dir, home)
     run_install_step("Helix runtime", install_helix_runtime, repo_dir, home)
     run_install_step("Vim runtime", install_vim_runtime, repo_dir, home)
