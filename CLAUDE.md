@@ -58,7 +58,7 @@ bash/
   bashrc                    - Main entry point → ~/.bashrc, ~/.bash_profile, ~/.bash_login, and ~/.profile
   functions.sh              - Shared functions loaded before any layer (path_*, is_truthy, etc.)
   global/                   - Canonical config (upstream here, don't modify locally)
-    config.sh               - cfg_* preference variables and defaults
+    config.sh               - DOTFILES_CFG_* preference variables and defaults (exported scalars)
     bashrc                  - PATH setup, colors, history, aliases, prompt, completions
     completions/            - bat, rg, zoxide, hyperfine, watchexec completions
     github.scop.bash-completion/  - Bundled bash-completion library (offline)
@@ -226,7 +226,7 @@ Files are sourced in order: `global → corp → site → project → user`. Eac
 
 **Loading sequence** (see `bash/bashrc`):
 1. Sources `bash/functions.sh` (shared utilities, available to all layers)
-2. Sources `config.sh` per layer (sets `cfg_*` preferences)
+2. Sources `config.sh` per layer (sets `DOTFILES_CFG_*` preferences)
 3. Sources `bashrc` per layer (PATH, aliases, prompt, completions); each layer's `bashrc` exits early if not interactive
 
 ### Hook System
@@ -245,22 +245,24 @@ Each layer can have `global_hooks/1.sh` through `7.sh` injected at these points 
 
 ### Configuration Variables (`bash/global/config.sh`)
 
+All variables are exported scalars (`export DOTFILES_CFG_*=value`) — they propagate to child processes and are visible in `env | grep DOTFILES_CFG_`. Override any variable in a user layer's `config.sh` with the same `export DOTFILES_CFG_*=value` form.
+
 | Variable | Default | Purpose |
 |----------|---------|---------|
-| `cfg_preferred_bash` | `""` | Full path to preferred bash binary; re-execs into it at startup if set, differs from current bash, and is executable |
-| `cfg_preferred_ls` | `eza` | ls replacement (`eza`, `lsd`, `ls`) |
-| `cfg_preferred_vi` | `nvim` | Editor (`nvim`, `vim`) |
-| `cfg_preferred_cat` | `bat` | cat replacement (used by aliases) |
-| `cfg_enable_grc` | `1` | Generic Colorizer |
-| `cfg_enable_fzf` | `0` | fzf shell integration |
-| `cfg_enable_starship` | `1` | Starship prompt (falls back to built-in prompt) |
-| `cfg_enable_fastnvim` | `0` | Fast nvim mode |
-| `cfg_enable_tmux_path_store` | `1` | tmux_path_store alias injection |
-| `cfg_prompt_color_normal` | `$PROMPT_YELLOW` | Normal session prompt color |
-| `cfg_prompt_color_farm` | `$PROMPT_RED` | Farm/LSF session prompt color |
-| `cfg_prompt_include_host` | `0` | Include hostname in prompt |
-| `cfg_attach_to_tmux` | `0` | Auto-attach tmux on login |
-| `cfg_attach_to_tmux_with_detach_others` | `0` | Detach other clients when attaching |
+| `DOTFILES_CFG_PREFERRED_BASH` | `""` | Full path to preferred bash binary; re-execs into it at startup if set, differs from current bash, and is executable |
+| `DOTFILES_CFG_PREFERRED_LS` | `eza` | ls replacement (`eza`, `lsd`, `ls`) |
+| `DOTFILES_CFG_PREFERRED_VI` | `nvim` | Editor (`nvim`, `vim`) |
+| `DOTFILES_CFG_PREFERRED_CAT` | `bat` | cat replacement (used by aliases) |
+| `DOTFILES_CFG_ENABLE_GRC` | `1` | Generic Colorizer |
+| `DOTFILES_CFG_ENABLE_FZF` | `0` | fzf shell integration |
+| `DOTFILES_CFG_ENABLE_STARSHIP` | `1` | Starship prompt (falls back to built-in prompt) |
+| `DOTFILES_CFG_ENABLE_FASTNVIM` | `0` | Fast nvim mode |
+| `DOTFILES_CFG_ENABLE_TMUX_PATH_STORE` | `1` | tmux_path_store alias injection |
+| `DOTFILES_CFG_PROMPT_COLOR_NORMAL` | `$PROMPT_YELLOW` | Normal session prompt color |
+| `DOTFILES_CFG_PROMPT_COLOR_FARM` | `$PROMPT_RED` | Farm/LSF session prompt color |
+| `DOTFILES_CFG_PROMPT_INCLUDE_HOST` | `0` | Include hostname in prompt |
+| `DOTFILES_CFG_ATTACH_TO_TMUX` | `0` | Auto-attach tmux on login |
+| `DOTFILES_CFG_ATTACH_TO_TMUX_WITH_DETACH_OTHERS` | `0` | Detach other clients when attaching |
 
 ### Key Functions (`bash/functions.sh`)
 
@@ -272,7 +274,7 @@ Each layer can have `global_hooks/1.sh` through `7.sh` injected at these points 
 - `vercomp`, `verlte`, `verlt`, `ver_between` — version string comparison
 - `array_slice` — Python-style array slicing (`array_slice 1:-1 "${arr[@]}"`)
 - `join_by` — join array with delimiter
-- `auto_attach_to_tmux` — attaches/creates tmux session if `cfg_attach_to_tmux` is set (available for manual call from user layer)
+- `auto_attach_to_tmux` — attaches/creates tmux session if `DOTFILES_CFG_ATTACH_TO_TMUX` is set (available for manual call from user layer)
 - `unset_bashrc_local_vars` — unsets all `_*` variables before bashrc exits
 
 ### Notable Aliases (`bash/global/bashrc`)
@@ -292,7 +294,7 @@ Each layer can have `global_hooks/1.sh` through `7.sh` injected at these points 
 - `lah` / `lha` — both size and all
 
 **Editing:**
-- `vi` / `vim` — `cfg_preferred_vi`
+- `vi` / `vim` — `DOTFILES_CFG_PREFERRED_VI`
 - `vic` — nvim with clean vimrc only
 - `vii` — open most recently modified file
 - `vid` — diff mode
@@ -404,7 +406,7 @@ Falls back gracefully: eza → lsd → ls, bat → cat, fd → find. Handles Deb
 
 ```bash
 # Create the file — it will automatically override global/
-bash/user/config.sh      # cfg_* variable overrides
+bash/user/config.sh      # DOTFILES_CFG_* variable overrides
 bash/user/bashrc         # alias/function overrides
 bash/corp/global_hooks/5.sh  # hook injection at point 5
 ```

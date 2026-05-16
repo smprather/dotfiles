@@ -50,13 +50,13 @@ EDA tool paths, and personal tweaks all coexist without forking. Pull a dotfiles
 overrides still work.
 
 **Opinionated but escapable.** Sensible defaults ship out of the box. Every preference is a
-`cfg_*` variable you can override in your user layer:
+`DOTFILES_CFG_*` variable you can override in your user layer:
 
 ```bash
 # bash/user/config.sh
-cfg_preferred_vi=vim        # use vim instead of nvim
-cfg_enable_starship=0       # use the built-in prompt
-cfg_attach_to_tmux=1        # auto-attach tmux on login
+export DOTFILES_CFG_PREFERRED_VI=vim        # use vim instead of nvim
+export DOTFILES_CFG_ENABLE_STARSHIP=0       # use the built-in prompt
+export DOTFILES_CFG_ATTACH_TO_TMUX=1        # auto-attach tmux on login
 ```
 
 ---
@@ -324,14 +324,14 @@ bash/user/      ← personal overrides            (user-created)
 ```
 
 Each layer sources `config.sh` (preferences) then `bashrc` (aliases/prompt).
-Override any `cfg_*` variable in your layer's `config.sh`:
+Override any `DOTFILES_CFG_*` variable in your layer's `config.sh`:
 
 ```bash
 # bash/user/config.sh
-cfg_preferred_vi=nvim
-cfg_enable_starship=1
-cfg_enable_fzf=1
-cfg_preferred_bash=/home/user/.local/bin/bash
+export DOTFILES_CFG_PREFERRED_VI=nvim
+export DOTFILES_CFG_ENABLE_STARSHIP=1
+export DOTFILES_CFG_ENABLE_FZF=1
+export DOTFILES_CFG_PREFERRED_BASH=/home/user/.local/bin/bash
 ```
 
 ### Hook Injection Points
@@ -363,7 +363,7 @@ cdd / cddd …          # cd to Nth most-recently-modified directory
 p / cdp               # bookmark cwd / return to it
 g                     # ripgrep (falls back to grep -r -i)
 f                     # fd (falls back to find .)
-vi / vim              # cfg_preferred_vi
+vi / vim              # DOTFILES_CFG_PREFERRED_VI
 v                     # nvim -n -R - (read stdin, read-only)
 fvi                   # fzf file picker → open in editor
 t                     # exec bash (reload shell)

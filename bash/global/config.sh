@@ -1,22 +1,15 @@
-# Valid values for preferred_ls : eza, lsd, ls (need to add pls)
-cfg_preferred_bash=""    # Full path to preferred bash binary; re-execs at startup if set
-cfg_preferred_ls="eza"
-cfg_preferred_vi="nvim"
-cfg_preferred_cat="bat"
-cfg_attach_to_tmux="0"
-cfg_attach_to_tmux_with_detach_others="0"
-cfg_enable_tmux_path_store="1"
-cfg_prompt_include_host="0"
-cfg_prompt_color_normal="$PROMPT_YELLOW"
-cfg_prompt_color_farm="$PROMPT_RED"
-cfg_enable_fastnvim="0"
-cfg_enable_fzf="0"
-cfg_enable_grc="1"
-cfg_enable_starship="1"
-
-# Debug, print out the config
-# declare -p cfg
-# for key in "${!cfg[@]}"; do
-#     # Access the value using the current key: ${colors[$key]}
-#     echo "Key: $key, Value: ${cfg[$key]}"
-# done
+# Valid values for DOTFILES_CFG_PREFERRED_LS: eza, lsd, ls
+export DOTFILES_CFG_PREFERRED_BASH=""    # Full path to preferred bash binary; re-execs at startup if set
+export DOTFILES_CFG_PREFERRED_LS="eza"
+export DOTFILES_CFG_PREFERRED_VI="nvim"
+export DOTFILES_CFG_PREFERRED_CAT="bat"
+export DOTFILES_CFG_ATTACH_TO_TMUX="0"
+export DOTFILES_CFG_ATTACH_TO_TMUX_WITH_DETACH_OTHERS="0"
+export DOTFILES_CFG_ENABLE_TMUX_PATH_STORE="1"
+export DOTFILES_CFG_PROMPT_INCLUDE_HOST="0"
+export DOTFILES_CFG_PROMPT_COLOR_NORMAL="$PROMPT_YELLOW"
+export DOTFILES_CFG_PROMPT_COLOR_FARM="$PROMPT_RED"
+export DOTFILES_CFG_ENABLE_FASTNVIM="0"
+export DOTFILES_CFG_ENABLE_FZF="0"
+export DOTFILES_CFG_ENABLE_GRC="1"
+export DOTFILES_CFG_ENABLE_STARSHIP="1"

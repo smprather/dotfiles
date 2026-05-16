@@ -1,10 +1,10 @@
 auto_attach_to_tmux() {
-    if is_truthy $cfg_attach_to_tmux; then
+    if is_truthy "${DOTFILES_CFG_ATTACH_TO_TMUX}"; then
         # Make sure terminal is in a known-good state
         reset
 
         if tmux has-session 2>/dev/null; then
-            if is_truthy $cfg_attach_to_tmux_with_detach_others; then
+            if is_truthy "${DOTFILES_CFG_ATTACH_TO_TMUX_WITH_DETACH_OTHERS}"; then
                 # Attach this bash, -d -> detach all others
                 unset_bashrc_local_vars
                 tmux attach -d
@@ -21,11 +21,9 @@ auto_attach_to_tmux() {
 }
 
 # Use a leading _ char for bashrc local vars that should go away at the end of env setup.
-# Keeping cfg_* vars since downstream function/alias usage may want to reference them.
-# Should we export the cfg? Open question
+# DOTFILES_CFG_* vars are exported scalars — they survive into child processes intentionally.
 unset_bashrc_local_vars() {
     # Unset all local variables that start with '_'.
-    # Removing for now: $(compgen -v cfg_)
     for var in $(compgen -v _); do
         # Check if the variable is NOT exported
         if [[ $(declare -p "$var" 2>/dev/null) != "declare -x"* ]]; then
