@@ -75,6 +75,7 @@ import inspect
 import tarfile
 import tempfile
 import time
+import traceback
 import warnings
 import zipfile
 
@@ -299,6 +300,7 @@ def run_install_step(thing, func, *args, **kwargs):
     except (OSError, subprocess.CalledProcessError) as exc:
         detail = "{} failed: {}".format(thing, exc)
         warn(detail)
+        traceback.print_exc()
         record_result(thing, "FAIL", detail)
         return None
 
@@ -379,10 +381,10 @@ def install_path(src, dest, links_mode):
 
     require_writable_parent(dest, "install")
     if os.path.isdir(src) and not os.path.islink(src):
-        if os.path.lexists(dest):
-            remove_path(dest)
-        os.makedirs(dest)
-        rsync_dir(src, dest)
+        if os.path.islink(dest):
+            os.unlink(dest)
+        ensure_dir(dest, "install")
+        rsync_dir(src, dest, delete=True)
         _vprint("  rsync: {}/ -> {}/".format(src, dest))
     else:
         if os.path.lexists(dest):
@@ -1458,9 +1460,6 @@ def preserve_bash_layers_from_symlink(home):
             shutil.move(tmp, os.path.join(bash_config, layer))
     else:
         ensure_dir(bash_config, "bash config")
-        remove_if_exists(os.path.join(bash_config, "global"))
-        for name in ("functions.sh", "README.md", "bashrc"):
-            remove_if_exists(os.path.join(bash_config, name))
 
 
 def install_bash(repo_dir, home, links_mode):
@@ -1607,42 +1606,46 @@ def install_copy_mode(repo_dir, home):
 
     nvim_src    = os.path.join(repo_dir, "nvim")
     nvim_config = os.path.join(home, ".config", "nvim")
-    saved_layers = _nvim_save_user_layers(nvim_config)
-    remove_if_exists(nvim_config)
     ensure_dir(os.path.join(nvim_config, "after", "lsp"),      "Neovim config")
     ensure_dir(os.path.join(nvim_config, "after", "ftplugin"), "Neovim config")
     ensure_dir(os.path.join(nvim_config, "lsp"),               "Neovim config")
     for rel in ("init.lua", "lazy-lock.json"):
         install_path(os.path.join(nvim_src, rel), os.path.join(nvim_config, rel), False)
     install_path(os.path.join(nvim_src, "lua", "global"), os.path.join(nvim_config, "lua", "global"), False)
-    for src in sorted(glob_paths(os.path.join(nvim_src, "lsp"))):
-        install_path(src, os.path.join(nvim_config, "lsp", os.path.basename(src)), False)
-    for src in sorted(glob_paths(os.path.join(nvim_src, "after", "ftplugin"))):
-        install_path(src, os.path.join(nvim_config, "after", "ftplugin", os.path.basename(src)), False)
-    for src in sorted(glob_paths(os.path.join(nvim_src, "after", "lsp"))):
-        install_path(src, os.path.join(nvim_config, "after", "lsp", os.path.basename(src)), False)
-    _nvim_restore_user_layers(saved_layers, nvim_config)
+    rsync_dir(os.path.join(nvim_src, "lsp"), os.path.join(nvim_config, "lsp"), delete=True)
+    rsync_dir(os.path.join(nvim_src, "after", "ftplugin"), os.path.join(nvim_config, "after", "ftplugin"), delete=True)
+    rsync_dir(os.path.join(nvim_src, "after", "lsp"), os.path.join(nvim_config, "after", "lsp"), delete=True)
+    for layer in NVIM_LAYERS:
+        ensure_dir(os.path.join(nvim_config, "lua", layer), "Neovim {} layer".format(layer))
     _nvim_migration_notice(nvim_config)
 
     remove_if_exists(os.path.join(home, ".vimrc"))
     remove_if_exists(os.path.join(home, ".vim"))
     vim_config = os.path.join(home, ".config", "vim")
-    remove_if_exists(vim_config)
+    if os.path.islink(vim_config):
+        os.unlink(vim_config)
     ensure_dir(os.path.join(vim_config, "vim", "pack", "vendor", "start"), "Vim config")
     ensure_dir(os.path.join(vim_config, "vim", "pack", "vendor", "opt"), "Vim config")
     for start_or_opt in ("start", "opt"):
-        for plugin_dir in sorted(glob_paths(os.path.join(repo_dir, "vim", "vim", "pack", "vendor", start_or_opt))):
-            install_path(plugin_dir, os.path.join(vim_config, "vim", "pack", "vendor", start_or_opt, os.path.basename(plugin_dir)), False)
+        rsync_dir(
+            os.path.join(repo_dir, "vim", "vim", "pack", "vendor", start_or_opt),
+            os.path.join(vim_config, "vim", "pack", "vendor", start_or_opt),
+            delete=True,
+        )
     install_path(os.path.join(repo_dir, "vim", "vimrc"), os.path.join(vim_config, "vimrc"), False)
     lns(".config/vim/vimrc", os.path.join(home, ".vimrc"), verbose=True)
 
     remove_if_exists(os.path.join(home, ".tmux.conf"))
     remove_if_exists(os.path.join(home, ".tmux"))
     tmux_config = os.path.join(home, ".config", "tmux")
-    remove_if_exists(tmux_config)
+    if os.path.islink(tmux_config):
+        os.unlink(tmux_config)
     ensure_dir(os.path.join(tmux_config, "tmux", "plugins"), "tmux config")
-    for plugin_dir in sorted(glob_paths(os.path.join(repo_dir, "tmux", "vendor", "plugins"))):
-        install_path(plugin_dir, os.path.join(tmux_config, "tmux", "plugins", os.path.basename(plugin_dir)), False)
+    rsync_dir(
+        os.path.join(repo_dir, "tmux", "vendor", "plugins"),
+        os.path.join(tmux_config, "tmux", "plugins"),
+        delete=True,
+    )
     install_path(os.path.join(repo_dir, "tmux", "tmux.conf"), os.path.join(tmux_config, "tmux.conf"), False)
     install_path(os.path.join(repo_dir, "tmux", "tmux-3col-layout.sh"), os.path.join(tmux_config, "tmux-3col-layout.sh"), False)
     install_path(os.path.join(repo_dir, "tmux", "tmux-word-separators"), os.path.join(tmux_config, "tmux-word-separators"), False)
@@ -1651,7 +1654,8 @@ def install_copy_mode(repo_dir, home):
 
     remove_if_exists(os.path.join(home, ".editorconfig"))
     editorconfig_dir = os.path.join(home, ".config", "editorconfig")
-    remove_if_exists(editorconfig_dir)
+    if os.path.islink(editorconfig_dir):
+        os.unlink(editorconfig_dir)
     ensure_dir(editorconfig_dir, "editorconfig")
     install_path(os.path.join(repo_dir, "editorconfig", "editorconfig"), os.path.join(editorconfig_dir, "editorconfig"), False)
     lns(".config/editorconfig/editorconfig", os.path.join(home, ".editorconfig"), verbose=True)
@@ -1663,7 +1667,8 @@ def install_copy_mode(repo_dir, home):
         install_path(_pip_conf_src, os.path.join(_pip_cfg_dir, "pip.conf"), False)
 
     starship_dir = os.path.join(home, ".config", "starship")
-    remove_if_exists(starship_dir)
+    if os.path.islink(starship_dir):
+        os.unlink(starship_dir)
     ensure_dir(starship_dir, "starship config")
     install_path(os.path.join(repo_dir, "starship", "config-schema.json"), os.path.join(starship_dir, "config-schema.json"), False)
     install_path(os.path.join(repo_dir, "starship", "starship.linux.toml"), os.path.join(starship_dir, "starship.toml"), False)
