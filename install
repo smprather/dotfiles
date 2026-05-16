@@ -750,6 +750,7 @@ def install_prebuilt_binaries(repo_dir, home, selected_tools=None):
             f for f in fnmatch.filter(
                 [os.path.join(bin_dir, x) for x in os.listdir(bin_dir)], "*.bz2")
             if _bin_selected(os.path.basename(f)[:-4]))
+        _max_bin_name = max((len(os.path.basename(f[:-4])) for f in _bin_bz2_files), default=0)
         _progress_ctx = (
             _RichProgress(
                 TextColumn("[cyan]{task.description}"),
@@ -771,7 +772,7 @@ def install_prebuilt_binaries(repo_dir, home, selected_tools=None):
             name = os.path.basename(dest_file)
 
             if _progress_ctx is not None:
-                _progress_ctx.update(_progress_task, description="  {}".format(name))
+                _progress_ctx.update(_progress_task, description="  {}".format(name.ljust(_max_bin_name)))
 
             if name in _DEFERRED_BINARIES:
                 pids = _exes_by_path(dest_file)
