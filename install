@@ -71,12 +71,15 @@ import re
 import shutil
 import stat
 import subprocess
+import inspect
 import tarfile
 import tempfile
 import time
 import warnings
 import zipfile
 
+
+_TAR_SUPPORTS_FILTER = "filter" in inspect.signature(tarfile.TarFile.extract).parameters
 
 FONT_EXCLUDES = (
     "*.bdf",
@@ -1149,11 +1152,11 @@ def safe_extract_tar(tf, dest_dir):
         target_real = os.path.realpath(os.path.join(dest_dir, member.name))
         if not (target_real == dest_real or target_real.startswith(dest_real + os.sep)):
             raise RuntimeError("unsafe tar member path: {}".format(member.name))
-    try:
-        tf.extractall(dest_dir, filter="data")
-    except TypeError:
-        with warnings.catch_warnings():
-            warnings.filterwarnings("ignore", message="The default behavior of tarfile extraction has been changed.*")
+    with warnings.catch_warnings():
+        warnings.filterwarnings("ignore", message="The default behavior of tarfile extraction has changed.*")
+        if _TAR_SUPPORTS_FILTER:
+            tf.extractall(dest_dir, filter="data")
+        else:
             tf.extractall(dest_dir)
 
 
@@ -1175,15 +1178,15 @@ def pv_extract_tar(archive_path, dest_dir):
 
         p, task = _progress("  " + os.path.basename(archive_path), len(members))
         assert p is not None
-        _use_filter = sys.version_info >= (3, 12)
-        for member in members:
-            if _use_filter:
-                tf.extract(member, dest_dir, filter="data")
-            else:
-                with warnings.catch_warnings():
-                    warnings.filterwarnings("ignore",
-                        message="The default behavior of tarfile extraction has changed.*")
+        with warnings.catch_warnings():
+            warnings.filterwarnings("ignore",
+                message="The default behavior of tarfile extraction has changed.*")
+            for member in members:
+                if _TAR_SUPPORTS_FILTER:
+                    tf.extract(member, dest_dir, filter="data")
+                else:
                     tf.extract(member, dest_dir)
+                p.advance(task)
             p.advance(task)
         p.stop()
 
