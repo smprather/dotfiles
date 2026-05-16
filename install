@@ -741,9 +741,10 @@ def install_prebuilt_binaries(repo_dir, home, selected_tools=None):
         # the pending-ops daemon so the user never has to manually re-run the installer.
         # tmux: server/client must be same version; NFS atomic rename still leaves old
         #       server running with the old inode while new clients exec the new binary.
-        # bash: the running shell itself holds the executable mapped; ETXTBSY is not
-        #       always raised for scripts, so proactive path detection is essential.
-        _DEFERRED_BINARIES = {"bash", "tmux"}
+        # bash: safe to replace live — write_bz2_atomic uses os.rename (atomic inode swap),
+        #       so the running shell keeps its old inode and new shells get the new binary.
+        #       No bash→bash IPC, so no version-mismatch risk.
+        _DEFERRED_BINARIES = {"tmux"}
 
         _bin_bz2_files = sorted(
             f for f in fnmatch.filter(
@@ -965,17 +966,12 @@ def check_prebuilt_binary_dependencies(dest_bin_dir):
 def add_prebuilt_binary_retry_notice(blocked_deferred, blocked_failed):
     # Per-tool deferred messages — shown even when the daemon was already running,
     # because the user needs to know what will happen and when.
-    if "bash" in blocked_deferred:
-        FINAL_NOTICES.append(
-            "bash: a newer version is staged and will install automatically the next time "
-            "you log out of all open login sessions."
-        )
     if "tmux" in blocked_deferred:
         FINAL_NOTICES.append(
             "tmux: a newer version is staged and will install automatically the next time "
             "all running tmux servers shut down."
         )
-    other_deferred = blocked_deferred - {"bash", "tmux"}
+    other_deferred = blocked_deferred - {"tmux"}
     if other_deferred:
         FINAL_NOTICES.append(
             "Deferred (pending daemon): {}. Will install automatically when those processes exit.".format(
@@ -1548,9 +1544,15 @@ def install_dev_mode(repo_dir, home):
     _nvim_restore_user_layers(saved_layers, nvim_config)
     _nvim_migration_notice(nvim_config)
 
-    for name in ("vim", "tmux", "starship", "editorconfig"):
+    for name in ("vim", "tmux", "editorconfig"):
         remove_if_exists(os.path.join(config_dir, name))
         lns(os.path.join(repo_dir, name), os.path.join(config_dir, name), verbose=True)
+
+    starship_dir = os.path.join(config_dir, "starship")
+    remove_if_exists(starship_dir)
+    ensure_dir(starship_dir, "starship config")
+    install_path(os.path.join(repo_dir, "starship", "config-schema.json"), os.path.join(starship_dir, "config-schema.json"), links_mode)
+    install_path(os.path.join(repo_dir, "starship", "starship.linux.toml"), os.path.join(starship_dir, "starship.toml"), links_mode)
 
     install_bash(repo_dir, home, links_mode=True)
     lns(".config/vim/vimrc", os.path.join(home, ".vimrc"), verbose=True)
@@ -1628,11 +1630,6 @@ def install_copy_mode(repo_dir, home):
     ensure_dir(editorconfig_dir, "editorconfig")
     install_path(os.path.join(repo_dir, "editorconfig", "editorconfig"), os.path.join(editorconfig_dir, "editorconfig"), False)
     lns(".config/editorconfig/editorconfig", os.path.join(home, ".editorconfig"), verbose=True)
-
-    starship_dir = os.path.join(home, ".config", "starship")
-    remove_if_exists(starship_dir)
-    ensure_dir(starship_dir, "starship config")
-    install_path(os.path.join(repo_dir, "starship", "starship.toml"), os.path.join(starship_dir, "starship.toml"), False)
 
     _helix_cfg = os.path.join(repo_dir, "helix", "config.toml")
     if os.path.isfile(_helix_cfg):
