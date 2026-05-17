@@ -140,6 +140,8 @@ def resolve_tool_selection(args, registry):
 
     def _parse_list(raw):
         names = [t.strip() for t in raw.split(",") if t.strip()]
+        if "all" in names:
+            return set(known)
         for n in names:
             if n not in known:
                 warn("unknown tool name '{}' (ignored); known tools: {}".format(
@@ -1758,11 +1760,11 @@ def parse_args(argv):
     parser.add_argument("--verbose", action="store_true")
     parser.add_argument("--help", "-h", action="store_true")
     parser.add_argument("--tools", default=None, metavar="TOOL,…",
-                        help="Install exactly these tools (comma-separated); overrides defaults.")
+                        help="Install exactly these tools (comma-separated, or 'all'); overrides defaults.")
     parser.add_argument("--add-tools", default=None, dest="add_tools", metavar="TOOL,…",
-                        help="Add optional tools to the default install set.")
+                        help="Add optional tools to the default install set (use 'all' for every tool).")
     parser.add_argument("--skip-tools", default=None, dest="skip_tools", metavar="TOOL,…",
-                        help="Remove tools from the default install set.")
+                        help="Remove tools from the default install set (use 'all' to skip every tool).")
     parser.add_argument("--list-tools", action="store_true", dest="list_tools",
                         help="List all available tools and whether they install by default.")
     args, unknown = parser.parse_known_args(argv)
@@ -1811,13 +1813,19 @@ Options:
   --tools TOOL,…             Install exactly these pre-built tools (comma-separated).
                              Overrides --add-tools and --skip-tools.
                              Tool names and groupings are defined in pre_built/tools.json.
+                             Use 'all' to install every tool.
                              Example: ./install --tools vim,nvim,rg,tmux
+                             Example: ./install --tools all
 
   --add-tools TOOL,…         Add optional tools to the default install set.
+                             Use 'all' to add every optional tool.
                              Example: ./install --add-tools octave
+                             Example: ./install --add-tools all
 
   --skip-tools TOOL,…        Remove tools from the default install set.
+                             Use 'all' to skip every tool.
                              Example: ./install --skip-tools gnuplot,kak
+                             Example: ./install --skip-tools all
 
   --restore-backup <dir>     Restore dotfiles from a previous backup directory.
                              Example: ./install --restore-backup dotfiles_backups/backup.1
