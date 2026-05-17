@@ -27,6 +27,7 @@
                   "libs": ["libjq.so", "libjq.so.1", "libjq.so.1.0.4", "libonig.so.5"]},
   "just":        {"bins": ["just"]},
   "kak":         {"bins": ["kak"]},
+  "lazygit":     {"bins": ["lazygit"]},
   "micro":       {"bins": ["micro"]},
   "nvim":        {"bins": ["nvim"]},
   "patchelf":    {"bins": ["patchelf"]},

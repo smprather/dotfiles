@@ -174,6 +174,9 @@ TOOLS = [
     ("just",        "just",        "https://github.com/casey/just",
      strategy_flag(["--version"], r"([0-9]+\.[0-9]+\.[0-9]+)")),
 
+    ("lazygit",     "lazygit",     "https://github.com/jesseduffield/lazygit",
+     strategy_flag(["--version"], r"version=([0-9]+\.[0-9]+\.[0-9]+)")),
+
     ("kak",         "kakoune",     "https://kakoune.org",
      # kakoune uses date-based release tags (YYYY.MM.DD). The binary embeds no
      # version string in dev builds. Fall back to hardcoded version for this build.
