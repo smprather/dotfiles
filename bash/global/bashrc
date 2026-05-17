@@ -151,6 +151,12 @@ export VISUAL=$EDITOR
 export GIT_EDITOR=$EDITOR
 export PIP_REQUIRE_VIRTUALENV=1
 
+# Qt5/GTK3: point Qt at bundled xcb platform plugin when gui_libs is installed.
+# libqxcb.so lives flat in ~/.local/lib64 alongside the other Qt5 libs.
+if [[ -f $HOME/.local/lib64/libqxcb.so ]]; then
+    export QT_QPA_PLATFORM_PLUGIN_PATH=$HOME/.local/lib64
+fi
+
 if command -v batcat >&/dev/null; then
     _bat_exec="batcat"
 elif command -v bat >&/dev/null; then
