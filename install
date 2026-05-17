@@ -1769,6 +1769,8 @@ def parse_args(argv):
     if args.help:
         print_help()
         sys.exit(0)
+    if args.list_tools:
+        return args  # skip unknown-args check; main() will print table and exit
     if unknown:
         eprint("Unknown option: {}".format(unknown[0]))
         eprint("Usage: ./install [--dev] [--dest-dir DIR] [--no-backup] [--no-fonts] "
