@@ -6,6 +6,7 @@
     "optional": "If true, not installed by default. User must opt in with --add-tools."
   },
 
+  "agent-deck":  {"bins": ["agent-deck"]},
   "bash":        {"bins": ["bash"]},
   "bat":         {"bins": ["bat"]},
   "broot":       {"bins": ["broot"]},

@@ -116,6 +116,9 @@ def strategy_first(*strategies):
 # binary_name is looked up in bin_dir; display_name is shown in output.
 
 TOOLS = [
+    ("agent-deck",  "agent-deck",  "https://github.com/asheshgoplani/agent-deck",
+     strategy_flag(["--version"], r"v([0-9]+\.[0-9]+\.[0-9]+)")),
+
     ("bash",        "bash",        "https://www.gnu.org/software/bash/",
      strategy_flag(["--version"], r"version ([0-9]+\.[0-9]+\.[0-9]+)")),
 
