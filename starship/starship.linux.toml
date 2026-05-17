@@ -3,7 +3,7 @@
 add_newline = false
 scan_timeout = 100
 format = """
-(${custom.username}${custom.lsf}$git_branch$git_status$cmd_duration\n)$directory
+(${custom.username}${custom.lsf}$git_branch$git_status$cmd_duration$python\n)$directory
 $character"""
 
 [custom.username]
@@ -41,5 +41,5 @@ error_symbol = "[❯](bold red)"
 
 [python]
 symbol = "🐍"
-format = '[${symbol}${pyenv_prefix}(${version})(\($virtualenv\))](bold yellow)'
+format = '[${symbol}${pyenv_prefix}(${version})(\($virtualenv\))](bold yellow) '
 pyenv_prefix = "venv "
