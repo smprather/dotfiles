@@ -57,6 +57,7 @@ sha256  b739d953087cf6bd655dc8cd7a346e210d309ddac1cc7cbec808aa90764eecad  pre_bu
 sha256  3d9990a7f74459ce9310c8ade69af3efc25f1a85bf40ef03825bd60399b4c768  pre_built/el8.x86_64.glibc2p28/lib64/libQt5Gui.so.5.bz2
 sha256  224d4e571d03df38567613801fea00ee52405ab467300cb7ebde7e4f15b76c95  pre_built/el8.x86_64.glibc2p28/lib64/libQt5Network.so.5.bz2
 sha256  2fa06ae08a70a7f652fb2c4cef9c681d962152e155f3ea99ee02771fc298c7a7  pre_built/el8.x86_64.glibc2p28/lib64/libQt5PrintSupport.so.5.bz2
+sha256  ff5d89cd8594fa0d2a9ce173d583aa7ddad7079ad2208f2a8eb3e54d9bf089be  pre_built/el8.x86_64.glibc2p28/lib64/libQt5WaylandClient.so.5.bz2
 sha256  8d066d0c917a8ff38a986ff1fd4def2379e11574d3eab1eea0d3da3cc6cebdfe  pre_built/el8.x86_64.glibc2p28/lib64/libQt5Widgets.so.5.bz2
 sha256  ab729c4214b0cfc0e6941b9a3f4c80387a056fe928297ac703c031182fd207a1  pre_built/el8.x86_64.glibc2p28/lib64/libQt5XcbQpa.so.5.bz2
 sha256  98588614d174694224486bae73d83109e3c7de03481f300b083bdd9488024132  pre_built/el8.x86_64.glibc2p28/lib64/libQt5Xml.so.5.bz2
@@ -145,6 +146,7 @@ sha256  6986b61db9683089da53add7b18e2f535ed5693589c8092b780e6065424fe663  pre_bu
 sha256  cdfc0cdc7e787b17504da28bc4845c7ca1acb199b5928287104b47edfd0e4c4f  pre_built/el8.x86_64.glibc2p28/lib64/libportaudio.so.2.bz2
 sha256  e3511ef1f603605aac705b520e7be6b6cf703374bdd43ee6cbfd6b585f284be4  pre_built/el8.x86_64.glibc2p28/lib64/libqhull_r.so.7.bz2
 sha256  1c926d23c972e7148f9d9d620d9ea6deed5d9b707cc3d49863696816c50478c7  pre_built/el8.x86_64.glibc2p28/lib64/libquadmath.so.0.bz2
+sha256  c1d8c54ea1088137d0c4f44d0c560ca8264a1f3fdb7f859c13f07cd5c6864415  pre_built/el8.x86_64.glibc2p28/lib64/libqwayland-generic.so.bz2
 sha256  ad37a844bfcfc017aebed179204551cd2e8a39ec2b9b37674a58aebe15acf9f2  pre_built/el8.x86_64.glibc2p28/lib64/libqxcb.so.bz2
 sha256  08b32218e03fc6b2079e226639ce3454e0ec5c76e6c48a55697f15f7577520a1  pre_built/el8.x86_64.glibc2p28/lib64/libreadline.so.7.bz2
 sha256  a2d36df82b1ebd81809a43251104c9ab03a7cf81e3608ccf935ab874c686ed69  pre_built/el8.x86_64.glibc2p28/lib64/libsatlas.so.3.bz2

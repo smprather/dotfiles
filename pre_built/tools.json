@@ -109,6 +109,8 @@
       "libpixman-1.so.0",
       "libpng16.so.16",
       "libqxcb.so",
+      "libqwayland-generic.so",
+      "libQt5WaylandClient.so.5",
       "libthai.so.0",
       "libwayland-client.so.0",
       "libwayland-cursor.so.0",
