@@ -10,7 +10,15 @@ Platform directory: `el8.x86_64.glibc2p28`
 ```
 uname -r  → 6.6.87.2-microsoft-standard-WSL2
 ldd --version → ldd (GNU libc) 2.28
-gcc --version → gcc 8.5.0
+gcc --version → gcc 14.2.1 (gcc-toolset-14, enabled in ~/.config/bash/user/bashrc)
+/usr/bin/gcc --version → gcc 8.5.0 (base system compiler, too old for most modern software)
+```
+
+GCC 14 is sourced via `gcc-toolset-14` from the `appstream` repo:
+```bash
+sudo dnf install -y gcc-toolset-14 gcc-toolset-14-gcc-c++
+# Or it may already be active if it is in your user bashrc:
+. /opt/rh/gcc-toolset-14/enable
 ```
 
 User has `sudo` (wheel group). Enabled repos: appstream, baseos, epel, extras, powertools,
@@ -53,23 +61,15 @@ ldd /path/to/binary
 Compare against already-bundled libs in `lib64/`. Anything already there: free.
 Anything missing: decide whether to bundle or accept as system dependency.
 
-**NEVER bundle these glibc components** — they must match the system's `ld-linux.so.2` exactly
-or you get `undefined symbol: _dl_audit_symbind_alt, version GLIBC_PRIVATE` style crashes:
-- `libc.so.6`
-- `libm.so.6`
-- `libpthread.so.0`
-- `libdl.so.2`
-- `librt.so.1`
+**NEVER bundle these — they must come from the system:**
 
-These are always present on any EL8 system. Bundling them causes glibc/loader version mismatch.
-If they're in `lib64/` from a previous mistake, remove them and purge from `~/.local/lib64` on
-deployed systems.
+- **glibc components**: `libc.so.6`, `libm.so.6`, `libpthread.so.0`, `libdl.so.2`, `librt.so.1` — must match the system's `ld-linux.so.2` exactly or you get `undefined symbol: _dl_audit_symbind_alt, version GLIBC_PRIVATE` crashes. Every EL8 system has glibc 2.28; never needed in the bundle.
+- **OpenGL dispatcher**: `libGL.so.1`, `libGLX.so.0`, `libGLdispatch.so.0` — must be the system's display-driver-linked version. Bundling causes crashes or wrong driver selection. Qt5 and GTK3 can be built without OpenGL (use `--no-opengl` or equivalent).
+- **C++ runtime**: `libstdc++.so.6`, `libgcc_s.so.1` — present on all EL8 systems; version mismatches with C++ exceptions are subtle.
 
-**Safe to bundle**: anything that isn't glibc — libz, libpng, libX11, libreadline, libncurses,
-libfreetype, libfontconfig, libevent, libxxhash, etc.
+If any of these appear in `lib64/` from a previous mistake, remove them and purge from `~/.local/lib64` on deployed systems.
 
-**libstdc++.so.6 and libgcc_s.so.1**: present on all EL8 systems. Don't bundle — no other
-binaries in this repo do, and version mismatches with C++ code are subtle.
+**Safe to bundle**: everything else — libz, libpng, libX11, libreadline, libncurses, libfreetype, libfontconfig, libevent, libxxhash, Qt5, GTK3, glib2, ICU, pango, cairo, xcb extensions, xkbcommon, Wayland client libs. See `gui_libs` in `tools.json` as a worked example of a large GUI lib bundle.
 
 ### 3. Minimize the dep chain
 
@@ -106,8 +106,13 @@ cp /tmp/mytool_tmp.bz2 "$BIN_DIR/mytool.bz2"
 chmod 644 "$BIN_DIR/mytool.bz2"   # bzip2 inherits source perms; normalize to 644
 
 # Shared lib — filename must be the SONAME (ldd shows "libfoo.so.3 => ...")
-# Libs don't need patchelf.
+# Standalone libs (only needed by one binary with a fixed RPATH): no patchelf needed.
+# GUI libs that must find EACH OTHER (e.g. gui_libs group in lib64/): need RPATH $ORIGIN.
+# Order for libs that need patchelf: strip → patchelf → bzip2 (same rule as binaries).
 cp /lib64/libfoo.so.3.x.y /tmp/libfoo_tmp
+/usr/bin/strip /tmp/libfoo_tmp
+# If this lib needs to find sibling libs in the same lib64/ dir:
+~/.local/bin/patchelf --set-rpath '$ORIGIN' /tmp/libfoo_tmp
 bzip2 -k /tmp/libfoo_tmp
 cp /tmp/libfoo_tmp.bz2 "$LIB_DIR/libfoo.so.3.bz2"
 chmod 644 "$LIB_DIR/libfoo.so.3.bz2"
@@ -266,16 +271,122 @@ See `pre_built/build_scripts/build-octave.sh` for the full bundling recipe.
 
 Home directory quotas on EE systems are typically small (~4–10 GB). Rough sizes after stripping:
 
-| Category           | Example                          | Approx size |
-|--------------------|----------------------------------|-------------|
-| Rust/Go binaries   | rg, fd, bat, eza, starship       | 0.5–3 MB    |
-| C binaries         | gnuplot, htop, tmux              | 0.3–1.5 MB  |
-| Qt5 bundle         | gnuplot with qt                  | ~150 MB     |
-| Cairo+pango chain  | gnuplot with cairo               | ~15 MB      |
-| ICU alone          | (pulled by Qt5)                  | ~75 MB      |
-| Portable Python    | python3.14                       | ~40 MB      |
-| Treesitter parsers | all platforms                    | ~20 MB      |
-| Octave (optional)  | octave 11.1.0                    | ~163 MB     |
+| Category                 | Example                          | Approx size (uncompressed) |
+|--------------------------|----------------------------------|---------------------------|
+| Rust/Go binaries         | rg, fd, bat, eza, starship       | 0.5–3 MB each             |
+| C binaries               | gnuplot, htop, tmux              | 0.3–1.5 MB each           |
+| Qt5/GTK3 + xcb + Wayland | gui_libs optional package        | ~200 MB total             |
+|   └─ ICU data alone      | libicudata.so.60                 | ~26 MB                    |
+|   └─ Qt5 Core            | libQt5Core.so.5                  | ~14 MB                    |
+|   └─ GTK3                | libgtk-3.so.0                    | ~13 MB                    |
+| Cairo+pango chain        | (subset of gui_libs)             | ~15 MB                    |
+| gvim (optional)          | GTK3 GUI vim 9.2                 | ~5 MB                     |
+| nedit-ng (optional)      | Qt5 NEdit rewrite                | ~8 MB                     |
+| Portable Python          | python3.14                       | ~40 MB                    |
+| Treesitter parsers       | all platforms                    | ~20 MB                    |
+| Octave (optional)        | octave 11.1.0                    | ~163 MB                   |
 
 Future: consider splitting pre_built into lightweight (→ `~/.local`) and heavyweight
 (→ shared filesystem, symlinked from `~/.local`). See memory file `project_prebuilt_bifurcation.md`.
+
+## gvim build notes (vim 9.2.458, added 2026-05-16)
+
+Built as GTK3 GUI vim targeting el8.x86_64.glibc2p28. Requires gcc-toolset-14 active.
+
+**Prerequisites:**
+```bash
+sudo dnf install -y gcc make ncurses-devel gtk3-devel libX11-devel libXt-devel libSM-devel libICE-devel
+. /opt/rh/gcc-toolset-14/enable
+```
+
+**Build:**
+```bash
+cd /tmp/vim-src
+make distclean   # important if previously built without GTK3
+./configure \
+  --prefix=/tmp/gvim-install \
+  --with-features=huge \
+  --enable-gui=gtk3 \
+  --with-x \
+  --enable-multibyte \
+  --disable-perl --disable-ruby --disable-python3 --disable-tcl \
+  CFLAGS="-O2 -fno-strength-reduce -Wall -Wno-deprecated-declarations \
+          -D_REENTRANT -U_FORTIFY_SOURCE -D_FORTIFY_SOURCE=1"
+make -j$(nproc)
+# Binary at src/vim
+```
+
+**Packaging (strip → patchelf → bzip2):**
+```bash
+cp src/vim /tmp/gvim_tmp
+/usr/bin/strip /tmp/gvim_tmp
+~/.local/bin/patchelf --set-rpath '$ORIGIN/../lib64:$ORIGIN/../lib' /tmp/gvim_tmp
+bzip2 -k /tmp/gvim_tmp
+cp /tmp/gvim_tmp.bz2 pre_built/el8.x86_64.glibc2p28/bin/gvim.bin.bz2
+```
+
+**gvim wrapper** (`gvim.bz2`): shell script that sets `VIM`/`VIMRUNTIME` and execs `gvim.bin -g "$@"` to force GUI mode regardless of argv[0]. Not an ELF — recorded in `.strip-manifest` as a non-ELF skip.
+
+Binary sizes: 4.5 MB unstripped → 1.9 MB stripped → ~740 KB bzip2.
+See `pre_built/build_scripts/build-gvim.sh` for the full recipe.
+
+## nedit-ng build notes (v2.0.1, commit 72661f5, added 2026-05-16)
+
+Qt5 CMake rewrite of NEdit. Single self-contained binary — Qt .qrc embeds all resources, no runtime files needed. Requires gcc-toolset-14 and Qt5 devel packages.
+
+**Prerequisites:**
+```bash
+sudo dnf install -y cmake gcc-c++ qt5-qtbase-devel qt5-qtsvg-devel qt5-linguist libXt-devel
+. /opt/rh/gcc-toolset-14/enable
+# qt5-linguist is required for lupdate/lrelease during the CMake build; easy to miss
+```
+
+**Build:**
+```bash
+git clone https://github.com/eteran/nedit-ng /tmp/nedit-ng-src
+cd /tmp/nedit-ng-src
+cmake -B build \
+  -DCMAKE_BUILD_TYPE=Release \
+  -DCMAKE_CXX_FLAGS="-O2 -Wall"
+cmake --build build -j$(nproc)
+# Binary at build/nedit-ng
+```
+
+**Packaging (strip → bzip2, no patchelf — Qt5 libs already in lib64/):**
+```bash
+cp build/nedit-ng /tmp/nedit_tmp
+/usr/bin/strip /tmp/nedit_tmp
+bzip2 -k /tmp/nedit_tmp
+cp /tmp/nedit_tmp.bz2 pre_built/el8.x86_64.glibc2p28/bin/nedit-ng.bz2
+```
+
+nedit-ng is `optional: true` in `tools.json` because it requires `gui_libs`. Install together:
+`./install --add-tools gui_libs,nedit-ng`.
+
+Binary sizes: 3.8 MB unstripped → 3.1 MB stripped → ~1.1 MB bzip2.
+See `pre_built/build_scripts/build-nedit-ng.sh` for the full recipe.
+
+## gui_libs bundle notes (added 2026-05-16)
+
+~80 shared libs covering Qt5 5.15.3, GTK3 3.22, ICU 60, cairo, pango, glib2, xcb extensions,
+xkbcommon, Wayland client, and X11 client libs. All built from system packages on AlmaLinux 8.10.
+
+**All libs use RPATH `$ORIGIN`** (not `$ORIGIN/../lib64`) so they find each other when installed
+flat into `~/.local/lib64/`. This is different from binaries which use `$ORIGIN/../lib64:$ORIGIN/../lib`.
+
+**Qt5 platform plugins** (`libqxcb.so`, `libqwayland-generic.so`): stored flat in `lib64/`
+alongside the other Qt5 libs. `bash/global/bashrc` sets:
+```bash
+export QT_QPA_PLATFORM_PLUGIN_PATH=$HOME/.local/lib64
+```
+Qt finds plugins directly in that directory (no `platforms/` subdirectory needed).
+
+**Critical: never bundle** `libGL.so.1`, `libGLX.so.0`, `libGLdispatch.so.0` — these must be
+the system's display-driver version. Qt5 and GTK3 work fine without them for non-OpenGL GUIs.
+
+**Transitive dep closure script** used to find all deps recursively:
+```bash
+# Recursive ldd with never-bundle filter
+seen=(); queue=(/path/to/binary); while [[ ${#queue[@]} -gt 0 ]]; do ...
+```
+See session history for the full `/tmp/dep_closure.sh` script.

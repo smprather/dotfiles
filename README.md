@@ -23,7 +23,7 @@ Linux box in under two minutes and gets out of your way.
 | **[WezTerm](https://wezfurlong.org/wezterm/)** | Terminal emulator config |
 | **[AutoHotKey](https://www.autohotkey.com)** | AHK v2 flat script, optional features via `dotkeys_config.toml` |
 | **[EditorConfig](https://editorconfig.org)** | Consistent formatting across all editors |
-| **Pre-built binaries** | 40 modern CLI tools, zero internet required — see table below |
+| **Pre-built binaries** | 45 modern CLI tools, zero internet required — see table below |
 | **Nerd Fonts** | 6 font families, split-archive support for GitHub's 50 MB limit |
 
 ---
@@ -112,6 +112,26 @@ is pure decompress + chmod — no runtime `patchelf`, no `LD_LIBRARY_PATH` hacks
 | [yq](https://github.com/mikefarah/yq) | 4.53.2 | `jq` for YAML, JSON, XML, CSV, TOML, and properties files |
 | [zoxide](https://github.com/ajeetdsouza/zoxide) | 0.9.9 | Smarter `cd` — learns your most-used directories |
 
+### Optional Tools
+
+Not installed by default. Add with `./install --add-tools <name>` or view all with `./install --list-tools`.
+
+| Binary | Version | Description |
+|--------|---------|-------------|
+| [gvim](https://www.vim.org) | 9.2 | GTK3 GUI vim — `gvim.bin` (stripped binary) + `gvim` wrapper setting VIM/VIMRUNTIME |
+| [nedit-ng](https://github.com/eteran/nedit-ng) | 2.0.1 | Qt5 rewrite of NEdit — single self-contained binary, no runtime files |
+| [octave](https://www.gnu.org/software/octave/) | 11.1.0 | GNU Octave scientific computing (~163 MB uncompressed; see notes below) |
+| [gui\_libs](https://github.com/smprather/dotfiles) | — | ~80 bundled Qt5/GTK3/xcb/Wayland shared libs for headless farm nodes |
+
+**gui_libs** targets headless EE farm/LSF nodes that have no GUI libraries but run GUI tools with `DISPLAY` forwarded back to a workstation. It includes Qt5 5.15.3, GTK3 3.22, ICU 60, cairo, pango, xcb extensions, xkbcommon, and Wayland client libs. All are patchelf'd with `$ORIGIN` RPATH so they find each other in `~/.local/lib64/`.
+
+```bash
+# Install GUI editors + all their shared library deps in one shot
+./install --no-backup --no-fonts --no-tldr-cache --add-tools gui_libs,gvim,nedit-ng
+```
+
+**WSLg note:** Qt5's XCB backend corrupts XWayland's global cursor state (all X11 apps in the session lose their cursor). Fix: add `export QT_QPA_PLATFORM=wayland` to `~/.config/bash/user/bashrc`. The Wayland backend (included in gui_libs) routes cursor management through the compositor directly, bypassing XWayland.
+
 ### Python
 
 | Package | Version | Description |
@@ -121,6 +141,8 @@ is pure decompress + chmod — no runtime `patchelf`, no `LD_LIBRARY_PATH` hacks
 ### Vendored Shared Libraries
 
 Runtime dependencies vendored alongside binaries — no system library assumptions.
+
+**Always installed** (core deps for default tools):
 
 | Library | Provides |
 |---------|---------|
@@ -151,6 +173,10 @@ Runtime dependencies vendored alongside binaries — no system library assumptio
 | `libXt.so.6` | X Toolkit Intrinsics |
 | `libxxhash.so.0` | Fast non-cryptographic hash |
 | `libz.so.1` | zlib compression |
+
+**gui_libs optional package** (~80 libs, opt in with `--add-tools gui_libs`):
+
+Qt5 5.15.3: `libQt5Core`, `libQt5Gui`, `libQt5Widgets`, `libQt5DBus`, `libQt5Network`, `libQt5PrintSupport`, `libQt5XcbQpa`, `libQt5Xml`, `libQt5WaylandClient` + platform plugins `libqxcb.so`, `libqwayland-generic.so` (flat in `~/.local/lib64/`). GTK3 3.22: `libgtk-3`, `libgdk-3`, `libgdk_pixbuf-2.0`, `libatk-1.0`, `libatk-bridge-2.0`, `libatspi`. ICU 60: `libicudata`, `libicui18n`, `libicuuc` (~27 MB). Cairo/Pango: `libcairo`, `libpango-1.0`, `libharfbuzz`, `libfribidi`, `libgraphite2`. xcb extensions: `libxcb-icccm`, `libxcb-image`, `libxcb-keysyms`, `libxcb-randr`, `libxcb-render`, `libxcb-render-util`, `libxcb-shape`, `libxcb-shm`, `libxcb-sync`, `libxcb-util`, `libxcb-xfixes`, `libxcb-xinerama`, `libxcb-xinput`, `libxcb-xkb`. Wayland: `libwayland-client`, `libwayland-cursor`, `libwayland-egl`. xkbcommon: `libxkbcommon`, `libxkbcommon-x11`. glib2 family: `libglib-2.0`, `libgobject-2.0`, `libgio-2.0`, `libgmodule-2.0`, `libgthread-2.0`. Fonts: `libfontconfig`, `libfreetype`, `libpixman-1`, `libpng16`. All patchelf'd with `$ORIGIN` RPATH so they find each other in `~/.local/lib64/`.
 
 ---
 
@@ -205,6 +231,10 @@ from any working directory — it resolves the repo from the script path.
 ./install --no-fonts                         # skip font extraction
 ./install --no-tldr-cache                    # skip bundled tldr page cache
 ./install --post-install-hook ~/corp/install.sh  # run corp/site add-on hooks
+./install --list-tools                       # show all tools with default install status
+./install --add-tools octave                 # add optional tool(s) to defaults
+./install --skip-tools gnuplot,kak           # remove tool(s) from defaults
+./install --tools vim,nvim,rg,tmux           # install exactly this set
 ```
 
 **What gets installed:**

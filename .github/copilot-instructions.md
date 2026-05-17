@@ -50,7 +50,7 @@ with headless Neovim.
 
 Loading sequence (`bash/bashrc`):
 1. Sources `bash/functions.sh` (shared utilities available to all layers)
-2. Sources `config.sh` per layer (sets `cfg_*` preferences)
+2. Sources `config.sh` per layer (sets `DOTFILES_CFG_*` preferences as exported scalars)
 3. Sources `bashrc` per layer; each exits early if not interactive
 
 `source_if_exists <path>` is used throughout for safe optional sourcing.
@@ -80,6 +80,10 @@ Each layer can inject code into `global/bashrc` via numbered files in `<layer>/g
 - **`--no-fonts`**: skip vendored font extraction and font cache refresh
 - **`--no-tldr-cache`**: skip bundled tealdeer/tldr page cache install
 - **`--post-install-hook <script>`**: execute an explicit corp/site/user add-on hook after global install steps; can be repeated and hooks run in argument order; each hook must be executable and provide its own shebang or binary format
+- **`--list-tools`**: print a two-column table (tool name, default install yes/no) and exit; takes priority over all other flags except `--help`
+- **`--add-tools <names>`**: add optional tool(s) to the default install set (comma-separated); e.g. `--add-tools gui_libs,gvim,nedit-ng` for full GUI editor support on headless nodes
+- **`--skip-tools <names>`**: remove tool(s) from the default install set
+- **`--tools <names>`**: install exactly this set (replaces defaults entirely)
 
 Backups are numbered (`dotfiles_backups/backup.N/`). The installer skips targets already pointing into the repo and never overwrites an existing backup.
 Backups intentionally exclude font files because vendored Nerd Font archives are large and reproducible.
@@ -99,6 +103,15 @@ about missing `.so` dependencies. If a running binary cannot be replaced,
 installer continues and prints a retry notice.
 **Binary bundling order: strip → patchelf → bzip2.** Never strip after patchelf;
 it corrupts `.dynstr` and causes segfaults or "undefined symbol" at runtime.
+**Libs that must find each other** (e.g. the `gui_libs` group): patchelf with `$ORIGIN` (not
+`$ORIGIN/../lib64`) — they install flat into `~/.local/lib64/` alongside each other.
+**Never bundle**: glibc (`libc.so.6`, `libm.so.6`, etc.), OpenGL dispatcher (`libGL.so.1`,
+`libGLX.so.0`, `libGLdispatch.so.0` — must match display driver), C++ runtime (`libstdc++.so.6`,
+`libgcc_s.so.1`). Everything else is safe to bundle.
+**Qt5 platform plugins** (`libqxcb.so`, `libqwayland-generic.so`) live flat in `~/.local/lib64/`;
+`QT_QPA_PLATFORM_PLUGIN_PATH=$HOME/.local/lib64` set in `bash/global/bashrc` when present.
+**WSLg cursor fix**: `QT_QPA_PLATFORM=wayland` in user bashrc — Qt5 XCB backend corrupts
+XWayland global cursor state for all X11 apps in the session; Wayland backend avoids this.
 **Go binaries: build with `go build -ldflags="-w -s"`**, not post-build strip.
 **Release gate: `./release --dry-run`** runs `pre_built/build_scripts/test-prebuilt-binaries`,
 which does a full temp install, probes every binary, checks editor runtime sentinels,
@@ -145,8 +158,8 @@ and copies metadata directories to `~/.local/share/nvim/tree-sitter-parsers/`.
 
 ### Variable Naming in Bash
 
-- `cfg_*` variables are user-facing preferences defined in `config.sh` per layer.
-- Variables prefixed with `_` are treated as bashrc-local and cleaned up by `unset_bashrc_local_vars` (in `functions.sh`) before bashrc exits. `cfg_*` are intentionally retained so aliases/functions can reference them at runtime.
+- `DOTFILES_CFG_*` variables are user-facing preferences defined in `bash/global/config.sh` as `export DOTFILES_CFG_*=value`. They propagate to child processes and are visible in `env | grep DOTFILES_CFG_`. Override any variable in a user layer's `config.sh` with the same `export DOTFILES_CFG_*=value` form.
+- Variables prefixed with `_` are treated as bashrc-local and cleaned up by `unset_bashrc_local_vars` (in `functions.sh`) before bashrc exits. `DOTFILES_CFG_*` are exported scalars and are intentionally retained so child processes and aliases/functions can reference them at runtime.
 
 ### Pre-commit Hook
 
@@ -162,7 +175,7 @@ and copies metadata directories to `~/.local/share/nvim/tree-sitter-parsers/`.
 
 Create layer files that will be automatically picked up — no changes to `bash/global/` needed:
 ```bash
-bash/user/config.sh       # cfg_* variable overrides
+bash/user/config.sh       # DOTFILES_CFG_* variable overrides (export DOTFILES_CFG_FOO=value)
 bash/user/bashrc          # alias/function overrides
 bash/corp/global_hooks/3.sh  # inject code after PATH setup
 ```
