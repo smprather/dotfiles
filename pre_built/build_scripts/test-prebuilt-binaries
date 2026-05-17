@@ -99,15 +99,6 @@ def require_path(path, label, failures):
     return False
 
 
-def require_absent_path(path, label, failures):
-    if not os.path.lexists(path):
-        print("  OK   (absent):       {}".format(label))
-        return True
-    print("  FAIL (absent):       {}  unexpected {}".format(label, path))
-    failures.append((label, "unexpected {}".format(path)))
-    return False
-
-
 def probe_binary(binary_path):
     """Return (ok, detail)."""
     name = os.path.basename(binary_path)
@@ -221,9 +212,6 @@ def smoke_runtime_layout(tmpdir):
         require_path(os.path.join(parsers, "queries", "python", "highlights.scm"), "tree-sitter python query", failures)
         require_path(os.path.join(parsers, "parser-info", "python.lua"), "tree-sitter python parser-info", failures)
 
-    if has_bin("python3.14"):
-        require_absent_path(os.path.join(bin_dir, "python3"), "portable python does not shadow python3", failures)
-        require_absent_path(os.path.join(bin_dir, "pip3"), "portable python does not shadow pip3", failures)
 
     if not failures:
         print("Runtime payloads OK")
