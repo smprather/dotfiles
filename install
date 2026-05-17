@@ -117,7 +117,7 @@ def _load_tool_registry(repo_dir):
         with open(path) as _f:
             raw = json.load(_f)
         # Strip non-tool metadata keys (e.g. _comment, _schema).
-        return {k: v for k, v in raw.items() if isinstance(v, dict)}
+        return {k: v for k, v in raw.items() if isinstance(v, dict) and not k.startswith("_")}
     except (ValueError, IOError) as _e:
         warn("could not read pre_built/tools.json: {}; tool selection disabled".format(_e))
         return {}
@@ -1763,6 +1763,8 @@ def parse_args(argv):
                         help="Add optional tools to the default install set.")
     parser.add_argument("--skip-tools", default=None, dest="skip_tools", metavar="TOOL,…",
                         help="Remove tools from the default install set.")
+    parser.add_argument("--list-tools", action="store_true", dest="list_tools",
+                        help="List all available tools and whether they install by default.")
     args, unknown = parser.parse_known_args(argv)
     if args.help:
         print_help()
@@ -1818,6 +1820,8 @@ Options:
   --restore-backup <dir>     Restore dotfiles from a previous backup directory.
                              Example: ./install --restore-backup dotfiles_backups/backup.1
 
+  --list-tools               List all available tools and whether they install by default.
+
   --help, -h                 Show this help message.""")
 
 
@@ -1831,6 +1835,15 @@ def main(argv):
     home = os.path.abspath(args.dest_dir) if args.dest_dir else os.path.expanduser("~")
     _tool_registry = _load_tool_registry(repo_dir)
     selected_tools = resolve_tool_selection(args, _tool_registry)
+
+    if args.list_tools:
+        col = max(len(n) for n in _tool_registry) if _tool_registry else 4
+        print("{:<{c}}  {}".format("TOOL", "DEFAULT", c=col))
+        print("{:<{c}}  {}".format("-" * col, "-------", c=col))
+        for name in sorted(_tool_registry):
+            default = "no" if _tool_registry[name].get("optional") else "yes"
+            print("{:<{c}}  {}".format(name, default, c=col))
+        return 0
 
     if args.restore_backup:
         restore_backup(args.restore_backup, home)
