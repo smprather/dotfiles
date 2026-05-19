@@ -5,9 +5,13 @@
 # tree-sitter, luajit, etc.) so the resulting binary links only against
 # system glibc — no bundled libs needed.
 #
+# Policy: always build from a stable tagged release. Never build from
+# an untagged HEAD or nightly branch. See stable tags at:
+#   https://github.com/neovim/neovim/releases
+#
 # Usage:
-#   cd ~/neovim          # or any neovim source checkout
-#   /path/to/build-nvim.sh [--tag v0.10.4]
+#   cd ~/neovim          # any neovim source checkout
+#   /path/to/build-nvim.sh --tag v0.11.3
 #
 # After a successful build the binary is at ./build/bin/nvim and the
 # runtime is at /usr/local/share/nvim/runtime/ (after make install).
@@ -21,9 +25,35 @@ RUNTIME_DIR="$REPO/pre_built/el8.x86_64.glibc2p28/runtime"
 PATCHELF="$HOME/.local/bin/patchelf"
 INSTALL_PREFIX=/usr/local
 
-if [ "${1:-}" = "--tag" ] && [ -n "${2:-}" ]; then
-    git checkout "$2"
+tag=""
+while [ "$#" -gt 0 ]; do
+    case "$1" in
+        --tag)
+            shift
+            [ "$#" -gt 0 ] || { echo "missing value for --tag" >&2; exit 2; }
+            tag="$1"
+            ;;
+        -h|--help)
+            sed -n '2,/^$/p' "$0"
+            exit 0
+            ;;
+        *) echo "unknown option: $1" >&2; exit 2 ;;
+    esac
+    shift
+done
+
+if [ -z "$tag" ]; then
+    echo "ERROR: --tag is required. Specify a stable release tag, e.g.:" >&2
+    echo "  $0 --tag v0.11.3" >&2
+    echo "" >&2
+    echo "Stable releases: https://github.com/neovim/neovim/releases" >&2
+    echo "" >&2
+    echo "Policy: this project ships stable releases only." >&2
+    echo "Nightly/dev builds are not accepted." >&2
+    exit 1
 fi
+
+git checkout "$tag"
 
 if [ -r /opt/rh/gcc-toolset-14/enable ]; then
     # shellcheck disable=SC1091
@@ -31,7 +61,6 @@ if [ -r /opt/rh/gcc-toolset-14/enable ]; then
 fi
 
 CMAKE=${CMAKE:-cmake}
-MAKE=${MAKE:-make}
 
 # Build with bundled deps (default); this links everything statically.
 "$CMAKE" -B build \

@@ -4,6 +4,10 @@
 # nedit-ng is a single binary linking only against system Qt5/X11 libs;
 # no bundled libs needed. Added to pre_built as optional tool.
 #
+# Policy: always build from a stable tagged release. Never build from
+# an untagged HEAD or dev branch. See stable tags at:
+#   https://github.com/eteran/nedit-ng/releases
+#
 # Prerequisites on the build machine:
 #   sudo dnf install cmake gcc-c++ \
 #                    qt5-qtbase-devel qt5-qtsvg-devel \
@@ -12,7 +16,7 @@
 #
 # Usage:
 #   cd ~/nedit-ng       # any nedit-ng source checkout (github.com/eteran/nedit-ng)
-#   /path/to/build-nedit-ng.sh [--clean] [--tag vX.Y.Z]
+#   /path/to/build-nedit-ng.sh [--clean] --tag vX.Y.Z
 #
 # After a successful build the binary is at ./build/nedit-ng.
 # Packaging instructions are printed at the end.
@@ -24,13 +28,14 @@ BIN_DIR="$REPO/pre_built/el8.x86_64.glibc2p28/bin"
 JOBS="${JOBS:-$(nproc 2>/dev/null || getconf _NPROCESSORS_ONLN 2>/dev/null || echo 8)}"
 
 clean=0
+tag=""
 while [ "$#" -gt 0 ]; do
     case "$1" in
         --clean) clean=1 ;;
         --tag)
             shift
             [ "$#" -gt 0 ] || { echo "missing value for --tag" >&2; exit 2; }
-            git checkout "$1"
+            tag="$1"
             ;;
         -h|--help)
             sed -n '2,/^$/p' "$0"
@@ -40,6 +45,18 @@ while [ "$#" -gt 0 ]; do
     esac
     shift
 done
+
+if [ -z "$tag" ]; then
+    echo "ERROR: --tag is required. Specify a stable release tag, e.g.:" >&2
+    echo "  $0 --tag v2.0.1" >&2
+    echo "" >&2
+    echo "Stable releases: https://github.com/eteran/nedit-ng/releases" >&2
+    echo "" >&2
+    echo "Policy: this project ships stable releases only." >&2
+    exit 1
+fi
+
+git checkout "$tag"
 
 if [ -r /opt/rh/gcc-toolset-14/enable ]; then
     # shellcheck disable=SC1091

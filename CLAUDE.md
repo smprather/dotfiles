@@ -438,6 +438,24 @@ bash/corp/global_hooks/5.sh  # hook injection at point 5
 2. The pre-commit hook will strip `.git` dirs automatically on next commit
 3. Update `install` if new symlink logic is needed
 
+### Stable-release policy for bundled binaries
+
+All bundled tools must come from **stable tagged releases** — never from git HEAD, nightly branches, or dev builds. This policy exists to protect the expanding user base: tagged releases have known changelogs, upstream testing, and verifiable provenance.
+
+**Rules:**
+- All `build_scripts/build-*.sh` scripts require `--tag vX.Y.Z` (enforced at runtime).
+- The tag must be a stable release tag from the tool's official GitHub releases page.
+- Dev builds (e.g. `nvim 0.13-dev`, `micro 2.0.16-dev`) are **not accepted** — rebuild from the latest stable tag before committing.
+- Source builds with long upstream release cycles (tmux, bash) are acceptable but must use the most recent **stable** tag, not HEAD.
+- An opt-in unstable stream may be added in the future; until then, all bundled binaries must be stable.
+
+**Verify provenance after adding:**
+```bash
+pre_built/build_scripts/verify-binaries          # check all tools
+pre_built/build_scripts/verify-binaries rg bat   # check specific tools
+```
+Tools built from EL8 source (different NEEDED libs than upstream musl/gnu release) or with patchelf layout deltas are documented in `verify-binaries`'s `_SKIP_REASONS` / PASS reasoning; all must still come from tagged releases.
+
 ### Add a new pre-built binary
 
 ```bash
