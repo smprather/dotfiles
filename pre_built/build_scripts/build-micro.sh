@@ -80,11 +80,29 @@ cp "${BIN}.bz2" "$BIN_DIR/micro.bz2"
 echo ""
 echo "Installed: $BIN_DIR/micro.bz2"
 echo "Version:   $(file "$BIN" | head -1)"
+
+# ── update tools.json ─────────────────────────────────────────────────────────
+
+TOOLS_JSON="$REPO/pre_built/tools.json"
+python3 -c "
+import re, sys
+path = sys.argv[1]; ver = sys.argv[2]
+txt = open(path).read()
+txt = re.sub(
+    r'(\"micro\".*?\"version\":\s*\")([^\"]+)(\")',
+    r'\g<1>' + ver + r'\3',
+    txt
+)
+open(path, 'w').write(txt)
+print('tools.json: micro version -> ' + ver)
+" "$TOOLS_JSON" "$ver"
+
+# ── strip manifest ────────────────────────────────────────────────────────────
+
+echo "Running strip_all_elf_binaries..."
+"$REPO/strip_all_elf_binaries"
+
 echo ""
-echo "Next steps:"
-echo "  cd $REPO"
-echo "  ./strip_all_elf_binaries"
-echo "  git add pre_built/el8.x86_64.glibc2p28/bin/micro.bz2 .strip-manifest"
-echo "  git commit"
-echo ""
-echo "Also update tools.json: set \"version\": \"${ver}\" for the micro entry."
+echo "Done. Commit with:"
+echo "  git add pre_built/el8.x86_64.glibc2p28/bin/micro.bz2 .strip-manifest pre_built/tools.json"
+echo "  git commit -m 'feat(pre_built): micro ${ver} from stable release'"

@@ -122,11 +122,29 @@ cp "${WORK}.bz2" "$BIN_DIR/nedit-ng.bz2"
 
 echo ""
 echo "Installed: $BIN_DIR/nedit-ng.bz2"
+
+# ── update tools.json ─────────────────────────────────────────────────────────
+
+TOOLS_JSON="$REPO/pre_built/tools.json"
+python3 -c "
+import re, sys
+path = sys.argv[1]; ver = sys.argv[2]
+txt = open(path).read()
+txt = re.sub(
+    r'(\"nedit-ng\".*?\"version\":\s*\")([^\"]+)(\")',
+    r'\g<1>' + ver + r'\3',
+    txt
+)
+open(path, 'w').write(txt)
+print('tools.json: nedit-ng version -> ' + ver)
+" "$TOOLS_JSON" "$tag"
+
+# ── strip manifest ────────────────────────────────────────────────────────────
+
+echo "Running strip_all_elf_binaries..."
+"$REPO/strip_all_elf_binaries"
+
 echo ""
-echo "Next steps:"
-echo "  cd $REPO"
-echo "  ./strip_all_elf_binaries"
-echo "  git add pre_built/el8.x86_64.glibc2p28/bin/nedit-ng.bz2 .strip-manifest"
-echo "  git commit"
-echo ""
-echo "Also update tools.json: set \"version\": \"${tag}\" for the nedit-ng entry."
+echo "Done. Commit with:"
+echo "  git add pre_built/el8.x86_64.glibc2p28/bin/nedit-ng.bz2 .strip-manifest pre_built/tools.json"
+echo "  git commit -m 'feat(pre_built): nedit-ng ${tag} stable EL8 source build'"

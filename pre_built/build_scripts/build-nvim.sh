@@ -168,15 +168,35 @@ case "$MAX_GLIBC" in
     GLIBC_2.2[0-8]|GLIBC_2.1[0-9]|GLIBC_2.[0-9])
         echo "OK — binary compatible with EL8 glibc 2.28" ;;
     *)
-        echo "WARNING: $MAX_GLIBC > GLIBC_2.28 — binary may not run on EL8" ;;
+        echo "WARNING: $MAX_GLIBC > GLIBC_2.28 — binary may not run on EL8" >&2 ;;
 esac
 
+# ── update tools.json ─────────────────────────────────────────────────────────
+
+ver="${tag#v}"
+TOOLS_JSON="$REPO/pre_built/tools.json"
+# Use Python (guaranteed available — it's in pre_built) for reliable JSON field update
+python3 -c "
+import re, sys
+path = sys.argv[1]; ver = sys.argv[2]
+txt = open(path).read()
+txt = re.sub(
+    r'(\"nvim\".*?\"version\":\s*\")([^\"]+)(\")',
+    r'\g<1>' + ver + r'\3',
+    txt
+)
+open(path, 'w').write(txt)
+print('tools.json: nvim version -> ' + ver)
+" "$TOOLS_JSON" "$ver"
+
+# ── strip manifest ────────────────────────────────────────────────────────────
+
+echo "Running strip_all_elf_binaries..."
+"$REPO/strip_all_elf_binaries"
+
 echo ""
-echo "Next steps:"
-echo "  1. Update tools.json: set \"version\": \"${tag#v}\" for the nvim entry"
-echo "  2. cd $REPO"
-echo "     ./strip_all_elf_binaries"
-echo "     git add pre_built/el8.x86_64.glibc2p28/bin/nvim.bz2 \\"
-echo "             pre_built/el8.x86_64.glibc2p28/runtime/nvim.tar.bz2 \\"
-echo "             .strip-manifest pre_built/tools.json"
-echo "     git commit"
+echo "Done. Commit with:"
+echo "  git add pre_built/el8.x86_64.glibc2p28/bin/nvim.bz2 \\"
+echo "          pre_built/el8.x86_64.glibc2p28/runtime/nvim.tar.bz2 \\"
+echo "          .strip-manifest pre_built/tools.json"
+echo "  git commit -m 'feat(pre_built): nvim ${ver} stable EL8 source build'"
