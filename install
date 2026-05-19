@@ -1957,12 +1957,46 @@ def main(argv):
     selected_tools = resolve_tool_selection(args, _tool_registry)
 
     if args.list_tools:
-        col = max(len(n) for n in _tool_registry) if _tool_registry else 4
-        print("{:<{c}}  {}".format("TOOL", "DEFAULT", c=col))
-        print("{:<{c}}  {}".format("-" * col, "-------", c=col))
-        for name in sorted(_tool_registry):
-            default = "no" if _tool_registry[name].get("optional") else "yes"
-            print("{:<{c}}  {}".format(name, default, c=col))
+        import textwrap as _textwrap
+        _rows = []
+        for _n in sorted(_tool_registry):
+            _info = _tool_registry[_n]
+            _rows.append((
+                _n,
+                "no" if _info.get("optional") else "yes",
+                _info.get("version", ""),
+                _info.get("description", ""),
+            ))
+        _MAX_WIDTH = 100
+        _c_name    = max((len(r[0]) for r in _rows), default=4)
+        _c_default = max(len("DEFAULT"), 7)
+        _c_ver     = max((len(r[2]) for r in _rows), default=7)
+        _c_ver     = max(_c_ver, len("VERSION"))
+        _c_desc    = max(_MAX_WIDTH - _c_name - 2 - _c_default - 2 - _c_ver - 2, 20)
+        if _RICH and _console is not None:
+            _lt = _RichTable(box=None, show_header=True, header_style="bold",
+                             pad_edge=False, show_edge=False, expand=False)
+            _lt.add_column("TOOL",    style="bold cyan", min_width=_c_name,    no_wrap=True)
+            _lt.add_column("DEFAULT", justify="center",  min_width=_c_default, no_wrap=True)
+            _lt.add_column("VERSION",                    min_width=_c_ver,     no_wrap=True)
+            _lt.add_column("DESCRIPTION",                max_width=_c_desc,    no_wrap=False)
+            for _n, _def, _ver, _desc in _rows:
+                _ds = "green" if _def == "yes" else "dim"
+                _lt.add_row(_n, "[{s}]{v}[/{s}]".format(s=_ds, v=_def), _ver, _desc)
+            _lt_console = _RichConsole(highlight=False, width=_MAX_WIDTH)
+            _lt_console.print(_lt)
+        else:
+            _hdr_fmt = "{{:<{}}}  {{:^{}}}  {{:<{}}}  {{}}".format(
+                _c_name, _c_default, _c_ver)
+            print(_hdr_fmt.format("TOOL", "DEFAULT", "VERSION", "DESCRIPTION"))
+            print(_hdr_fmt.format("-" * _c_name, "-" * _c_default,
+                                  "-" * _c_ver, "-" * _c_desc))
+            _indent = " " * (_c_name + 2 + _c_default + 2 + _c_ver + 2)
+            for _n, _def, _ver, _desc in _rows:
+                _lines = _textwrap.wrap(_desc, _c_desc) or [""]
+                print(_hdr_fmt.format(_n, _def, _ver, _lines[0]))
+                for _line in _lines[1:]:
+                    print("{}{}".format(_indent, _line))
         return 0
 
     if args.restore_backup:
