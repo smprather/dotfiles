@@ -66,7 +66,7 @@
   "uv":          {"bins": ["uv"],                 "version": "0.11.13",    "description": "Extremely fast Python package and project manager"},
   "vim":         {"bins": ["vim", "vim.bin"],     "version": "9.2",        "description": "Vi IMproved text editor"},
   "gvim":        {"bins": ["gvim", "gvim.bin"],   "version": "9.2",        "description": "GTK3 GUI Vim with clipboard and font rendering",  "optional": true},
-  "nedit-ng":    {"bins": ["nedit-ng"],           "version": "dev",        "description": "Qt5 GUI text editor, NEdit rewrite",               "optional": true},
+  "nedit-ng":    {"bins": ["nedit-ng"],           "version": "2025.1",        "description": "Qt5 GUI text editor, NEdit rewrite",               "optional": true},
 
   "gui_libs": {
     "bins": [],
