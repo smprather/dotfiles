@@ -10,6 +10,7 @@ sha256  9b02288377fa7ea47ede47b58aefa15e2e93673be2a8a2209508121360b57998  pre_bu
 sha256  f1f4faa776f9374604e19af08e21541341b3d088c9a04bd403061f0dfb2c1d17  pre_built/el8.x86_64.glibc2p28/bin/bzip2.bz2
 sha256  2465d31ba6014c7b7af7b11ef0c1992eb030645d4a3b8effef2ca4acfd8a7f7a  pre_built/el8.x86_64.glibc2p28/bin/choose.bz2
 sha256  99ad4db62c375e036c22cb86f6c5c710804a12247c3b7dcd17275befeca43aa6  pre_built/el8.x86_64.glibc2p28/bin/dasel.bz2
+sha256  49e8479000bee36225dae5bb1aecd7cb3a6f906128c470af7637c2f38d1b5386  pre_built/el8.x86_64.glibc2p28/bin/duf.bz2
 sha256  d2c1570d81b342fe5d4884ee50336a8c9ab6ee28f5c7ab3e0343b50763ddbf9c  pre_built/el8.x86_64.glibc2p28/bin/dust.bz2
 sha256  cfaf4bf343cea07f168e1af1609c7c0be928a80ca49b6e3ae27ea8dc238cdc1b  pre_built/el8.x86_64.glibc2p28/bin/eza.bz2
 sha256  2f53fe219fbe6edf520124779d2272b3d7d9e7ba4715bfac3c2752ecd101668c  pre_built/el8.x86_64.glibc2p28/bin/fd.bz2
@@ -31,6 +32,7 @@ sha256  dbaa6876ed2d09b6b6dd5fc0ff2fb86e96e13454c8ed872330a38c30e90e2acf  pre_bu
 sha256  eacb73a3e57af3b2d3399f3785aab8305fcd1fa743bc08d7500ac15f19f3577d  pre_built/el8.x86_64.glibc2p28/bin/octave.bz2
 sha256  32fefa25d1f8378cfd840f49ca2b9a16a8b7c44a4f7ecbd0a13d6fc1496308a5  pre_built/el8.x86_64.glibc2p28/bin/patchelf.bz2
 sha256  9f067987f751cef72283d71f05c319153098ffe27443072d6689dd2032d1a2d1  pre_built/el8.x86_64.glibc2p28/bin/pigz.bz2
+sha256  093a8a46eede8e941363d2f12766a92ce644402bf5d846d9587b881ff99f4b4c  pre_built/el8.x86_64.glibc2p28/bin/procs.bz2
 sha256  147dc9863a2a0d30d54e1e5b15fb2427944a6eb34e9258e9699fad9fc046f018  pre_built/el8.x86_64.glibc2p28/bin/pv.bz2
 sha256  370a8103dba02819ff13b56dd3457a4e26332228fccdff1fdd3e49f456460204  pre_built/el8.x86_64.glibc2p28/bin/resize.bz2
 sha256  38d2a5fb1cc6f92edb6a3c7b92000c4721fd0c32f1a4ddd5c8e825bcbfd98a19  pre_built/el8.x86_64.glibc2p28/bin/rg.bz2
