@@ -42,6 +42,7 @@
   "shfmt":       {"bins": ["shfmt"]},
   "starship":    {"bins": ["starship"]},
   "stylua":      {"bins": ["stylua"]},
+  "tkdiff":      {"bins": ["tkdiff"]},
   "tldr":        {"bins": ["tldr"]},
   "tmux":        {"bins": ["tmux"],
                   "libs": ["libevent_core-2.1.so.6"]},

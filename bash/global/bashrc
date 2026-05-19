@@ -265,6 +265,8 @@ bind "set colored-completion-prefix on"
 bind '\C-j:menu-complete'
 bind '\C-k:menu-complete-backward'
 
+eval "$(zoxide init bash)"
+
 ### Completions
 # Clean the slate
 complete -r
@@ -304,7 +306,7 @@ if fpcmp $_glibc -gt 2.17; then
         }"
     elif [[ ${DOTFILES_CFG_PREFERRED_LS} == "eza" ]]; then
         _eza_src=$(realpath $(which eza) 2>/dev/null)
-        if [[ -n $_eza_src && ( ! -f /dev/shm/$USER/bin/eza || $_eza_src -nt /dev/shm/$USER/bin/eza ) ]]; then
+        if [[ -n $_eza_src && (! -f /dev/shm/$USER/bin/eza || $_eza_src -nt /dev/shm/$USER/bin/eza) ]]; then
             mkdir -p /dev/shm/$USER/bin
             cp "$_eza_src" /dev/shm/$USER/bin/eza
         fi
@@ -587,16 +589,39 @@ vnc() {
     fi
 }
 alias startvnc="vncserver -SecurityTypes None"
+alias runvnc="startvnc"
 alias stopvnc="vncserver -kill"
 alias killvnc="vncserver -kill"
 alias st="strace -o /tmp/strace.$USER -f -v -s 1000000"
 alias vman="MANPAGER='nvim +Man\!' man"
+killvnc() {
+    local max_display
+    max_display=$(
+        ps -ef | awk '
+            /Xtigervnc|Xvnc/ && $0 !~ /awk/ {
+                for (i=1; i<=NF; i++) {
+                    if ($i ~ /^:[0-9]+/) {
+                        gsub(":", "", $i)
+                        print $i
+                    }
+                }
+            }
+        ' | sort -n | tail -1
+    )
+    if [[ -z "$max_display" ]]; then
+        echo "No VNC sessions found."
+        return 1
+    fi
+    echo "Killing VNC session :$max_display"
+    if command -v vncserver >/dev/null 2>&1; then
+        vncserver -kill :"$max_display"
+    else
+        pkill -f "X.*:$max_display"
+    fi
+}
 # "Grep All (bash) History"
 gah() {
     rg $* /run/user/*/bash_history.* 2>/dev/null
 }
-
-# https://github.com/ajeetdsouza/zoxide
-#eval "$(zoxide init bash)"
 
 # vim: ft=bash ts=4

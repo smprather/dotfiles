@@ -222,6 +222,9 @@ TOOLS = [
     ("stylua",      "stylua",      "https://github.com/JohnnyMorganz/StyLua",
      strategy_flag(["--version"], r"stylua ([0-9]+\.[0-9]+\.[0-9]+)")),
 
+    ("tkdiff",      "tkdiff",      "https://sourceforge.net/projects/tkdiff/",
+     strategy_strings(r"g\(version\)\s+\"([0-9]+\.[0-9]+(?:\.[0-9]+)?)\"")),
+
     ("tldr",        "tealdeer",    "https://github.com/dbrgn/tealdeer",
      strategy_flag(["--version"], r"tealdeer ([0-9]+\.[0-9]+\.[0-9]+)")),
 
