@@ -102,6 +102,7 @@ _SKIP_REASONS = {
     "xsel":       "built from source",
     "xterm":      "built from source",
     "yank":       "built from source",
+    "yara":       "built from source (no Linux prebuilt in official releases)",
     "rg":         "GNU ABI; ripgrep ships musl-only for Linux releases — EL8 RPM or source build",
     "eza":        "NEEDED libs differ from official release (libz.so.1 vs librt.so.1) — EL8 source build",
     "fd":         "NEEDED libs differ from official release — EL8 source build",
