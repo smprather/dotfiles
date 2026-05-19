@@ -59,7 +59,11 @@ curl -fL "$URL" -o "$TMPDIR/micro.tar.gz"
 
 echo "Extracting ..."
 tar -xzf "$TMPDIR/micro.tar.gz" -C "$TMPDIR"
+# Archive layout changed: v2.0.14 used micro-VER-linux64/micro; v2.0.15+ uses micro-VER/micro
 BIN="$TMPDIR/micro-${ver}-linux64/micro"
+if [ ! -f "$BIN" ]; then
+    BIN="$TMPDIR/micro-${ver}/micro"
+fi
 if [ ! -f "$BIN" ]; then
     echo "ERROR: could not find micro binary in archive" >&2
     ls "$TMPDIR/" >&2
