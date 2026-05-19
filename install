@@ -940,6 +940,116 @@ def install_portable_python(repo_dir, home):
     print("  Installed portable Python -> {}/.local/".format(home))
 
 
+def install_typelibs(repo_dir, home):
+    """Copy *.typelib files from pre_built/<platform>/typelibs/ to ~/.local/lib/girepository-1.0/."""
+    platform_dir = select_prebuilt_platform_dir(os.path.join(repo_dir, "pre_built"))
+    if not platform_dir:
+        skipped("GObject typelibs (no matching platform)", "")
+        record_result("GObject typelibs", "SKIP", "no matching platform")
+        return
+
+    src_dir = os.path.join(platform_dir, "typelibs")
+    if not os.path.isdir(src_dir):
+        skipped("GObject typelibs (no typelibs/ in platform dir)", "")
+        record_result("GObject typelibs", "SKIP", "no typelibs directory")
+        return
+
+    typelib_files = sorted(f for f in os.listdir(src_dir) if f.endswith(".typelib"))
+    if not typelib_files:
+        skipped("GObject typelibs (no *.typelib files in {})".format(src_dir), "")
+        record_result("GObject typelibs", "SKIP", "no typelib files")
+        return
+
+    dest_dir = os.path.join(home, ".local", "lib", "girepository-1.0")
+    ensure_dir(dest_dir, "GObject typelibs")
+
+    _p, _pt = _progress("GObject typelibs", len(typelib_files))
+    for name in typelib_files:
+        src = os.path.join(src_dir, name)
+        dest = os.path.join(dest_dir, name)
+        if _p:
+            _p.update(_pt, description="  {}".format(name))
+        require_writable_parent(dest, "GObject typelibs")
+        shutil.copy2(src, dest)
+        _vprint("  cp: {} -> {}".format(src, dest))
+        if _p:
+            _p.advance(_pt)
+    if _p:
+        _p.stop()
+
+    record_result("GObject typelibs", "yes", "{} files".format(len(typelib_files)))
+    print("  Installed {} typelibs -> {}/".format(len(typelib_files), dest_dir))
+
+
+def install_python_tools(repo_dir, home, selected_tools, registry):
+    """Install Python tools via 'uv tool install' using bundled offline wheels."""
+    platform_dir = select_prebuilt_platform_dir(os.path.join(repo_dir, "pre_built"))
+    if not platform_dir:
+        skipped("Python tools (no matching platform)", "")
+        record_result("Python tools", "SKIP", "no matching platform")
+        return
+
+    wheels_dir = os.path.join(platform_dir, "wheels")
+    if not os.path.isdir(wheels_dir):
+        skipped("Python tools (no wheels/ in platform dir)", "")
+        record_result("Python tools", "SKIP", "no wheels directory")
+        return
+
+    uv_bin = os.path.join(home, ".local", "bin", "uv")
+    python_bin = os.path.join(home, ".local", "bin", "python3.14")
+    if not os.path.isfile(uv_bin):
+        warn("uv not found at {} — Python tools will NOT be installed".format(uv_bin))
+        record_result("Python tools", "FAIL", "uv not installed")
+        return
+    if not os.path.isfile(python_bin):
+        warn("python3.14 not found at {} — Python tools will NOT be installed".format(python_bin))
+        record_result("Python tools", "FAIL", "python3.14 not installed")
+        return
+
+    tools_to_install = []
+    for name, info in registry.items():
+        if "uv_tool" not in info:
+            continue
+        if selected_tools is not None and name not in selected_tools:
+            continue
+        tools_to_install.append((name, info["uv_tool"]))
+
+    if not tools_to_install:
+        skipped("Python tools (no selected tools require uv_tool)", "")
+        record_result("Python tools", "SKIP", "no uv_tool entries selected")
+        return
+
+    installed = []
+    failed = []
+    for tool_name, pkg_name in tools_to_install:
+        cmd = [
+            uv_bin, "tool", "install", pkg_name,
+            "--python", python_bin,
+            "--no-index",
+            "--find-links", wheels_dir,
+            "--no-cache",
+        ]
+        print("  running: {}".format(" ".join(cmd)))
+        proc = subprocess.run(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+        out = proc.stdout.decode("utf-8", "replace")
+        err = proc.stderr.decode("utf-8", "replace")
+        for line in out.splitlines():
+            print("  {}".format(line))
+        if proc.returncode != 0:
+            for line in err.splitlines():
+                eprint("  {}".format(line))
+            warn("uv tool install {} exited {}".format(pkg_name, proc.returncode))
+            failed.append(tool_name)
+        else:
+            installed.append(tool_name)
+            print("  Installed Python tool: {} -> ~/.local/bin/".format(tool_name))
+
+    if failed:
+        record_result("Python tools", "FAIL", "failed: {}".format(", ".join(failed)))
+    else:
+        record_result("Python tools", "yes", "installed: {}".format(", ".join(installed)))
+
+
 def check_prebuilt_binary_dependencies(dest_bin_dir):
     if not _LDD:
         warn("ldd is not available — shared library dependency check skipped")
@@ -1911,6 +2021,8 @@ def main(argv):
         run_install_step("tldr cache", install_tldr_cache, repo_dir, home)
 
     run_install_step("portable Python", install_portable_python, repo_dir, home)
+    run_install_step("GObject typelibs", install_typelibs, repo_dir, home)
+    run_install_step("Python tools", install_python_tools, repo_dir, home, selected_tools, _tool_registry)
     run_install_step("Helix runtime", install_helix_runtime, repo_dir, home)
     run_install_step("Vim runtime", install_vim_runtime, repo_dir, home)
     run_install_step("Neovim runtime", install_nvim_runtime, repo_dir, home)

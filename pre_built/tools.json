@@ -3,6 +3,9 @@
   "_schema": {
     "bins":     "List of bin/*.bz2 stems (without .bz2) owned by this tool.",
     "libs":     "List of lib64/*.bz2 stems exclusively owned by this tool. Omit or leave empty for libs shared by multiple tools — those are always installed. Exclusively-owned libs are skipped when the tool is not selected.",
+    "typelibs": "List of typelibs/*.typelib files required by this tool (documentation only; all typelibs in the dir are always installed).",
+    "wheels":   "List of Python package names whose wheels are bundled in wheels/ for offline uv tool install.",
+    "uv_tool":  "Package name passed to 'uv tool install' for Python-based tools. Triggers install_python_tools().",
     "optional": "If true, not installed by default. User must opt in with --add-tools."
   },
 
@@ -187,6 +190,29 @@
       "libvorbis.so.0",
       "libvorbisenc.so.2"
     ],
+    "optional": true
+  },
+
+  "meld": {
+    "bins":     [],
+    "libs":     [
+      "libgirepository-1.0.so.1",
+      "libgtksourceview-4.so.0"
+    ],
+    "typelibs": [
+      "GLib-2.0.typelib",
+      "GObject-2.0.typelib",
+      "Gio-2.0.typelib",
+      "GIRepository-2.0.typelib",
+      "Gdk-3.0.typelib",
+      "GdkPixbuf-2.0.typelib",
+      "Gtk-3.0.typelib",
+      "Pango-1.0.typelib",
+      "cairo-1.0.typelib",
+      "GtkSource-4.typelib"
+    ],
+    "wheels":   ["PyGObject", "pycairo", "meld"],
+    "uv_tool":  "meld",
     "optional": true
   }
 }

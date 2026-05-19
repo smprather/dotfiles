@@ -93,6 +93,11 @@ if [[ -f $HOME/.local/lib64/libqxcb.so ]]; then
     export QT_QPA_PLATFORM_PLUGIN_PATH=$HOME/.local/lib64
 fi
 
+# GObject introspection typelib search path for bundled GUI Python tools (meld, etc.)
+if [[ -d $HOME/.local/lib/girepository-1.0 ]]; then
+    export GI_TYPELIB_PATH=$HOME/.local/lib/girepository-1.0${GI_TYPELIB_PATH:+:$GI_TYPELIB_PATH}
+fi
+
 ### History ###
 # Don't save to history if command line starts with a space char
 # Erasedups causes all previous lines matching the current line to be removed from the history list before that line is saved.
@@ -276,7 +281,7 @@ for _layer in global corp site project user; do
         source_if_exists $_comp_file
     done
 done
-for _cmd in uv ruff; do
+for _cmd in uv ruff ty; do
     command -v $_cmd >/dev/null && eval "$($_cmd generate-shell-completion bash)"
 done
 
