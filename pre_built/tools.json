@@ -40,7 +40,7 @@
   "lazygit":     {"bins": ["lazygit"],            "version": "0.61.1",     "description": "TUI git client for staging, committing, rebasing"},
   "micro":       {"bins": ["micro"],              "version": "2.0.15",     "description": "Beginner-friendly terminal text editor"},
   "miller":      {"bins": ["mlr"],                "version": "6.18.1",     "description": "CSV/TSV/JSON/NDJSON data processor (mlr)"},
-  "nvim":        {"bins": ["nvim"],               "version": "0.13-dev",   "description": "Hyperextensible Vim-based text editor"},
+  "nvim":        {"bins": ["nvim"],               "version": "0.12.2",     "description": "Hyperextensible Vim-based text editor"},
   "patchelf":    {"bins": ["patchelf"],           "version": "0.12",       "description": "Modify ELF RPATH and interpreter in-place"},
   "pigz":        {"bins": ["pigz"],               "version": "2.8",        "description": "Parallel implementation of gzip"},
   "procs":       {"bins": ["procs"],              "version": "0.14.11",    "description": "ps replacement with colors and process tree"},

@@ -62,11 +62,22 @@ fi
 
 CMAKE=${CMAKE:-cmake}
 
-# Build with bundled deps (default); this links everything statically.
-"$CMAKE" -B build \
+# Build bundled deps first (luajit, luv, libuv, treesitter, etc.).
+# Must use the bundled luajit as the Lua compiler — the system luajit
+# (if installed) may have an incompatible bytecode format and cause
+# "E970: Failed to initialize builtin Lua modules" at runtime.
+echo "Building bundled deps..."
+"$CMAKE" -S cmake.deps -B .deps -DCMAKE_BUILD_TYPE=Release
+"$CMAKE" --build .deps -j"$(nproc)"
+
+BUNDLED_LUAJIT="$(pwd)/.deps/usr/bin/luajit"
+
+echo "Configuring nvim..."
+DEPS_BUILD_DIR="$(pwd)/.deps" "$CMAKE" -B build \
     -DCMAKE_BUILD_TYPE=Release \
     -DCMAKE_INSTALL_PREFIX="$INSTALL_PREFIX" \
     -DENABLE_TRANSLATIONS=OFF \
+    -DLUA_PRG="$BUNDLED_LUAJIT" \
     -G Ninja
 
 ninja -C build -j"$(nproc)"
@@ -74,25 +85,32 @@ ninja -C build -j"$(nproc)"
 echo ""
 echo "Build complete: $(./build/bin/nvim --version | head -1)"
 echo ""
-echo "Install runtime (requires sudo):"
-echo "  sudo ninja -C build install"
+
+echo "Installing runtime (requires sudo)..."
+sudo ninja -C build install
+
 echo ""
-echo "Then package for the repo:"
+echo "Packaging for repo..."
+
+cp "$INSTALL_PREFIX/bin/nvim" /tmp/nvim_tmp
+strip /tmp/nvim_tmp
+"$PATCHELF" --set-rpath '$ORIGIN/../lib64:$ORIGIN/../lib' /tmp/nvim_tmp
+bzip2 -kf /tmp/nvim_tmp
+cp /tmp/nvim_tmp.bz2 "$BIN_DIR/nvim.bz2"
+
+tar -cjf /tmp/nvim.tar.bz2 -C "$INSTALL_PREFIX/share/nvim" ./runtime
+cp /tmp/nvim.tar.bz2 "$RUNTIME_DIR/nvim.tar.bz2"
+
 echo ""
-echo "  # Binary: strip -> patchelf -> bzip2"
-echo "  cp $INSTALL_PREFIX/bin/nvim /tmp/nvim_tmp"
-echo "  strip /tmp/nvim_tmp"
-echo "  $PATCHELF --set-rpath '\$ORIGIN/../lib64:\$ORIGIN/../lib' /tmp/nvim_tmp"
-echo "  bzip2 -k /tmp/nvim_tmp"
-echo "  cp /tmp/nvim_tmp.bz2 $BIN_DIR/nvim.bz2"
+echo "Installed: $BIN_DIR/nvim.bz2"
+echo "Runtime:   $RUNTIME_DIR/nvim.tar.bz2"
 echo ""
-echo "  # Runtime archive"
-echo "  tar -cjf /tmp/nvim.tar.bz2 -C $INSTALL_PREFIX/share/nvim ./runtime"
-echo "  cp /tmp/nvim.tar.bz2 $RUNTIME_DIR/nvim.tar.bz2"
-echo ""
-echo "  # Strip manifest + commit"
-echo "  cd $REPO && ./strip_all_elf_binaries"
+echo "Next steps:"
+echo "  cd $REPO"
+echo "  ./strip_all_elf_binaries"
 echo "  git add pre_built/el8.x86_64.glibc2p28/bin/nvim.bz2 \\"
 echo "          pre_built/el8.x86_64.glibc2p28/runtime/nvim.tar.bz2 \\"
 echo "          .strip-manifest"
 echo "  git commit"
+echo ""
+echo "Also update tools.json: set \"version\": \"${tag#v}\" for the nvim entry."
