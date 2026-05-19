@@ -1,6 +1,6 @@
 # Non-interactive and interactive shell setup.
 # Non-interactive exits early after PATH setup (see guard below).
-#
+
 # Load home-dir-based NVM (Node Version Manager) if found
 if [[ -r $HOME/.nvm ]]; then
     export NVM_DIR="$HOME/.nvm"
@@ -32,8 +32,13 @@ fi
 ###################################    Interactive   ###############################################
 ####################################################################################################
 
+### Detection ###
 _is_ssh_connection=$(ps -f $PPID | grep -c sshd)
+# Detect GLIBC version. I can't support everything on RH7, but I want a minimal level of usability
+# since we still occasionally find ourselves on incredibly old RH7 machines.
+_glibc=$(/usr/bin/ldd --version | /bin/grep -Po "\d\.\d+" | /bin/head -n 1)
 
+### Colors ###
 # Make these colors available in case Starship prompt generator is not available.
 export WHITE="\e[38;2;255;255;255m"
 export GREEN="\e[38;2;0;255;0m"
@@ -55,10 +60,7 @@ export PROMPT_CYAN="\\[$CYAN\\]"
 export PROMPT_BOLD="\\[$BOLD\\]"
 export PROMPT_NORMAL="\\[$NORMAL\\]"
 
-# Detect GLIBC version. I can't support everything on RH7, but I want a minimal level of usability
-# since we still occasionally find ourselves on incredibly old RH7 machines.
-_glibc=$(/usr/bin/ldd --version | /bin/grep -Po "\d\.\d+" | /bin/head -n 1)
-
+### Environment ###
 # Tmux will not detect UTF-8 support unless you set LANG/LC_ALL like this
 # When broken, all non-ASCII glyphs will show up as _ chars.
 #export LC_ALL=en_US.UTF-8
@@ -69,13 +71,29 @@ if [[ ! -r $XDG_RUNTIME_DIR ]]; then
     mkdir -p "$XDG_RUNTIME_DIR"
 fi
 
-# bash checks the window size after each command and, if necessary, updates the values of LINES and COLUMNS.
-shopt -s checkwinsize
+# Should work for all cases, but this terminfo stuff is always trying to fail.
+# When working correctly, you should see undercurl, italics, etc working in nvim.
+export COLORTERM=truecolor
 
-# Don't escape vars when tab-complete. Expand instead. I would actually prefer the tcsh method of respecting
-# the var value, but just leaving it there instead of expanding. Bash can't do this AFAIK.
-shopt -s direxpand
+# Compile python bytecode cache to fast /dev/shm filesystem
+export PYTHONPYCACHEPREFIX=/dev/shm/$USER/pycache
+# When using Python Poetry, it tries to access the desktop keyring which for some reason causes a hang
+# This var disables keyring
+export PYTHON_KEYRING_BACKEND=keyring.backends.null.Keyring
 
+export PAGER='less --incsearch --use-color --no-init --ignore-case --mouse'
+export EDITOR="${DOTFILES_CFG_PREFERRED_VI}"
+export VISUAL=$EDITOR
+export GIT_EDITOR=$EDITOR
+export PIP_REQUIRE_VIRTUALENV=1
+
+# Qt5/GTK3: point Qt at bundled xcb platform plugin when gui_libs is installed.
+# libqxcb.so lives flat in ~/.local/lib64 alongside the other Qt5 libs.
+if [[ -f $HOME/.local/lib64/libqxcb.so ]]; then
+    export QT_QPA_PLATFORM_PLUGIN_PATH=$HOME/.local/lib64
+fi
+
+### History ###
 # Don't save to history if command line starts with a space char
 # Erasedups causes all previous lines matching the current line to be removed from the history list before that line is saved.
 export HISTCONTROL=ignorespace:erasedups
@@ -98,65 +116,45 @@ if [[ ! -f "$HISTFILE" ]]; then
     fi
 fi
 
-# Compile python bytecode cache to fast /dev/shm filesystem
-export PYTHONPYCACHEPREFIX=/dev/shm/$USER/pycache
+### Shell options ###
+# bash checks the window size after each command and, if necessary, updates the values of LINES and COLUMNS.
+shopt -s checkwinsize
+# Don't escape vars when tab-complete. Expand instead. I would actually prefer the tcsh method of respecting
+# the var value, but just leaving it there instead of expanding. Bash can't do this AFAIK.
+shopt -s direxpand
 
-# When using Python Poetry, it tries to access the desktop keyring which for some reason causes a hang
-# This var disables keyring
-export PYTHON_KEYRING_BACKEND=keyring.backends.null.Keyring
+### GNU readline ###
+bind 'set colored-completion-prefix on'
+bind 'set colored-stats off'
+bind 'set bell-style none'
+# Disable check for too many completions, and paging the results.
+# This is so that I can use a 2nd TAB to cycle through the possible results.
+bind 'set completion-query-items 0'
+bind 'set page-completions off'
+# Prevent pasted text from being highlighted in reverse text
+bind 'set enable-bracketed-paste off'
+# If there are multiple matches for completion, Tab should cycle through them
+bind 'TAB:menu-complete'
+# Display a list of the matching files
+bind "set show-all-if-ambiguous on"
+# Perform partial (common) completion on the first Tab press, only start
+# cycling full results on the second Tab press (from bash version 5)
+bind "set menu-complete-display-prefix on"
+# Make dot-files not tab-complete visible. I was getting .snapshot hits.
+bind 'set match-hidden-files off'
+# Cycle through history based on characters already typed on the line
+bind '"\e[A":history-search-backward'
+bind '"\e[B":history-search-forward'
+bind "set colored-completion-prefix on"
+# cycle completions forward/backward
+bind '\C-j:menu-complete'
+bind '\C-k:menu-complete-backward'
 
-# Should work for all cases, but this terminfo stuff is always trying to fail.
-# When working correctly, you should see undercurl, italics, etc working in nvim.
-export COLORTERM=truecolor
-# This is a bad test for RH7 machines. There are better solutions, but in a rush.
-#if (( $(/bin/echo "$_glibc > 2.17" | bc -l) )); then
-#    export TERM="tmux-256color"
-#fi
-
-# Adds color to a lot of basic linux cmds
-if is_truthy "${DOTFILES_CFG_ENABLE_GRC}"; then
-    path_prepend PATH "$BASH_CONFIG_ROOT_DIR/global/grc/bin"
-    export GRC_ALIASES="true"
-    source $BASH_CONFIG_ROOT_DIR/global/grc/etc/profile.d/grc.sh
-fi
-
+### Terminal tools ###
 # Rust
 [[ -r "$HOME/.cargo/env" ]] && source $HOME/.cargo/env
 
-# Can't check for existence of stuff until PATH is fully set.
-if ! command -v "${DOTFILES_CFG_PREFERRED_LS}" >/dev/null; then
-    DOTFILES_CFG_PREFERRED_LS="ls"
-fi
-
-# Create tmux_path_store aliases. Run 'tdd' to see a list of aliases.
-if is_truthy "${DOTFILES_CFG_ENABLE_TMUX_PATH_STORE}" && command -v tmux_path_store >/dev/null; then
-    eval $(tmux_path_store --bash)
-fi
-
-# If NOT in an activated python virtual env
-if [[ -z ${VIRTUAL_ENV+x} ]]; then
-    # This is required by bash in an empty if
-    :
-
-    # I want to re-order $HOME/.local/bin, so remove it first
-    # path_remove PATH $HOME/.local/bin
-    # [[ -d "$HOME/.local/bin" ]] && path_prepend PATH $HOME/.local/bin
-fi
-
-### END PATH SETUP ###
-
-export PAGER='less --incsearch --use-color --no-init --ignore-case --mouse'
-export EDITOR="${DOTFILES_CFG_PREFERRED_VI}"
-export VISUAL=$EDITOR
-export GIT_EDITOR=$EDITOR
-export PIP_REQUIRE_VIRTUALENV=1
-
-# Qt5/GTK3: point Qt at bundled xcb platform plugin when gui_libs is installed.
-# libqxcb.so lives flat in ~/.local/lib64 alongside the other Qt5 libs.
-if [[ -f $HOME/.local/lib64/libqxcb.so ]]; then
-    export QT_QPA_PLATFORM_PLUGIN_PATH=$HOME/.local/lib64
-fi
-
+# bat: detect executable name (Debian uses 'batcat')
 if command -v batcat >&/dev/null; then
     _bat_exec="batcat"
 elif command -v bat >&/dev/null; then
@@ -167,6 +165,20 @@ if [[ -n $_bat_exec ]]; then
     export BAT_PAGER="$PAGER -RF"
 fi
 
+# Fall back if preferred ls tool is not installed
+if ! command -v "${DOTFILES_CFG_PREFERRED_LS}" >/dev/null; then
+    DOTFILES_CFG_PREFERRED_LS="ls"
+fi
+
+### Optional integrations ###
+# GRC: adds color to many basic linux commands
+if is_truthy "${DOTFILES_CFG_ENABLE_GRC}"; then
+    path_prepend PATH "$BASH_CONFIG_ROOT_DIR/global/grc/bin"
+    export GRC_ALIASES="true"
+    source $BASH_CONFIG_ROOT_DIR/global/grc/etc/profile.d/grc.sh
+fi
+
+# fzf: shell integration (CTRL-T file picker, CTRL-R history, ALT-C cd)
 if command -v fzf >&/dev/null && is_truthy "${DOTFILES_CFG_ENABLE_FZF}"; then
     if [[ -n $_bat_exec ]]; then
         # https://junegunn.github.io/fzf/shell-integration/
@@ -179,7 +191,17 @@ if command -v fzf >&/dev/null && is_truthy "${DOTFILES_CFG_ENABLE_FZF}"; then
     eval "$(fzf --bash)"
 fi
 
-### Prompt configuration ###
+# zoxide: smart cd with frecency tracking (z/zi commands)
+if command -v zoxide >/dev/null && is_truthy "${DOTFILES_CFG_ENABLE_ZOXIDE}"; then
+    eval "$(zoxide init bash)"
+fi
+
+# tmux_path_store: create per-path tmux session aliases
+if is_truthy "${DOTFILES_CFG_ENABLE_TMUX_PATH_STORE}" && command -v tmux_path_store >/dev/null; then
+    eval $(tmux_path_store --bash)
+fi
+
+### Prompt ###
 /bin/stty sane
 # Disable ctrl-s terminal pausing
 /bin/stty -ixon
@@ -238,38 +260,7 @@ export LESS_TERMCAP_us=$'\e[1;4;31m'
 export MANPAGER="/usr/bin/less"
 export MANROFFOPT="-c"
 
-### GNU readline configuration ###
-bind 'set colored-completion-prefix on'
-bind 'set colored-stats off'
-bind 'set bell-style none'
-# Disable check for too many completions, and paging the results.
-# This is so that I can use a 2nd TAB to cycle through the possible results.
-bind 'set completion-query-items 0'
-bind 'set page-completions off'
-# Prevent pasted text from being highlighted in reverse text
-bind 'set enable-bracketed-paste off'
-# If there are multiple matches for completion, Tab should cycle through them
-bind 'TAB:menu-complete'
-# Display a list of the matching files
-bind "set show-all-if-ambiguous on"
-# Perform partial (common) completion on the first Tab press, only start
-# cycling full results on the second Tab press (from bash version 5)
-bind "set menu-complete-display-prefix on"
-# Make dot-files not tab-complete visible. I was getting .snapshot hits.
-bind 'set match-hidden-files off'
-### Cycle through history based on characters already typed on the line
-bind '"\e[A":history-search-backward'
-bind '"\e[B":history-search-forward'
-bind "set colored-completion-prefix on"
-# cycle completions forward/backward
-bind '\C-j:menu-complete'
-bind '\C-k:menu-complete-backward'
-
-if command -v zoxide >/dev/null && is_truthy "${DOTFILES_CFG_ENABLE_ZOXIDE}"; then
-    eval "$(zoxide init bash)"
-fi
-
-### Completions
+### Completions ###
 # Clean the slate
 complete -r
 source $BASH_CONFIG_ROOT_DIR/global/github.scop.bash-completion/share/bash-completion/bash_completion
@@ -289,6 +280,7 @@ for _cmd in uv ruff; do
     command -v $_cmd >/dev/null && eval "$($_cmd generate-shell-completion bash)"
 done
 
+### ls function ###
 # Using eval:
 #   * The de-symlinking realpath call is baked into the function definition instead of calling it every time
 #   * Doesn't have to test for preferred ls tool everytime
@@ -335,6 +327,269 @@ if fpcmp $_glibc -gt 2.17; then
     fi
 fi
 
+##############################################################################
+###                              Aliases                                   ###
+##############################################################################
+
+### Navigation ###
+alias cd-='cd -'
+alias bcd="builtin cd"
+alias b='cd ..'
+alias bb='cd ../..'
+alias bbb='cd ../../..'
+alias bbbb='cd ../../../..'
+alias bbbbb='cd ../../../../..'
+alias bbbbbb='cd ../../../../../..'
+alias bbbbbbb='cd ../../../../../../..'
+alias bbbbbbbb='cd ../../../../../../../..'
+alias bbbbbbbbb='cd ../../../../../../../../..'
+alias bbbbbbbbbb='cd ../../../../../../../../../..'
+alias cdd='cd $(find * -maxdepth 0 -type d | xargs /bin/ls -drt1 | tail -n 1)'
+alias cddd='cd `find * -maxdepth 0 -type d | xargs /bin/ls -drt1 | tail -n 2 | head -n 1`'
+alias cdddd='cd `find * -maxdepth 0 -type d | xargs /bin/ls -drt1 | tail -n 3 | head -n 1`'
+alias cddddd='cd `find * -maxdepth 0 -type d | xargs /bin/ls -drt1 | tail -n 4 | head -n 1`'
+alias cdddddd='cd `find * -maxdepth 0 -type d | xargs /bin/ls -drt1 | tail -n 5 | head -n 1`'
+alias p='pwd | tee /tmp/p_dir'
+alias cdp='cd $(cat /tmp/p_dir)'
+cds() {
+    eval "$(cd-surfer "$@")"
+}
+
+### Listing ###
+alias sl='ls'
+alias ll='ls'
+alias lr='ls'
+alias rl='ls'
+alias lh='human_readable=1 ls'
+alias la='list_all=1 ls'
+alias lg='show_group=1 ls'
+alias lah='human_readable=1 list_all=1 ls'
+alias lha='lah'
+alias lsg='lg'
+alias tree='ls -T'
+
+### Editing ###
+_vi=${DOTFILES_CFG_PREFERRED_VI}
+alias vi="$_vi"
+alias vim="$_vi"
+alias vic="$_vi --clean -u ~/.vimrc"
+alias vii="$_vi \$(find * -maxdepth 0 -type f | xargs /bin/ls -drt1 | tail -n 1)"
+alias vimdiff="NVIM_WRAPPER_OPTS='-d -R' $_vi"
+alias vid="$_vi -d"
+alias ovi='\vim'
+alias fls="ls \$(fzf)"
+alias fvi="$_vi \$(fzf)"
+unset _vi
+alias fcd="eval \$(__fzf_cd__) && ls"
+alias fcat="cat \$(fzf)"
+alias v="nvim -n -R -"
+alias wip='vim $HOME/wip.txt'
+alias test_nvim='NVIM_APPNAME=test_nvim nvim_wrapper'
+new() {
+    touch $1
+    chmod +x $1
+    vi $1
+}
+
+### Search ###
+if command -v rg >&/dev/null; then
+    g() {
+        rg --smart-case --search-zip --hidden --no-ignore --glob='!*.snapshot*' "$@"
+    }
+    alias sg='rg --smart-case --search-zip --hidden --no-ignore --glob="!*.snapshot*" --max-filesize=100K'
+    alias gv='g -v'
+else
+    g() {
+        grep -r -i --color=auto --exclude-dir='.snapshot' "$@"
+    }
+    alias sg='g -l'
+    alias gv='g -v'
+fi
+alias gf='g -F'
+alias gpy='g --glob "*.py" --glob="!*.snapshot*"'
+alias gtcl='g --glob "*.tcl" --glob="!*.snapshot*"'
+# This makes grep run way faster. Though you should be using rg instead!
+alias grep='LC_ALL=C grep'
+if command -v fdfind >/dev/null; then
+    alias fd="fdfind"
+    alias f='fdfind --exclude .snapshot --unrestricted --full-path'
+elif command -v fd >/dev/null && fd --help | /bin/grep -q sharkdp; then
+    alias f='fd --exclude .snapshot --unrestricted --full-path'
+else
+    alias f='find .'
+fi
+fc() {
+    fd --unrestricted --full-path $1 | wc -l
+}
+alias h='history | g'
+alias hg='history | /bin/grep -i'
+gah() {
+    rg $* /run/user/*/bash_history.* 2>/dev/null
+}
+
+### Git ###
+ga() {
+    if [[ -z "$1" ]]; then
+        git add --all .
+    else
+        git add $*
+    fi
+    git status
+}
+alias gc='git commit'
+alias gs='git status'
+alias gp='git push'
+alias gd='git d'
+alias gr='git review'
+alias gsp='git stash; git pull; git stash pop'
+
+### System / utils ###
+alias t='exec bash'
+alias c='clear'
+alias w='type -a'
+alias ho='hostname -s'
+alias d='date'
+alias rm='rm -f'
+alias mkdir='mkdir -p'
+alias mdkir='mkdir'
+alias rs='rsync --archive --info=progress2 --info=name0 --no-inc-recursive --exclude="*/.snapshot/"'
+alias du='du --block-size=G -s * | sort -r -n -k 1'
+alias dum='/bin/du --block-size=M -s * | sort -r -n -k 1'
+alias df='colourify df --block-size=G'
+alias pl='echo $PATH | tr ":" "\n" | nl'
+alias ncdu='ncdu --graph-style hash --color dark'
+alias less='less --incsearch --use-color +X'
+alias tx='tar -xvf'
+alias tt='tar -tvf'
+alias gunzip='unpigz'
+alias gzip='pigz'
+alias gz='pigz'
+alias we='watchexec --clear --poll 500'
+alias rlrt="find \$1 -type f -print0 | xargs -0 stat --format '%Y :%y %n' | sort -nr | cut -d: -f2- | head"
+alias gpw='chmod -R g+w'
+alias gmw='chmod -R g-w'
+alias a="alias | sort > /tmp/alias.$$; declare -f >> /tmp/alias.$$; vi /tmp/alias.$$; rm /tmp/alias.$$"
+alias clean_bash='echo "/usr/bin/env --ignore-environment PATH=/bin HOME=$HOME USER=$(/bin/whoami) /bin/bash --rcfile ~/.clean.bashrc"'
+alias vman="MANPAGER='nvim +Man\!' man"
+alias st="strace -o /tmp/strace.$USER -f -v -s 1000000"
+alias sp1="set_prompt"
+alias sp2="set_prompt include_host"
+alias fsbm='fio --randrepeat=1 --ioengine=libaio --direct=0 --gtod_reduce=1 --name=test --bs=4k --iodepth=64 --readwrite=randrw --rwmixread=75 --size=4G --filename=./fio_test; rm ./fio_test'
+# I was getting a weird completion failure for `x <tab>`. This is the work-around.
+unalias x 2>/dev/null
+complete -r x 2>/dev/null
+x() { chmod +x -- "$@"; }
+rp() { [[ -n "$1" ]] && realpath $1 || realpath .; }
+if [[ -n $_bat_exec ]]; then
+    alias cat='bat --paging=never'
+    alias catp='bat'
+fi
+lns() {
+    # Assume deletion of any existing sym-link
+    if [[ -n $2 ]]; then
+        if /bin/readlink $2 >/dev/null; then
+            rm -f $2
+        fi
+    else
+        local b=$(basename $1)
+        if readlink $b >/dev/null; then
+            rm -f $b
+        fi
+    fi
+    ln -s "$@"
+}
+latest() {
+    local latest
+    rm -f latest
+    if [[ -n $1 ]]; then
+        mkdir -p $1
+        ln -s $1 latest
+        latest=$1
+    else
+        latest=$(command ls -1drt */ | tail -n 1)
+        ln -s $latest latest
+    fi
+    cd $latest
+}
+
+### Tmux ###
+alias tl='tmux list-sessions'
+alias ta='resize; tmux attach -d || tmux'
+alias btopu='btop -u $(/bin/whoami)'
+_tmux_get_window_cmd='TMUX_WINDOW=$(tmux display-message -p "#W")'
+
+### EDA / LSF ###
+alias invs='innovus -stylus'
+alias vlts='voltus -stylus'
+alias itcl="\$HOME/.local/lib/tcl/tclsh-wrapper/TclReadLine/TclReadLine.tcl"
+alias ipy='ipython3'
+alias pyprofile='python3 -m cProfile -s cumtime'
+alias agrep="alias | g"
+alias fdon="echo 'export FLEXLM_DIAGNOSTICS=3'; export FLEXLM_DIAGNOSTICS=3"
+alias fdoff="echo 'unset FLEXLM_DIAGNOSTICS'; unset FLEXLM_DIAGNOSTICS"
+alias mli='module list'
+alias ms='module show'
+alias ma='module avail'
+alias my_total_cpu="while true; do top -b -n 1 -u \$(/bin/whoami) | awk 'NR>7 { sum += \$9; } END { print sum; }'; sleep 1; done"
+alias pg='pgrep -u $(/bin/whoami) --full --list-full'
+alias pk='pkill'
+alias pgrep='pgrep -f'
+alias pkill='pkill -f'
+alias bkillall='bkill -u $(/bin/whoami) 0'
+alias bjobsv='export LSB_BJOBS_FORMAT="jobid:7 stat:5 user:12 queue:15 slots:3 proj_name:15 sla:15 exec_host:13 max_mem:12 pend_time:12 max_req_proc:12 mem"'
+bq() {
+    [[ $1 == "-l" ]] && bqueues -l $* || bqueues -u $(whoami) -o 'queue_name: status: njobs: pend: run:'
+}
+#alias bq="bqueues -u $_user -o 'queue_name: status: njobs: pend: run:'"
+alias bqs="bq"
+alias sbqueues='echo "QUEUE_NAME      PRIO STATUS          MAX JL/U JL/P JL/H NJOBS  PEND   RUN  SUSP  RSV PJOBS "; bqueues | grep hw_ | egrep "interactive|reg_batch|reg_user|cot|batch|biggermem|spot|reg_ci"'
+alias sbq='sbqueues'
+
+### VNC / X ###
+_xterm_cmd="xterm -bg black -fg white -fa HackNerdFontMono-Regular -fs 10 +sb"
+alias xterm=$_xterm_cmd
+# Without args, start a VNC server. With args, be an alias for vncserver.
+vnc() {
+    if [[ -z $1 ]]; then
+        vncserver -SecurityTypes None
+    else
+        vncserver "$@"
+    fi
+}
+alias startvnc="vncserver -SecurityTypes None"
+alias runvnc="startvnc"
+alias stopvnc="vncserver -kill"
+alias killvnc="vncserver -kill"
+killvnc() {
+    local max_display
+    max_display=$(
+        ps -ef | awk '
+            /Xtigervnc|Xvnc/ && $0 !~ /awk/ {
+                for (i=1; i<=NF; i++) {
+                    if ($i ~ /^:[0-9]+/) {
+                        gsub(":", "", $i)
+                        print $i
+                    }
+                }
+            }
+        ' | sort -n | tail -1
+    )
+    if [[ -z "$max_display" ]]; then
+        echo "No VNC sessions found."
+        return 1
+    fi
+    echo "Killing VNC session :$max_display"
+    if command -v vncserver >/dev/null 2>&1; then
+        vncserver -kill :"$max_display"
+    else
+        pkill -f "X.*:$max_display"
+    fi
+}
+
+##############################################################################
+###                             Functions                                  ###
+##############################################################################
+
 cd() {
     if [[ "$1" == "cd" ]]; then
         shift
@@ -371,19 +626,11 @@ cd() {
     builtin cd "$target" && human_readable=0 ls
     # z "$target" && human_readable=0 ls
 }
-alias bcd="builtin cd"
 
 extract_rpm() {
     rpm2cpio "$1" | cpio -idmv
 }
-ga() {
-    if [[ -z "$1" ]]; then
-        git add --all .
-    else
-        git add $*
-    fi
-    git status
-}
+
 zhead() {
     zcat "${@: -1}" | head $(array_slice 0:-1 ${@})
 }
@@ -391,239 +638,5 @@ zhead() {
 # Executing a directory will cd to that directory. Makes it so that you can
 # paste a directory to the cmd line w/o a cd first.
 trap 'last_cmd=$BASH_COMMAND; [[ -r $last_cmd && -d $last_cmd ]] && cd $last_cmd || ( [[ -r $last_cmd && ! -x $last_cmd ]] && cd $(/bin/dirname $last_cmd) )' ERR
-
-_xterm_cmd="xterm -bg black -fg white -fa HackNerdFontMono-Regular -fs 10 +sb"
-
-alias sl='ls'
-alias ll='ls'
-alias lr='ls'
-alias rl='ls'
-alias lh='human_readable=1 ls'
-alias la='list_all=1 ls'
-alias lg='show_group=1 ls'
-alias lah='human_readable=1 list_all=1 ls'
-alias lha='lah'
-alias lsg='lg'
-cds() {
-    eval "$(cd-surfer "$@")"
-}
-alias cd-='cd -'
-alias b='cd ..'
-alias bb='cd ../..'
-alias bbb='cd ../../..'
-alias bbbb='cd ../../../..'
-alias bbbbb='cd ../../../../..'
-alias bbbbbb='cd ../../../../../..'
-alias bbbbbbb='cd ../../../../../../..'
-alias bbbbbbbb='cd ../../../../../../../..'
-alias bbbbbbbbb='cd ../../../../../../../../..'
-alias bbbbbbbbbb='cd ../../../../../../../../../..'
-alias cdd='cd $(find * -maxdepth 0 -type d | xargs /bin/ls -drt1 | tail -n 1)'
-alias cddd='cd `find * -maxdepth 0 -type d | xargs /bin/ls -drt1 | tail -n 2 | head -n 1`'
-alias cdddd='cd `find * -maxdepth 0 -type d | xargs /bin/ls -drt1 | tail -n 3 | head -n 1`'
-alias cddddd='cd `find * -maxdepth 0 -type d | xargs /bin/ls -drt1 | tail -n 4 | head -n 1`'
-alias cdddddd='cd `find * -maxdepth 0 -type d | xargs /bin/ls -drt1 | tail -n 5 | head -n 1`'
-alias p='pwd | tee /tmp/p_dir'
-alias ho='hostname -s'
-alias d='date'
-_vi=${DOTFILES_CFG_PREFERRED_VI}
-alias vi="$_vi"
-alias vim="$_vi"
-alias vic="$_vi --clean -u ~/.vimrc"
-alias vii="$_vi \$(find * -maxdepth 0 -type f | xargs /bin/ls -drt1 | tail -n 1)"
-alias vimdiff="NVIM_WRAPPER_OPTS='-d -R' $_vi"
-alias vid="$_vi -d"
-alias ovi='\vim'
-alias fls="ls \$(fzf)"
-alias fvi="$_vi \$(fzf)"
-unset _vi
-alias fcd="eval \$(__fzf_cd__) && ls"
-alias fcat="cat \$(fzf)"
-alias t='exec bash'
-alias hg='history | /bin/grep -i'
-if command -v fdfind >/dev/null; then
-    alias fd="fdfind"
-    alias f='fdfind --exclude .snapshot --unrestricted --full-path'
-elif command -v fd >/dev/null && fd --help | /bin/grep -q sharkdp; then
-    alias f='fd --exclude .snapshot --unrestricted --full-path'
-else
-    alias f='find .'
-fi
-fc() {
-    fd --unrestricted --full-path $1 | wc -l
-}
-alias w='type -a'
-alias du='du --block-size=G -s * | sort -r -n -k 1'
-alias dum='/bin/du --block-size=M -s * | sort -r -n -k 1'
-alias df='colourify df --block-size=G'
-alias tl='tmux list-sessions'
-alias ta='resize; tmux attach -d || tmux'
-alias c='clear'
-alias h='history | g'
-alias rm='rm -f'
-alias rs='rsync --archive --info=progress2 --info=name0 --no-inc-recursive --exclude="*/.snapshot/"'
-alias pl='echo $PATH | tr ":" "\n" | nl'
-alias ncdu='ncdu --color dark'
-new() {
-    touch $1
-    chmod +x $1
-    vi $1
-}
-if command -v rg >&/dev/null; then
-    g() {
-        rg --smart-case --search-zip --hidden --no-ignore --glob='!*.snapshot*' "$@"
-    }
-    alias sg='rg --smart-case --search-zip --hidden --no-ignore --glob="!*.snapshot*" --max-filesize=100K'
-    alias gv='g -v'
-else
-    g() {
-        grep -r -i --color=auto --exclude-dir='.snapshot' "$@"
-    }
-    alias sg='g -l'
-    alias gv='g -v'
-fi
-alias tx='tar -xvf'
-alias tt='tar -tvf'
-alias ncdu='ncdu --graph-style hash --color dark'
-alias mdkir='mkdir'
-alias itcl="\$HOME/.local/lib/tcl/tclsh-wrapper/TclReadLine/TclReadLine.tcl"
-alias ipy='ipython3'
-# I was getting a weird completion failure for `x <tab>`. This is the work-around.
-unalias x 2>/dev/null
-complete -r x 2>/dev/null
-x() { chmod +x -- "$@"; }
-alias clean_bash='echo "/usr/bin/env --ignore-environment PATH=/bin HOME=$HOME USER=$(/bin/whoami) /bin/bash --rcfile ~/.clean.bashrc"'
-alias tree='ls -T'
-if [[ -n $_bat_exec ]]; then
-    alias cat='bat --paging=never'
-    alias catp='bat'
-fi
-alias invs='innovus -stylus'
-alias vlts='voltus -stylus'
-alias a="alias | sort > /tmp/alias.$$; declare -f >> /tmp/alias.$$; vi /tmp/alias.$$; rm /tmp/alias.$$"
-alias gpw='chmod -R g+w'
-alias gmw='chmod -R g-w'
-_tmux_get_window_cmd='TMUX_WINDOW=$(tmux display-message -p "#W")'
-alias btopu='btop -u $(/bin/whoami)'
-alias rlrt="find \$1 -type f -print0 | xargs -0 stat --format '%Y :%y %n' | sort -nr | cut -d: -f2- | head"
-# There's a fxn above for ga (git add)
-alias xterm=$_xterm_cmd
-alias gc='git commit'
-alias gs='git status'
-alias gp='git push'
-alias gd='git d'
-alias gr='git review'
-alias pg='pgrep -u $(/bin/whoami) --full --list-full'
-alias pk='pkill'
-alias pyprofile='python3 -m cProfile -s cumtime'
-alias my_total_cpu="while true; do top -b -n 1 -u \$(/bin/whoami) | awk 'NR>7 { sum += \$9; } END { print sum; }'; sleep 1; done"
-alias sp1="set_prompt"
-alias sp2="set_prompt include_host"
-alias agrep="alias | g"
-alias fdon="echo 'export FLEXLM_DIAGNOSTICS=3'; export FLEXLM_DIAGNOSTICS=3"
-alias fdoff="echo 'unset FLEXLM_DIAGNOSTICS'; unset FLEXLM_DIAGNOSTICS"
-alias wip='vim $HOME/wip.txt'
-alias cdp='cd $(cat /tmp/p_dir)'
-alias mkdir='mkdir -p'
-alias fsbm='fio --randrepeat=1 --ioengine=libaio --direct=0 --gtod_reduce=1 --name=test --bs=4k --iodepth=64 --readwrite=randrw --rwmixread=75 --size=4G --filename=./fio_test; rm ./fio_test'
-alias we='watchexec --clear --poll 500'
-bq() {
-    [[ $1 == "-l" ]] && bqueues -l $* || bqueues -u $(whoami) -o 'queue_name: status: njobs: pend: run:'
-}
-#alias bq="bqueues -u $_user -o 'queue_name: status: njobs: pend: run:'"
-alias bqs="bq"
-alias sbqueues='echo "QUEUE_NAME      PRIO STATUS          MAX JL/U JL/P JL/H NJOBS  PEND   RUN  SUSP  RSV PJOBS "; bqueues | grep hw_ | egrep "interactive|reg_batch|reg_user|cot|batch|biggermem|spot|reg_ci"'
-alias sbq='sbqueues'
-alias pgrep='pgrep -f'
-alias pkill='pkill -f'
-alias bkillall='bkill -u $(/bin/whoami) 0'
-alias gf='g -F'
-alias gpy='g --glob "*.py" --glob="!*.snapshot*"'
-alias gtcl='g --glob "*.tcl" --glob="!*.snapshot*"'
-alias mli='module list'
-alias ms='module show'
-alias ma='module avail'
-# This makes grep run way faster. Though you should be using rg instead!
-alias grep='LC_ALL=C grep'
-latest() {
-    local latest
-    rm -f latest
-    if [[ -n $1 ]]; then
-        mkdir -p $1
-        ln -s $1 latest
-        latest=$1
-    else
-        latest=$(command ls -1drt */ | tail -n 1)
-        ln -s $latest latest
-    fi
-    cd $latest
-}
-lns() {
-    # Assume deletion of any existing sym-link
-    if [[ -n $2 ]]; then
-        if /bin/readlink $2 >/dev/null; then
-            rm -f $2
-        fi
-    else
-        local b=$(basename $1)
-        if readlink $b >/dev/null; then
-            rm -f $b
-        fi
-    fi
-
-    ln -s "$@"
-}
-alias test_nvim='NVIM_APPNAME=test_nvim nvim_wrapper'
-alias gsp='git stash; git pull; git stash pop'
-alias gunzip='unpigz'
-alias gzip='pigz'
-alias gz='pigz'
-rp() { [[ -n "$1" ]] && realpath $1 || realpath .; }
-alias less='less --incsearch --use-color +X'
-alias bjobsv='export LSB_BJOBS_FORMAT="jobid:7 stat:5 user:12 queue:15 slots:3 proj_name:15 sla:15 exec_host:13 max_mem:12 pend_time:12 max_req_proc:12 mem"'
-alias v="nvim -n -R -"
-# Without args, start a VNC server. With args, be an alias for vncserver.
-vnc() {
-    if [[ -z $1 ]]; then
-        vncserver -SecurityTypes None
-    else
-        vncserver "$@"
-    fi
-}
-alias startvnc="vncserver -SecurityTypes None"
-alias runvnc="startvnc"
-alias stopvnc="vncserver -kill"
-alias killvnc="vncserver -kill"
-alias st="strace -o /tmp/strace.$USER -f -v -s 1000000"
-alias vman="MANPAGER='nvim +Man\!' man"
-killvnc() {
-    local max_display
-    max_display=$(
-        ps -ef | awk '
-            /Xtigervnc|Xvnc/ && $0 !~ /awk/ {
-                for (i=1; i<=NF; i++) {
-                    if ($i ~ /^:[0-9]+/) {
-                        gsub(":", "", $i)
-                        print $i
-                    }
-                }
-            }
-        ' | sort -n | tail -1
-    )
-    if [[ -z "$max_display" ]]; then
-        echo "No VNC sessions found."
-        return 1
-    fi
-    echo "Killing VNC session :$max_display"
-    if command -v vncserver >/dev/null 2>&1; then
-        vncserver -kill :"$max_display"
-    else
-        pkill -f "X.*:$max_display"
-    fi
-}
-# "Grep All (bash) History"
-gah() {
-    rg $* /run/user/*/bash_history.* 2>/dev/null
-}
 
 # vim: ft=bash ts=4
