@@ -11,21 +11,21 @@
 # Prerequisites on the build machine:
 #   sudo dnf install cmake gcc-c++ \
 #                    qt5-qtbase-devel qt5-qtsvg-devel \
-#                    libXt-devel
+#                    libXt-devel git
 #   # gcc-toolset-14 optional but recommended for consistent ABI
 #
-# Usage:
-#   cd ~/nedit-ng       # any nedit-ng source checkout (github.com/eteran/nedit-ng)
-#   /path/to/build-nedit-ng.sh [--clean] --tag vX.Y.Z
+# Usage (run from any directory — script clones nedit-ng automatically):
+#   /path/to/build-nedit-ng.sh --tag 2025.1
+#   /path/to/build-nedit-ng.sh --tag 2025.1 --clean   # wipe build/ first
 #
-# After a successful build the binary is at ./build/nedit-ng.
-# Packaging instructions are printed at the end.
+# After a successful build the script packages and installs the binary.
 
 set -eu
 
 REPO="$(cd "$(dirname "$0")/../.." && pwd)"
 BIN_DIR="$REPO/pre_built/el8.x86_64.glibc2p28/bin"
 JOBS="${JOBS:-$(nproc 2>/dev/null || getconf _NPROCESSORS_ONLN 2>/dev/null || echo 8)}"
+CLONE_URL="https://github.com/eteran/nedit-ng.git"
 
 clean=0
 tag=""
@@ -48,7 +48,7 @@ done
 
 if [ -z "$tag" ]; then
     echo "ERROR: --tag is required. Specify a stable release tag, e.g.:" >&2
-    echo "  $0 --tag v2.0.1" >&2
+    echo "  $0 --tag 2025.1" >&2
     echo "" >&2
     echo "Stable releases: https://github.com/eteran/nedit-ng/releases" >&2
     echo "" >&2
@@ -56,7 +56,7 @@ if [ -z "$tag" ]; then
     exit 1
 fi
 
-git checkout "$tag"
+# ── prerequisite checks ───────────────────────────────────────────────────────
 
 if [ -r /opt/rh/gcc-toolset-14/enable ]; then
     # shellcheck disable=SC1091
@@ -72,10 +72,27 @@ need() {
 
 need cmake
 need g++
+need git
 pkg-config --exists Qt5Widgets 2>/dev/null || {
     echo "Qt5Widgets not found via pkg-config — install qt5-qtbase-devel" >&2
     exit 1
 }
+
+# ── source checkout ───────────────────────────────────────────────────────────
+
+# Run inside a dedicated clone dir under /tmp so we never dirty the dotfiles repo
+SRCDIR="/tmp/nedit-ng-build-${tag}"
+
+if [ ! -d "$SRCDIR/.git" ]; then
+    echo "Cloning $CLONE_URL ..."
+    git clone --filter=blob:none "$CLONE_URL" "$SRCDIR"
+fi
+
+cd "$SRCDIR"
+git fetch --tags
+git checkout "$tag"
+
+# ── build ─────────────────────────────────────────────────────────────────────
 
 if [ "$clean" -eq 1 ] && [ -d build ]; then
     rm -rf build
@@ -89,21 +106,27 @@ cmake -B build \
 cmake --build build -j"$JOBS"
 
 echo ""
-echo "Build complete: $(./build/nedit-ng --version 2>/dev/null || ./build/nedit-ng -version 2>/dev/null | head -1)"
+echo "Build complete: $(./build/nedit-ng --version 2>/dev/null || echo '(--version not supported)')"
 echo ""
 echo "Binary size: $(ls -lh build/nedit-ng | awk '{print $5}') unstripped"
 echo ""
 
-echo "=== Packaging (run from the nedit-ng source directory) ==="
+# ── package ───────────────────────────────────────────────────────────────────
+
+WORK="/tmp/nedit-ng_tmp_${tag}"
+cp build/nedit-ng "$WORK"
+strip "$WORK"
+ls -lh "$WORK"
+bzip2 -kf "$WORK"
+cp "${WORK}.bz2" "$BIN_DIR/nedit-ng.bz2"
+
 echo ""
-echo "  # Binary: strip -> bzip2  (no patchelf needed — all system Qt5 libs)"
-echo "  cp build/nedit-ng /tmp/nedit-ng_tmp"
-echo "  strip /tmp/nedit-ng_tmp"
-echo "  ls -lh /tmp/nedit-ng_tmp"
-echo "  bzip2 -k /tmp/nedit-ng_tmp"
-echo "  cp /tmp/nedit-ng_tmp.bz2 $BIN_DIR/nedit-ng.bz2"
+echo "Installed: $BIN_DIR/nedit-ng.bz2"
 echo ""
-echo "  # Strip manifest + commit"
-echo "  cd $REPO && ./strip_all_elf_binaries"
+echo "Next steps:"
+echo "  cd $REPO"
+echo "  ./strip_all_elf_binaries"
 echo "  git add pre_built/el8.x86_64.glibc2p28/bin/nedit-ng.bz2 .strip-manifest"
 echo "  git commit"
+echo ""
+echo "Also update tools.json: set \"version\": \"${tag}\" for the nedit-ng entry."
