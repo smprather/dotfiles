@@ -447,6 +447,7 @@ All bundled tools must come from **stable tagged releases** — never from git H
 - The tag must be a stable release tag from the tool's official GitHub releases page.
 - Dev builds (e.g. `nvim 0.13-dev`, `micro 2.0.16-dev`) are **not accepted** — rebuild from the latest stable tag before committing.
 - Source builds with long upstream release cycles (tmux, bash) are acceptable but must use the most recent **stable** tag, not HEAD.
+- Some tools have no EL8-compatible official prebuilt (e.g. nvim — official releases require GLIBC_2.34, EL8 has 2.28). These must be source-built from a stable tag on the EL8 build machine. The bundled binary will still be stable; it is just compiled locally rather than downloaded.
 - An opt-in unstable stream may be added in the future; until then, all bundled binaries must be stable.
 
 **Verify provenance after adding:**
