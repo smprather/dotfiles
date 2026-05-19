@@ -270,6 +270,7 @@ All variables are exported scalars (`export DOTFILES_CFG_*=value`) — they prop
 | `DOTFILES_CFG_PREFERRED_CAT` | `bat` | cat replacement (used by aliases) |
 | `DOTFILES_CFG_ENABLE_GRC` | `1` | Generic Colorizer |
 | `DOTFILES_CFG_ENABLE_FZF` | `0` | fzf shell integration |
+| `DOTFILES_CFG_ENABLE_ZOXIDE` | `0` | zoxide shell integration (`z`/`zi` commands) |
 | `DOTFILES_CFG_ENABLE_STARSHIP` | `1` | Starship prompt (falls back to built-in prompt) |
 | `DOTFILES_CFG_STARSHIP_USERIDS_TO_HIGHLIGHT` | `""` | Space-separated list of usernames; if `whoami` matches, username is shown in prompt |
 | `DOTFILES_CFG_ENABLE_FASTNVIM` | `0` | Fast nvim mode |

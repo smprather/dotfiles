@@ -265,7 +265,9 @@ bind "set colored-completion-prefix on"
 bind '\C-j:menu-complete'
 bind '\C-k:menu-complete-backward'
 
-eval "$(zoxide init bash)"
+if command -v zoxide >/dev/null && is_truthy "${DOTFILES_CFG_ENABLE_ZOXIDE}"; then
+    eval "$(zoxide init bash)"
+fi
 
 ### Completions
 # Clean the slate
