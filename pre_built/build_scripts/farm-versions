@@ -137,6 +137,9 @@ TOOLS = [
     ("choose",      "choose",      "https://github.com/theryangeary/choose",
      strategy_flag(["--version"], r"choose ([0-9]+\.[0-9]+\.[0-9]+)")),
 
+    ("delta",       "delta",       "https://github.com/dandavison/delta",
+     strategy_flag(["--version"], r"delta ([0-9]+\.[0-9]+\.[0-9]+)")),
+
     ("duf",         "duf",         "https://github.com/muesli/duf",
      strategy_flag(["--version"], r"duf ([0-9]+\.[0-9]+\.[0-9]+)")),
 
@@ -194,6 +197,9 @@ TOOLS = [
 
     ("micro",       "micro",       "https://micro-editor.github.io",
      strategy_flag(["--version"], r"Version:\s*([0-9]+\.[0-9]+\.[0-9a-z.\-]+)")),
+
+    ("mlr",         "miller",      "https://github.com/johnkerl/miller",
+     strategy_flag(["--version"], r"mlr ([0-9]+\.[0-9]+\.[0-9]+)")),
 
     ("nvim",        "neovim",      "https://neovim.io",
      strategy_flag(["--version"], r"NVIM v([0-9]+\.[0-9]+\.[0-9]+[^\n]*)")),
@@ -281,6 +287,9 @@ TOOLS = [
 
     ("zoxide",      "zoxide",      "https://github.com/ajeetdsouza/zoxide",
      strategy_flag(["--version"], r"zoxide ([0-9]+\.[0-9]+\.[0-9]+)")),
+
+    ("vd",          "visidata",    "https://www.visidata.org",
+     strategy_flag(["--version"], r"VisiData ([0-9]+\.[0-9]+)")),
 
     ("uv",          "uv",          "https://github.com/astral-sh/uv",
      strategy_flag(["--version"], r"uv ([0-9]+\.[0-9]+\.[0-9]+)")),
